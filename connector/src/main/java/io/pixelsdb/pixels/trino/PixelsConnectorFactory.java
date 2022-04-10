@@ -37,7 +37,7 @@ public class PixelsConnectorFactory
     @Override
     public String getName()
     {
-        return "example-http";
+        return "pixels";
     }
 
     @Override
@@ -49,7 +49,7 @@ public class PixelsConnectorFactory
         Bootstrap app = new Bootstrap(
                 new JsonModule(),
                 new TypeDeserializerModule(context.getTypeManager()),
-                new PixelsModule());
+                new PixelsModule(catalogName, context.getTypeManager()));
 
         Injector injector = app
                 .doNotInitializeLogging()

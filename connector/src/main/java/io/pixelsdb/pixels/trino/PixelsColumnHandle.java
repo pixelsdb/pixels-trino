@@ -21,9 +21,12 @@ package io.pixelsdb.pixels.trino;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.pixelsdb.pixels.core.TypeDescription;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ColumnMetadata;
 import io.trino.spi.type.Type;
+
+import java.util.Objects;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
@@ -31,19 +34,33 @@ import static java.util.Objects.requireNonNull;
 public final class PixelsColumnHandle
         implements ColumnHandle
 {
+    private final String connectorId;
     private final String columnName;
     private final Type columnType;
+    private final TypeDescription.Category typeCategory;
+    private final String columnComment;
     private final int ordinalPosition;
 
     @JsonCreator
     public PixelsColumnHandle(
+            @JsonProperty("connectorId") String connectorId,
             @JsonProperty("columnName") String columnName,
             @JsonProperty("columnType") Type columnType,
-            @JsonProperty("ordinalPosition") int ordinalPosition)
+            @JsonProperty("typeCategory") TypeDescription.Category typeCategory,
+            @JsonProperty("columnComment") String columnComment, @JsonProperty("ordinalPosition") int ordinalPosition)
     {
+        this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.columnName = requireNonNull(columnName, "columnName is null");
         this.columnType = requireNonNull(columnType, "columnType is null");
+        this.typeCategory = requireNonNull(typeCategory, "typeCategory is null");
+        this.columnComment = requireNonNull(columnComment, "columnComment is null");
         this.ordinalPosition = ordinalPosition;
+    }
+
+    @JsonProperty
+    public String getConnectorId()
+    {
+        return connectorId;
     }
 
     @JsonProperty
@@ -56,6 +73,17 @@ public final class PixelsColumnHandle
     public Type getColumnType()
     {
         return columnType;
+    }
+
+    @JsonProperty
+    public TypeDescription.Category getTypeCategory()
+    {
+        return typeCategory;
+    }
+
+    @JsonProperty
+    public String getColumnComment() {
+        return columnComment;
     }
 
     @JsonProperty
@@ -72,7 +100,7 @@ public final class PixelsColumnHandle
     @Override
     public int hashCode()
     {
-        return columnName.hashCode();
+        return Objects.hash(connectorId, columnName);
     }
 
     @Override
@@ -86,15 +114,19 @@ public final class PixelsColumnHandle
         }
 
         PixelsColumnHandle other = (PixelsColumnHandle) obj;
-        return columnName.equals(other.columnName);
+        return Objects.equals(this.connectorId, other.connectorId) &&
+                Objects.equals(this.columnName, other.columnName) &&
+                Objects.equals(this.ordinalPosition, other.ordinalPosition);
     }
 
     @Override
     public String toString()
     {
         return toStringHelper(this)
+                .add("connectorId", connectorId)
                 .add("columnName", columnName)
                 .add("columnType", columnType)
+                .add("columnComment", columnComment)
                 .add("ordinalPosition", ordinalPosition)
                 .toString();
     }

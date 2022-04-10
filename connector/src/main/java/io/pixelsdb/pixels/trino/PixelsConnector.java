@@ -20,62 +20,163 @@
 package io.pixelsdb.pixels.trino;
 
 import io.airlift.bootstrap.LifeCycleManager;
+import io.airlift.log.Logger;
+import io.pixelsdb.pixels.common.exception.TransException;
+import io.pixelsdb.pixels.common.transaction.QueryTransInfo;
+import io.pixelsdb.pixels.common.transaction.TransContext;
+import io.pixelsdb.pixels.common.transaction.TransService;
+import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
+import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
+import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
+import io.pixelsdb.pixels.trino.properties.PixelsTableProperties;
+import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
+import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.transaction.IsolationLevel;
 
 import javax.inject.Inject;
 
-import static io.pixelsdb.pixels.trino.PixelsTransactionHandle.INSTANCE;
-import static java.util.Objects.requireNonNull;
+import java.util.List;
 
+import static java.util.Objects.requireNonNull;
 public class PixelsConnector
-        implements Connector
-{
+        implements Connector {
+    private static final Logger logger = Logger.get(PixelsConnector.class);
+
     private final LifeCycleManager lifeCycleManager;
     private final PixelsMetadata metadata;
     private final PixelsSplitManager splitManager;
+    private final boolean recordCursorEnabled;
+    private final PixelsPageSourceProvider pageSourceProvider;
     private final PixelsRecordSetProvider recordSetProvider;
+    private final PixelsSessionProperties sessionProperties;
+    private final PixelsTableProperties tableProperties;
+    private TransService transService;
 
     @Inject
     public PixelsConnector(
             LifeCycleManager lifeCycleManager,
             PixelsMetadata metadata,
             PixelsSplitManager splitManager,
-            PixelsRecordSetProvider recordSetProvider)
-    {
+            PixelsTrinoConfig config,
+            PixelsPageSourceProvider pageSourceProvider,
+            PixelsRecordSetProvider recordSetProvider,
+            PixelsSessionProperties sessionProperties,
+            PixelsTableProperties tableProperties) {
         this.lifeCycleManager = requireNonNull(lifeCycleManager, "lifeCycleManager is null");
         this.metadata = requireNonNull(metadata, "metadata is null");
         this.splitManager = requireNonNull(splitManager, "splitManager is null");
+        this.pageSourceProvider = requireNonNull(pageSourceProvider, "recordSetProvider is null");
         this.recordSetProvider = requireNonNull(recordSetProvider, "recordSetProvider is null");
+        this.sessionProperties = requireNonNull(sessionProperties, "sessionProperties is null");
+        this.tableProperties = requireNonNull(tableProperties, "tableProperties is null");
+        requireNonNull(config, "config is null");
+        this.recordCursorEnabled = Boolean.parseBoolean(config.getConfigFactory().getProperty("record.cursor.enabled"));
+        this.transService = new TransService(config.getConfigFactory().getProperty("trans.server.host"),
+                Integer.parseInt(config.getConfigFactory().getProperty("trans.server.port")));
     }
 
     @Override
-    public ConnectorTransactionHandle beginTransaction(IsolationLevel isolationLevel, boolean readOnly, boolean autoCommit)
+    public ConnectorTransactionHandle beginTransaction(IsolationLevel isolationLevel, boolean readOnly)
     {
-        return INSTANCE;
+        /**
+         * PIXELS-172:
+         * Be careful that Presto does not set readOnly to true for normal queries.
+         */
+        QueryTransInfo info;
+        try
+        {
+            info = this.transService.getQueryTransInfo();
+        } catch (TransException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
+        }
+        TransContext.Instance().beginQuery(info);
+        return new PixelsTransactionHandle(info.getQueryId(), info.getQueryTimestamp());
     }
 
     @Override
-    public ConnectorMetadata getMetadata(ConnectorSession session, ConnectorTransactionHandle transactionHandle)
+    public void commit(ConnectorTransactionHandle transactionHandle)
     {
+        if (transactionHandle instanceof PixelsTransactionHandle)
+        {
+            PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
+            TransContext.Instance().commitQuery(handle.getTransId());
+        } else
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
+                    "The transaction handle is not an instance of PixelsTransactionHandle.");
+        }
+    }
+
+    @Override
+    public void rollback(ConnectorTransactionHandle transactionHandle)
+    {
+        if (transactionHandle instanceof PixelsTransactionHandle)
+        {
+            PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
+            TransContext.Instance().rollbackQuery(handle.getTransId());
+        } else
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
+                    "The transaction handle is not an instance of PixelsTransactionHandle.");
+        }
+    }
+
+    @Override
+    public ConnectorMetadata getMetadata(ConnectorTransactionHandle transactionHandle) {
         return metadata;
     }
 
     @Override
-    public ConnectorSplitManager getSplitManager()
-    {
+    public ConnectorSplitManager getSplitManager() {
         return splitManager;
     }
 
+    /**
+     * @throws UnsupportedOperationException if this connector does not support reading tables page at a time
+     */
+    @Override
+    public PixelsPageSourceProvider getPageSourceProvider() {
+        if (this.recordCursorEnabled)
+        {
+            throw new UnsupportedOperationException();
+        }
+        return pageSourceProvider;
+    }
+
+    /**
+     * @throws UnsupportedOperationException if this connector does not support reading tables record at a time
+     */
     @Override
     public ConnectorRecordSetProvider getRecordSetProvider()
     {
-        return recordSetProvider;
+        if (this.recordCursorEnabled)
+        {
+            return recordSetProvider;
+        }
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public final void shutdown()
+    public final void shutdown() {
+        try {
+            lifeCycleManager.stop();
+        } catch (Exception e) {
+            logger.error(e, "error in shutting down connector");
+            throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, e);
+        }
+    }
+
+    @Override
+    public List<PropertyMetadata<?>> getSessionProperties()
     {
-        lifeCycleManager.stop();
+        return sessionProperties.getSessionProperties();
+    }
+
+    @Override
+    public List<PropertyMetadata<?>> getTableProperties()
+    {
+        return tableProperties.getTableProperties();
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 PixelsDB.
+ * Copyright 2018 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -17,27 +17,12 @@
  * License along with Pixels.  If not, see
  * <https://www.gnu.org/licenses/>.
  */
-package io.pixelsdb.pixels.trino;
+package io.pixelsdb.pixels.trino.exception;
 
-import io.airlift.configuration.Config;
-
-import javax.validation.constraints.NotNull;
-import java.net.URI;
-
-public class PixelsConfig
+/**
+ * Created at: 18-11-27
+ * Author: hank
+ */
+public class CacheException extends Exception
 {
-    private URI metadata;
-
-    @NotNull
-    public URI getMetadata()
-    {
-        return metadata;
-    }
-
-    @Config("metadata-uri")
-    public PixelsConfig setMetadata(URI metadata)
-    {
-        this.metadata = metadata;
-        return this;
-    }
 }
