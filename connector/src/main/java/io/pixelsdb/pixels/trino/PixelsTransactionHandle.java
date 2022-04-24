@@ -28,8 +28,14 @@ public class PixelsTransactionHandle
 {
     public static final PixelsTransactionHandle Default = new PixelsTransactionHandle(-1, -1);
 
-    private long transId;
-    private long timestamp;
+    /**
+     * transId is also the query id, as each query is a single-statement read-only transaction.
+     */
+    private final long transId;
+    /**
+     * The timestamp that is used to get a read snapshot of the query.
+     */
+    private final long timestamp;
 
     /**
      * Create a transaction handle.

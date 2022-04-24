@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -25,6 +25,9 @@ import io.trino.spi.ErrorType;
 
 import static io.trino.spi.ErrorType.*;
 
+/**
+ * @author hank
+ */
 public enum ListenerErrorCode
         implements ErrorCodeSupplier
 {

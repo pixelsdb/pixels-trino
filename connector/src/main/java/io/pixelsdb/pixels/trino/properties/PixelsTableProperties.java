@@ -34,8 +34,7 @@ import static io.trino.spi.session.PropertyMetadata.stringProperty;
  * WITH (storage = 'hdfs');
  * </p>
  *
- * Created at: 14/02/2022
- * Author: hank
+ * @author hank
  */
 public class PixelsTableProperties
 {

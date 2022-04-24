@@ -22,34 +22,39 @@ package io.pixelsdb.pixels.trino;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
+import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.core.lambda.ScanOutput;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
-import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.predicate.TupleDomain;
-import org.openjdk.jol.info.ClassLayout;
 
-import java.net.URI;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-import static io.airlift.slice.SizeOf.estimatedSizeOf;
+import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
+/**
+ * @author tao
+ * @author hank
+ */
 public class PixelsSplit
         implements ConnectorSplit {
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
-    private final String storageScheme;
-    private final List<String> paths;
+    private String storageScheme;
+    private List<String> paths;
     private final long queryId;
-    private final int start;
-    private final int len;
+    private List<Integer> rgStarts;
+    private List<Integer> rgLengths;
     private int pathIndex;
     private boolean cached;
-    private boolean ensureLocality;
+    private final boolean ensureLocality;
     private final List<HostAddress> addresses;
-    private final List<String> order;
+    private List<String> order;
     private final List<String> cacheOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
 
@@ -61,8 +66,8 @@ public class PixelsSplit
             @JsonProperty("storageScheme") String storageScheme,
             @JsonProperty("paths") List<String> paths,
             @JsonProperty("queryId") long queryId,
-            @JsonProperty("start") int start,
-            @JsonProperty("len") int len,
+            @JsonProperty("rgStarts") List<Integer> rgStarts,
+            @JsonProperty("rgLengths") List<Integer> rgLengths,
             @JsonProperty("cached") boolean cached,
             @JsonProperty("ensureLocality") boolean ensureLocality,
             @JsonProperty("addresses") List<HostAddress> addresses,
@@ -74,20 +79,43 @@ public class PixelsSplit
         this.tableName = requireNonNull(tableName, "table name is null");
         this.storageScheme = requireNonNull(storageScheme, "storage scheme is null");
         this.paths = requireNonNull(paths, "paths is null");
-        if (paths.isEmpty())
-        {
-            throw new NullPointerException("paths is empty");
-        }
+        checkArgument(!paths.isEmpty(), "paths is empty");
         this.pathIndex = 0;
         this.queryId = queryId;
-        this.start = start;
-        this.len = len;
+        this.rgStarts = requireNonNull(rgStarts, "rgStarts is null");
+        checkArgument(rgStarts.size() == paths.size(),
+                "the size of rgStarts and paths are different");
+        this.rgLengths = requireNonNull(rgLengths, "rgLengths is null");
+        checkArgument(rgLengths.size() == paths.size(),
+                "the size of rgLengths and paths are different");
         this.cached = cached;
         this.ensureLocality = ensureLocality;
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
         this.order = requireNonNull(order, "order is null");
         this.cacheOrder = requireNonNull(cacheOrder, "cache order is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
+    }
+
+    /**
+     * Permute the original file information with the information of the
+     * intermediate files produced by serverless.
+     * @param scheme the storage scheme of intermediate files
+     * @param includeCols the columns that will be included in the intermediate files
+     * @param scanOutput the output of serverless
+     */
+    public void permute(Storage.Scheme scheme, String[] includeCols, ScanOutput scanOutput)
+    {
+        requireNonNull(scheme, "scheme is null");
+        requireNonNull(scanOutput, "scanOutput is null");
+        requireNonNull(scanOutput.getOutputs(), "scanOutput.outputs is null");
+        requireNonNull(scanOutput.getRowGroupNums(), "scanOutput.rowGroupNums is null");
+        this.storageScheme = scheme.name();
+        this.paths = scanOutput.getOutputs();
+        this.rgStarts = Collections.nCopies(scanOutput.getOutputs().size(), 0);
+        this.rgLengths = scanOutput.getRowGroupNums();
+        this.order = Arrays.asList(includeCols);
+        this.cached = false;
+        this.cacheOrder.clear();
     }
 
     @JsonProperty
@@ -98,10 +126,6 @@ public class PixelsSplit
     @JsonProperty
     public String getSchemaName() {
         return schemaName;
-    }
-
-    public SchemaTableName toSchemaTableName() {
-        return new SchemaTableName(schemaName, tableName);
     }
 
     @JsonProperty
@@ -130,13 +154,15 @@ public class PixelsSplit
     }
 
     @JsonProperty
-    public int getStart() {
-        return start;
+    public List<Integer> getRgStarts()
+    {
+        return rgStarts;
     }
 
     @JsonProperty
-    public int getLen() {
-        return len;
+    public List<Integer> getRgLengths()
+    {
+        return rgLengths;
     }
 
     @JsonProperty
@@ -169,14 +195,30 @@ public class PixelsSplit
         }
     }
 
+    public boolean isEmpty()
+    {
+        return this.paths.isEmpty();
+    }
+
     public String getPath()
     {
         return this.paths.get(this.pathIndex);
     }
 
+    public int getRgStart()
+    {
+        return this.rgStarts.get(pathIndex);
+    }
+
+    public int getRgLength()
+    {
+        return this.rgLengths.get(pathIndex);
+    }
+
     @JsonProperty
     @Override
-    public List<HostAddress> getAddresses() {
+    public List<HostAddress> getAddresses()
+    {
         return addresses;
     }
 
@@ -198,7 +240,8 @@ public class PixelsSplit
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(Object o)
+    {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
@@ -208,40 +251,50 @@ public class PixelsSplit
                 Objects.equals(this.schemaName, that.schemaName) &&
                 Objects.equals(this.tableName, that.tableName) &&
                 Objects.equals(this.paths, that.paths) &&
-                Objects.equals(this.start, that.start) &&
-                Objects.equals(this.len, that.len) &&
+                Objects.equals(this.rgStarts, that.rgStarts) &&
+                Objects.equals(this.rgLengths, that.rgLengths) &&
                 Objects.equals(this.addresses, that.addresses) &&
-                Objects.equals(this.cached, that.cached) &&
+                // No need to consider this.order and this.cacheOrder.
                 Objects.equals(this.constraint, that.constraint);
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(connectorId, schemaName, tableName, paths, start, len, addresses, cached, constraint);
+    public int hashCode()
+    {
+        // No need to consider this.order and this.cacheOrder.
+        return Objects.hash(connectorId, schemaName, tableName, paths,
+                rgStarts, rgLengths, addresses, cached, constraint);
     }
 
     @Override
-    public String toString() {
-        StringBuilder pathBuilder = new StringBuilder("{");
-        if (paths.isEmpty() == false)
-        {
-            pathBuilder.append(paths.get(0));
-            for (int i = 1; i < paths.size(); ++i)
-            {
-                pathBuilder.append(",").append(paths.get(i));
-            }
-        }
-        pathBuilder.append("}");
+    public String toString()
+    {
+        // No need to print order, cacheOrder, and constrain, in most cases.
         return "PixelsSplit{" +
                 "connectorId=" + connectorId +
                 ", schemaName='" + schemaName + '\'' +
                 ", tableName='" + tableName + '\'' +
                 ", storageScheme='" + storageScheme + '\'' +
-                ", paths=" + pathBuilder.toString() +
-                ", start=" + start +
-                ", len=" + len +
+                ", paths=" + listToJsonArray(paths) +
+                ", rgStarts=" + listToJsonArray(rgStarts) +
+                ", rgLengths=" + listToJsonArray(rgLengths) +
                 ", isCached=" + cached +
                 ", addresses=" + addresses +
                 '}';
+    }
+
+    private <T> String listToJsonArray(List<T> list)
+    {
+        StringBuilder builder = new StringBuilder("[");
+        if (!list.isEmpty())
+        {
+            builder.append(list.get(0));
+            for (int i = 1; i < list.size(); ++i)
+            {
+                builder.append(",").append(list.get(i));
+            }
+        }
+        builder.append("]");
+        return builder.toString();
     }
 }

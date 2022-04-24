@@ -1,6 +1,3 @@
-/**
- * This class is copied from io.trino.spi.block.BlockUtil
- */
 package io.pixelsdb.pixels.trino.block;
 
 import io.airlift.slice.Slice;
@@ -15,8 +12,6 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * This class is copied from io.trino.spi.block.BlockUtil, because it's not public.
- * Created at: 19-6-1
- * Author: hank
  */
 final class BlockUtil
 {
@@ -34,28 +29,32 @@ final class BlockUtil
     {
         requireNonNull(array, "array is null");
         if (offset < 0 || length < 0 || offset + length > array.length) {
-            throw new IndexOutOfBoundsException(format("Invalid offset %s and length %s in array with %s elements", offset, length, array.length));
+            throw new IndexOutOfBoundsException(format("Invalid offset %s and length %s in array with %s elements",
+                    offset, length, array.length));
         }
     }
 
     static void checkValidRegion(int positionCount, int positionOffset, int length)
     {
         if (positionOffset < 0 || length < 0 || positionOffset + length > positionCount) {
-            throw new IndexOutOfBoundsException(format("Invalid position %s and length %s in block with %s positions", positionOffset, length, positionCount));
+            throw new IndexOutOfBoundsException(format("Invalid position %s and length %s in block with %s positions",
+                    positionOffset, length, positionCount));
         }
     }
 
     static void checkValidPositions(boolean[] positions, int positionCount)
     {
         if (positions.length != positionCount) {
-            throw new IllegalArgumentException(format("Invalid positions array size %d, actual position count is %d", positions.length, positionCount));
+            throw new IllegalArgumentException(format("Invalid positions array size %d, actual position count is %d",
+                    positions.length, positionCount));
         }
     }
 
     static void checkValidPosition(int position, int positionCount)
     {
         if (position < 0 || position >= positionCount) {
-            throw new IllegalArgumentException(format("Invalid position %s in block with %s positions", position, positionCount));
+            throw new IllegalArgumentException(format("Invalid position %s in block with %s positions",
+                    position, positionCount));
         }
     }
 
@@ -189,7 +188,8 @@ final class BlockUtil
         return used;
     }
 
-    static int countAndMarkSelectedPositionsFromOffsets(boolean[] positions, int[] offsets, int offsetBase, boolean[] elementPositions)
+    static int countAndMarkSelectedPositionsFromOffsets(boolean[] positions, int[] offsets,
+                                                        int offsetBase, boolean[] elementPositions)
     {
         checkArrayRange(offsets, offsetBase, positions.length);
         int used = 0;
@@ -223,7 +223,8 @@ final class BlockUtil
     }
 
     /**
-     * Returns the input blocks array if all blocks are already loaded, otherwise returns a new blocks array with all blocks loaded
+     * Returns the input blocks array if all blocks are already loaded, otherwise returns
+     * a new blocks array with all blocks loaded
      */
     static Block[] ensureBlocksAreLoaded(Block[] blocks)
     {

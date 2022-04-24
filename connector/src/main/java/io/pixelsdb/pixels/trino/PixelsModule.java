@@ -36,8 +36,6 @@ import javax.inject.Inject;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.airlift.configuration.ConfigBinder.configBinder;
 import static io.airlift.json.JsonBinder.jsonBinder;
-import static io.airlift.json.JsonCodec.listJsonCodec;
-import static io.airlift.json.JsonCodecBinder.jsonCodecBinder;
 import static java.util.Objects.requireNonNull;
 
 public class PixelsModule
@@ -65,7 +63,7 @@ public class PixelsModule
         binder.bind(PixelsTableProperties.class).in(Scopes.SINGLETON);
         configBinder(binder).bindConfig(PixelsTrinoConfig.class);
 
-//        jsonBinder(binder).addDeserializerBinding(Type.class).to(TypeDeserializer.class);
+        jsonBinder(binder).addDeserializerBinding(Type.class).to(TypeDeserializer.class);
     }
 
     public static final class TypeDeserializer

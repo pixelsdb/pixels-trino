@@ -28,6 +28,7 @@
         <dependency>
             <groupId>io.trino</groupId>
             <artifactId>trino-spi</artifactId>
+            <optional>true</optional>
             <scope>provided</scope>
         </dependency>
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -40,8 +40,7 @@ import static io.pixelsdb.pixels.trino.exception.ListenerErrorCode.PIXELS_EVENT_
 import static io.pixelsdb.pixels.trino.exception.ListenerErrorCode.PIXELS_EVENT_LISTENER_METRIC_ERROR;
 
 /**
- * Created at: 18-12-8
- * Author: hank
+ * @author hank
  */
 public class PixelsEventListener implements EventListener
 {

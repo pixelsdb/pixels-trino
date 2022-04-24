@@ -35,10 +35,9 @@ import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.transaction.IsolationLevel;
 
 import javax.inject.Inject;
-
 import java.util.List;
-
 import static java.util.Objects.requireNonNull;
+
 public class PixelsConnector
         implements Connector {
     private static final Logger logger = Logger.get(PixelsConnector.class);
@@ -51,7 +50,8 @@ public class PixelsConnector
     private final PixelsRecordSetProvider recordSetProvider;
     private final PixelsSessionProperties sessionProperties;
     private final PixelsTableProperties tableProperties;
-    private TransService transService;
+    private final PixelsTrinoConfig config;
+    private final TransService transService;
 
     @Inject
     public PixelsConnector(
@@ -70,6 +70,7 @@ public class PixelsConnector
         this.recordSetProvider = requireNonNull(recordSetProvider, "recordSetProvider is null");
         this.sessionProperties = requireNonNull(sessionProperties, "sessionProperties is null");
         this.tableProperties = requireNonNull(tableProperties, "tableProperties is null");
+        this.config = requireNonNull(config, "config is null");
         requireNonNull(config, "config is null");
         this.recordCursorEnabled = Boolean.parseBoolean(config.getConfigFactory().getProperty("record.cursor.enabled"));
         this.transService = new TransService(config.getConfigFactory().getProperty("trans.server.host"),
@@ -77,7 +78,8 @@ public class PixelsConnector
     }
 
     @Override
-    public ConnectorTransactionHandle beginTransaction(IsolationLevel isolationLevel, boolean readOnly)
+    public ConnectorTransactionHandle beginTransaction(IsolationLevel isolationLevel,
+                                                       boolean readOnly, boolean autoCommit)
     {
         /**
          * PIXELS-172:
@@ -102,6 +104,7 @@ public class PixelsConnector
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             TransContext.Instance().commitQuery(handle.getTransId());
+            cleanIntermediatePathForQuery(handle.getTransId());
         } else
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
@@ -116,6 +119,7 @@ public class PixelsConnector
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             TransContext.Instance().rollbackQuery(handle.getTransId());
+            cleanIntermediatePathForQuery(handle.getTransId());
         } else
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
@@ -123,8 +127,25 @@ public class PixelsConnector
         }
     }
 
+    private void cleanIntermediatePathForQuery(long queryId)
+    {
+        if (config.isLambdaEnabled())
+        {
+            try
+            {
+                IntermediateFileCleaner.Instance().asyncDelete(
+                        config.getMinioOutputFolderForQuery(queryId));
+            } catch (InterruptedException e)
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                        "Failed to clean intermediate path for the query");
+            }
+        }
+    }
+
     @Override
-    public ConnectorMetadata getMetadata(ConnectorTransactionHandle transactionHandle) {
+    public ConnectorMetadata getMetadata(ConnectorSession session, ConnectorTransactionHandle transactionHandle)
+    {
         return metadata;
     }
 
