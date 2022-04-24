@@ -38,8 +38,7 @@ import javax.inject.Inject;
 import java.util.List;
 import static java.util.Objects.requireNonNull;
 
-public class PixelsConnector
-        implements Connector {
+public class PixelsConnector implements Connector {
     private static final Logger logger = Logger.get(PixelsConnector.class);
 
     private final LifeCycleManager lifeCycleManager;

@@ -45,8 +45,7 @@ import static java.util.stream.Collectors.toList;
  * @author tao
  * @author hank
  **/
-public class PixelsMetadata
-        implements ConnectorMetadata
+public class PixelsMetadata implements ConnectorMetadata
 {
     // private static final Logger logger = Logger.get(PixelsMetadata.class);
     private final String connectorId;

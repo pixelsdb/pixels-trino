@@ -40,8 +40,8 @@ import static java.util.Objects.requireNonNull;
  * @author tao
  * @author hank
  */
-public class PixelsSplit
-        implements ConnectorSplit {
+public class PixelsSplit implements ConnectorSplit
+{
     private final String connectorId;
     private final String schemaName;
     private final String tableName;

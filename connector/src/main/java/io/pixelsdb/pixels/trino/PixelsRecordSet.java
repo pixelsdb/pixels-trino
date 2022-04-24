@@ -34,8 +34,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * @author hank
  */
-public class PixelsRecordSet
-        implements RecordSet
+public class PixelsRecordSet implements RecordSet
 {
     private final PixelsSplit split;
     private final List<PixelsColumnHandle> columnHandles;

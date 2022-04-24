@@ -21,7 +21,6 @@ package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.JSON;
 import com.google.inject.Inject;
-import io.airlift.log.Logger;
 import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
@@ -48,10 +47,9 @@ import static java.util.stream.Collectors.toList;
 /**
  * Provider Class for Pixels Page Source class.
  */
-public class PixelsPageSourceProvider
-        implements ConnectorPageSourceProvider
+public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 {
-    private static final Logger logger = Logger.get(PixelsPageSourceProvider.class);
+    // private static final Logger logger = Logger.get(PixelsPageSourceProvider.class);
 
     private final String connectorId;
     private final MemoryMappedFile cacheFile;

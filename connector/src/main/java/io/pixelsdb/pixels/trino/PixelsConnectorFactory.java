@@ -31,8 +31,7 @@ import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
-public class PixelsConnectorFactory
-        implements ConnectorFactory
+public class PixelsConnectorFactory implements ConnectorFactory
 {
     @Override
     public String getName()

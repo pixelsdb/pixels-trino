@@ -54,8 +54,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * @author hank
  */
-public class PixelsRecordCursor
-        implements RecordCursor
+public class PixelsRecordCursor implements RecordCursor
 {
     private static final Logger logger = Logger.get(PixelsPageSource.class);
     private final int BatchSize;

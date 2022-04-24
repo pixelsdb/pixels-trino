@@ -23,8 +23,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 
-public class PixelsTransactionHandle
-        implements ConnectorTransactionHandle
+public class PixelsTransactionHandle implements ConnectorTransactionHandle
 {
     public static final PixelsTransactionHandle Default = new PixelsTransactionHandle(-1, -1);
 

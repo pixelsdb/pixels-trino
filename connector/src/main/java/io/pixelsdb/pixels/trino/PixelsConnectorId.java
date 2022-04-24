@@ -26,7 +26,8 @@ import java.util.Objects;
 
 import static java.util.Objects.requireNonNull;
 
-public final class PixelsConnectorId {
+public final class PixelsConnectorId
+{
     private final String id;
 
     @JsonCreator

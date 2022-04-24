@@ -39,8 +39,7 @@ import static java.util.stream.Collectors.toList;
 /**
  * @author hank
  */
-public class PixelsRecordSetProvider
-        implements ConnectorRecordSetProvider
+public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
 {
     private final String connectorId;
     private final MemoryMappedFile cacheFile;

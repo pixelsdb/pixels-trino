@@ -31,8 +31,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * @author tao
  */
-public final class PixelsTableHandle
-        implements ConnectorTableHandle {
+public final class PixelsTableHandle implements ConnectorTableHandle
+{
     private final String connectorId;
     private final String schemaName;
     private final String tableName;

@@ -61,8 +61,8 @@ import static java.util.Objects.requireNonNull;
  * @author guodong
  * @author tao
  */
-public class PixelsSplitManager
-        implements ConnectorSplitManager {
+public class PixelsSplitManager implements ConnectorSplitManager
+{
     private static final Logger logger = Logger.get(PixelsSplitManager.class);
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;

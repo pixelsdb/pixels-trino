@@ -33,8 +33,7 @@ import static io.pixelsdb.pixels.trino.block.EncoderUtil.encodeNullsAsBits;
  *
  * @author hank
  */
-public class TimeArrayBlockEncoding
-        implements BlockEncoding
+public class TimeArrayBlockEncoding implements BlockEncoding
 {
     public static final String NAME = "TIME_ARRAY";
 
