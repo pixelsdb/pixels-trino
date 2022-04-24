@@ -21,6 +21,7 @@ package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.JSON;
 import com.google.inject.Inject;
+import io.airlift.log.Logger;
 import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
@@ -49,7 +50,7 @@ import static java.util.stream.Collectors.toList;
  */
 public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 {
-    // private static final Logger logger = Logger.get(PixelsPageSourceProvider.class);
+    private static final Logger logger = Logger.get(PixelsPageSourceProvider.class);
 
     private final String connectorId;
     private final MemoryMappedFile cacheFile;
@@ -143,6 +144,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         TableScanFilter filter = PixelsSplitManager.createTableScanFilter(inputSplit.getSchemaName(),
                 inputSplit.getTableName(), includeCols, inputSplit.getConstraint());
         scanInput.setFilter(JSON.toJSONString(filter));
+        logger.info("table scan filter: " + scanInput.getFilter());
         String folder = config.getMinioOutputFolderForQuery(inputSplit.getQueryId());
         String endpoint = config.getMinioEndpoint();
         String accessKey = config.getMinioAccessKey();
