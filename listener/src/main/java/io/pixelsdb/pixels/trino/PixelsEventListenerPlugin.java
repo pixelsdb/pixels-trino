@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -27,8 +27,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Created at: 18-12-9
- * Author: hank
+ * @author hank
  */
 public class PixelsEventListenerPlugin implements Plugin
 {

@@ -19,11 +19,11 @@
  */
 package io.pixelsdb.pixels.trino.block;
 
-import io.trino.spi.block.*;
+import io.trino.spi.block.Block;
+import io.trino.spi.block.BlockBuilder;
 import org.openjdk.jol.info.ClassLayout;
 
 import java.util.OptionalInt;
-import java.util.function.BiConsumer;
 import java.util.function.ObjLongConsumer;
 
 import static io.airlift.slice.SizeOf.sizeOf;
@@ -88,7 +88,6 @@ public class TimeArrayBlock implements Block
         sizeInBytes = (Integer.BYTES + Byte.BYTES) * (long) positionCount;
         retainedSizeInBytes = INSTANCE_SIZE + sizeOf(valueIsNull) + sizeOf(values);
     }
-
 
     @Override
     public OptionalInt fixedSizeInBytesPerPosition()

@@ -20,9 +20,10 @@
 package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.JSON;
-import io.etcd.jetcd.KeyValue;
 import com.google.common.collect.ImmutableList;
 import io.airlift.log.Logger;
+import io.airlift.slice.Slice;
+import io.etcd.jetcd.KeyValue;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.layout.*;
 import io.pixelsdb.pixels.common.metadata.domain.*;
@@ -31,6 +32,11 @@ import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
+import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.predicate.Bound;
+import io.pixelsdb.pixels.core.predicate.ColumnFilter;
+import io.pixelsdb.pixels.core.predicate.Filter;
+import io.pixelsdb.pixels.core.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -39,19 +45,24 @@ import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
 import io.trino.spi.HostAddress;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
+import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.TupleDomain;
+import io.trino.spi.type.Type;
 
 import javax.inject.Inject;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static java.util.Objects.requireNonNull;
-import static java.util.stream.Collectors.toSet;
 
-public class PixelsSplitManager
-        implements ConnectorSplitManager {
+/**
+ * @author hank
+ * @author guodong
+ * @author tao
+ */
+public class PixelsSplitManager implements ConnectorSplitManager
+{
     private static final Logger logger = Logger.get(PixelsSplitManager.class);
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
@@ -79,17 +90,18 @@ public class PixelsSplitManager
     
 
     @Override
-    public ConnectorSplitSource getSplits(ConnectorTransactionHandle handle, ConnectorSession session,
-            ConnectorTableHandle tableHandle_,
-                                          SplitSchedulingStrategy splitSchedulingStrategy,DynamicFilter dynamicFilter,
+    public ConnectorSplitSource getSplits(ConnectorTransactionHandle transHandle_,
+                                          ConnectorSession session,
+                                          ConnectorTableHandle tableHandle_,
+                                          SplitSchedulingStrategy splitSchedulingStrategy,
+                                          DynamicFilter dynamicFilter,
                                           Constraint constraint_)
     {
-        PixelsTransactionHandle transHandle = (PixelsTransactionHandle) handle;
+        PixelsTransactionHandle transHandle = (PixelsTransactionHandle) transHandle_;
         PixelsTableHandle tableHandle = (PixelsTableHandle) tableHandle_;
-
         TupleDomain<PixelsColumnHandle> constraint = constraint_.getSummary()
                 .transformKeys(PixelsColumnHandle.class::cast);
-//        TODO:
+//        TODO: get desiredColumns using projection push-down.
 //        Set<PixelsColumnHandle> desiredColumns = layoutHandle.getDesiredColumns().stream().map(PixelsColumnHandle.class::cast)
 //                .collect(toSet());
 
@@ -136,7 +148,7 @@ public class PixelsSplitManager
         boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
         boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
 
-        List<ConnectorSplit> pixelsSplits = new ArrayList<>();
+        List<PixelsSplit> pixelsSplits = new ArrayList<>();
         for (Layout layout : layouts)
         {
             // get index
@@ -144,7 +156,7 @@ public class PixelsSplitManager
             IndexName indexName = new IndexName(schemaName, tableName);
             Order order = JSON.parseObject(layout.getOrder(), Order.class);
             ColumnSet columnSet = new ColumnSet();
-//            TODO:
+//            TODO: get desiredColumns using projection push-down.
 //            for (PixelsColumnHandle column : desiredColumns)
 //            {
 //                columnSet.addColumn(column.getColumnName());
@@ -278,7 +290,9 @@ public class PixelsSplitManager
                                     PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
                                             tableHandle.getSchemaName(), tableHandle.getTableName(),
                                             table.getStorageScheme(), paths, transHandle.getTransId(),
-                                            0, 1, false, storage.hasLocality(), orderedAddresses,
+                                            Collections.nCopies(paths.size(), 0),
+                                            Collections.nCopies(paths.size(), 1),
+                                            false, storage.hasLocality(), orderedAddresses,
                                             order.getColumnOrder(), new ArrayList<>(0), constraint);
                                     // log.debug("Split in orderPath: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
@@ -313,10 +327,10 @@ public class PixelsSplitManager
 
                                         PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
                                                 tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                                table.getStorageScheme(), Arrays.asList(path),
-                                                transHandle.getTransId(), curFileRGIdx, splitSize,
-                                                true, ensureLocality, compactAddresses,
-                                                order.getColumnOrder(), cacheColumnletOrders, constraint);
+                                                table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
+                                                Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
+                                                true, ensureLocality, compactAddresses, order.getColumnOrder(),
+                                                cacheColumnletOrders, constraint);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPath" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -372,7 +386,9 @@ public class PixelsSplitManager
                             PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
                                     tableHandle.getSchemaName(), tableHandle.getTableName(),
                                     table.getStorageScheme(), paths, transHandle.getTransId(),
-                                    0, 1, false, storage.hasLocality(), orderedAddresses,
+                                    Collections.nCopies(paths.size(), 0),
+                                    Collections.nCopies(paths.size(), 1),
+                                    false, storage.hasLocality(), orderedAddresses,
                                     order.getColumnOrder(), new ArrayList<>(0), constraint);
                             // logger.debug("Split in orderPath: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
@@ -393,8 +409,8 @@ public class PixelsSplitManager
 
                                 PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
                                         tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                        table.getStorageScheme(), Arrays.asList(path),
-                                        transHandle.getTransId(), curFileRGIdx, splitSize,
+                                        table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
+                                        Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         order.getColumnOrder(), new ArrayList<>(0), constraint);
                                 pixelsSplits.add(pixelsSplit);
@@ -412,7 +428,140 @@ public class PixelsSplitManager
 
         Collections.shuffle(pixelsSplits);
 
-        return new FixedSplitSource(pixelsSplits);
+        return new PixelsSplitSource(pixelsSplits);
+    }
+
+    public static TableScanFilter createTableScanFilter(
+            String schemaName, String tableName,
+            String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
+    {
+        SortedMap<Integer, ColumnFilter> columnFilters = new TreeMap<>();
+        TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
+        Map<String, Integer> colToCid = new HashMap<>(includeCols.length);
+        for (int i = 0; i < includeCols.length; ++i)
+        {
+            colToCid.put(includeCols[i], i);
+        }
+        if (constraint.getDomains().isPresent())
+        {
+            Map<PixelsColumnHandle, Domain> domains = constraint.getDomains().get();
+            for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
+            {
+                ColumnFilter<?> columnFilter = createColumnFilter(entry.getKey(), entry.getValue());
+                columnFilters.put(colToCid.get(entry.getKey().getColumnName()), columnFilter);
+            }
+        }
+
+        return tableScanFilter;
+    }
+
+    private static  <T extends Comparable<T>> ColumnFilter<T> createColumnFilter(
+            PixelsColumnHandle columnHandle, Domain domain)
+    {
+        Type prestoType = domain.getType();
+        String columnName = columnHandle.getColumnName();
+        TypeDescription.Category columnType = columnHandle.getTypeCategory();
+        Class<?> filterJavaType = columnType.getInternalJavaType() == byte[].class ?
+                String.class : columnType.getInternalJavaType();
+        boolean isAll = domain.isAll();
+        boolean isNone = domain.isNone();
+        boolean allowNull = domain.isNullAllowed();
+        boolean onlyNull = domain.isOnlyNull();
+
+        Filter<T> filter = domain.getValues().getValuesProcessor().transform(
+                ranges -> {
+                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
+                    if (ranges.getRangeCount() > 0)
+                    {
+                        ranges.getOrderedRanges().forEach(range ->
+                        {
+                            if (range.isSingleValue())
+                            {
+                                Bound<?> bound = createBound(prestoType, Bound.Type.INCLUDED,
+                                        range.getSingleValue());
+                                res.addDiscreteValue((Bound<T>) bound);
+                            } else
+                            {
+                                Bound.Type lowerBoundType = range.isLowInclusive() ?
+                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                                Bound.Type upperBoundType = range.isHighInclusive() ?
+                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                                Object lowerBoundValue = null, upperBoundValue = null;
+                                if (range.isLowUnbounded())
+                                {
+                                    lowerBoundType = Bound.Type.UNBOUNDED;
+                                } else
+                                {
+                                    lowerBoundValue = range.getLowBoundedValue();
+                                }
+                                if (range.isHighUnbounded())
+                                {
+                                    upperBoundType = Bound.Type.UNBOUNDED;
+                                } else
+                                {
+                                    upperBoundValue = range.getHighBoundedValue();
+                                }
+                                Bound<?> lowerBound = createBound(prestoType, lowerBoundType, lowerBoundValue);
+                                Bound<?> upperBound = createBound(prestoType, upperBoundType, upperBoundValue);
+                                res.addRange((Bound<T>) lowerBound, (Bound<T>) upperBound);
+                            }
+                        });
+                    }
+                    return res;
+                },
+                discreteValues -> {
+                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
+                    Bound.Type boundType = discreteValues.isInclusive() ?
+                            Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                    discreteValues.getValues().forEach(value ->
+                    {
+                        if (value == null)
+                        {
+                            throw new TrinoException(PixelsErrorCode.PIXELS_INVALID_METADATA,
+                                    "discrete value is null");
+                        } else
+                        {
+                            Bound<?> bound = createBound(prestoType, boundType, value);
+                            res.addDiscreteValue((Bound<T>) bound);
+                        }
+                    });
+                    return res;
+                },
+                allOrNone -> new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull)
+        );
+        return new ColumnFilter<>(columnName, columnType, filter);
+    }
+
+    private static Bound<?> createBound(Type prestoType, Bound.Type boundType, Object value)
+    {
+        Class<?> javaType = prestoType.getJavaType();
+        Bound<?> bound = null;
+        if (boundType == Bound.Type.UNBOUNDED)
+        {
+            bound = new Bound<>(boundType, null);
+        }
+        else
+        {
+            requireNonNull(value, "the value of the bound is null");
+            if (javaType == long.class)
+            {
+                bound = new Bound<>(boundType, (Long) value);
+            }
+            if (javaType == double.class)
+            {
+                bound = new Bound<>(boundType, (Double) value);
+            }
+            if (javaType == boolean.class)
+            {
+                bound = new Bound<>(boundType, (byte) ((Boolean) value ? 1 : 0));
+            }
+            if (javaType == Slice.class)
+            {
+                bound = new Bound<>(boundType, ((Slice) value).toString(StandardCharsets.UTF_8).trim());
+            }
+        }
+
+        return bound;
     }
 
     private List<HostAddress> toHostAddresses(List<Location> locations)

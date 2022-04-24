@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -45,6 +45,8 @@ import io.trino.spi.type.Type;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
@@ -59,13 +61,17 @@ class PixelsPageSource implements ConnectorPageSource
     private static final Logger logger = Logger.get(PixelsPageSource.class);
     private final int BatchSize;
     private PixelsSplit split;
-    private List<PixelsColumnHandle> columns;
-    private Storage storage;
+    private final List<PixelsColumnHandle> columns;
+    private final String[] includeCols;
+    private final Storage storage;
     private boolean closed;
     private PixelsReader pixelsReader;
     private PixelsRecordReader recordReader;
-    private PixelsCacheReader cacheReader;
-    private PixelsFooterCache footerCache;
+    private final PixelsCacheReader cacheReader;
+    private final PixelsFooterCache footerCache;
+    private final CompletableFuture<?> lambdaOutput;
+    private final AtomicInteger localSplitCounter;
+    private final CompletableFuture<?> blocked;
     private long completedBytes = 0L;
     private long readTimeNanos = 0L;
     private long memoryUsage = 0L;
@@ -73,47 +79,68 @@ class PixelsPageSource implements ConnectorPageSource
     private final int numColumnToRead;
     private int batchId;
 
-    public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, Storage storage,
-                            MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
-                            PixelsFooterCache pixelsFooterCache,
-                            String connectorId)
+    public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, String[] includeCols,
+                            Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
+                            PixelsFooterCache pixelsFooterCache, CompletableFuture<?> lambdaOutput,
+                            AtomicInteger localSplitCounter)
     {
         this.split = split;
         this.storage = storage;
         this.columns = columnHandles;
+        this.includeCols = includeCols;
         this.numColumnToRead = columnHandles.size();
         this.footerCache = pixelsFooterCache;
+        this.lambdaOutput = lambdaOutput;
+        this.localSplitCounter = localSplitCounter;
         this.batchId = 0;
         this.closed = false;
+        this.BatchSize = PixelsTrinoConfig.getBatchSize();
 
         this.cacheReader = PixelsCacheReader
                 .newBuilder()
                 .setCacheFile(cacheFile)
                 .setIndexFile(indexFile)
                 .build();
-        getPixelsReaderBySchema(split, cacheReader, pixelsFooterCache);
 
-        try
+        if (this.lambdaOutput == null)
         {
-            this.recordReader = this.pixelsReader.read(this.option);
+            readFirstPath();
+            this.blocked = NOT_BLOCKED;
         }
-        catch (IOException e)
+        else
         {
-            logger.error("create record reader error: " + e.getMessage());
-            closeWithSuppression(e);
-            throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
-                    "create record reader error.", e);
+            this.blocked = this.lambdaOutput.whenComplete(((ret, err) -> {
+                if (err != null)
+                {
+                    logger.error(err);
+                    throw new RuntimeException(err);
+                }
+                try
+                {
+                    readFirstPath();
+                }
+                catch (Exception e)
+                {
+                    logger.error(e, "error in minio read.");
+                    throw new RuntimeException(e);
+                }
+            }));
+            if (this.blocked.isDone() && !this.blocked.isCancelled() &&
+                    !this.blocked.isCompletedExceptionally() &&
+                    !this.closed && this.recordReader == null)
+            {
+                // this.blocked is complete normally before reaching here.
+                readFirstPath();
+            }
         }
-        this.BatchSize = PixelsTrinoConfig.getBatchSize();
     }
 
-    private void getPixelsReaderBySchema(PixelsSplit split, PixelsCacheReader pixelsCacheReader,
-                                         PixelsFooterCache pixelsFooterCache)
+    private void readFirstPath()
     {
-        String[] cols = new String[columns.size()];
-        for (int i = 0; i < columns.size(); i++)
+        if (split.isEmpty())
         {
-            cols[i] = columns.get(i).getColumnName();
+            this.close();
+            return;
         }
 
         Map<PixelsColumnHandle, Domain> domains = new HashMap<>();
@@ -139,9 +166,9 @@ class PixelsPageSource implements ConnectorPageSource
         this.option = new PixelsReaderOption();
         this.option.skipCorruptRecords(true);
         this.option.tolerantSchemaEvolution(true);
-        this.option.includeCols(cols);
+        this.option.includeCols(includeCols);
         this.option.predicate(predicate);
-        this.option.rgRange(split.getStart(), split.getLen());
+        this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.queryId(split.getQueryId());
 
         try
@@ -154,9 +181,10 @@ class PixelsPageSource implements ConnectorPageSource
                         .setPath(split.getPath())
                         .setEnableCache(split.getCached())
                         .setCacheOrder(split.getCacheOrder())
-                        .setPixelsCacheReader(pixelsCacheReader)
-                        .setPixelsFooterCache(pixelsFooterCache)
+                        .setPixelsCacheReader(cacheReader)
+                        .setPixelsFooterCache(footerCache)
                         .build();
+                this.recordReader = this.pixelsReader.read(this.option);
             } else
             {
                 logger.error("pixelsReader error: storage handler is null");
@@ -189,6 +217,7 @@ class PixelsPageSource implements ConnectorPageSource
                             .setPixelsCacheReader(this.cacheReader)
                             .setPixelsFooterCache(this.footerCache)
                             .build();
+                    this.option.rgRange(split.getRgStart(), split.getRgLength());
                     this.recordReader = this.pixelsReader.read(this.option);
                 } else
                 {
@@ -215,7 +244,7 @@ class PixelsPageSource implements ConnectorPageSource
         {
             return this.completedBytes;
         }
-        return this.completedBytes + recordReader.getCompletedBytes();
+        return this.completedBytes + (recordReader != null ? recordReader.getCompletedBytes() : 0);
     }
 
     @Override
@@ -225,7 +254,7 @@ class PixelsPageSource implements ConnectorPageSource
         {
             return readTimeNanos;
         }
-        return this.readTimeNanos + recordReader.getReadTimeNanos();
+        return this.readTimeNanos + (recordReader != null ? recordReader.getReadTimeNanos() : 0);
     }
 
     @Override
@@ -243,7 +272,7 @@ class PixelsPageSource implements ConnectorPageSource
         {
             return memoryUsage;
         }
-        return this.memoryUsage + recordReader.getMemoryUsage();
+        return this.memoryUsage + (recordReader != null ? recordReader.getMemoryUsage() : 0);
     }
 
     @Override
@@ -253,8 +282,31 @@ class PixelsPageSource implements ConnectorPageSource
     }
 
     @Override
+    public CompletableFuture<?> isBlocked()
+    {
+        return this.blocked;
+    }
+
+    @Override
     public Page getNextPage()
     {
+        if (!this.blocked.isDone())
+        {
+            return null;
+        }
+        if (this.blocked.isCancelled() || this.blocked.isCompletedExceptionally())
+        {
+            this.close();
+            throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
+                    "lambda request is done exceptionally: " +
+                            this.blocked.isCompletedExceptionally());
+        }
+
+        if (this.closed)
+        {
+            return null;
+        }
+
         this.batchId++;
         VectorizedRowBatch rowBatch;
         int rowBatchSize;
@@ -328,6 +380,11 @@ class PixelsPageSource implements ConnectorPageSource
         }
 
         closeReader();
+
+        if (this.localSplitCounter != null)
+        {
+            this.localSplitCounter.decrementAndGet();
+        }
 
         closed = true;
     }
@@ -513,5 +570,4 @@ class PixelsPageSource implements ConnectorPageSource
             return block;
         }
     }
-
 }

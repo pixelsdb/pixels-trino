@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -19,11 +19,11 @@
  */
 package io.pixelsdb.pixels.trino.block;
 
-import io.trino.spi.block.Block;
-import io.trino.spi.block.BlockBuilder;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 import io.airlift.slice.XxHash64;
+import io.trino.spi.block.Block;
+import io.trino.spi.block.BlockBuilder;
 import org.openjdk.jol.info.ClassLayout;
 import sun.misc.Unsafe;
 
@@ -32,7 +32,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.function.ObjLongConsumer;
 
 import static io.airlift.slice.SizeOf.sizeOf;
@@ -46,8 +45,8 @@ import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
  * and replaced the implementation of each methods;
  * 2. add some other methods.
  * <p>
- * Created at: 19-5-31
- * Author: hank
+ *
+ * @author hank
  */
 public class VarcharArrayBlock implements Block
 {

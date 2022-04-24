@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -26,8 +26,7 @@ import io.airlift.log.Logger;
 import java.util.Map;
 
 /**
- * Created at: 18-12-8
- * Author: hank
+ * @author hank
  */
 public class PixelsEventListenerFactory implements EventListenerFactory
 {

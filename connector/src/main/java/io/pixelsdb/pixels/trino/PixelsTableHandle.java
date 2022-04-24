@@ -29,11 +29,10 @@ import java.util.Objects;
 
 import static java.util.Objects.requireNonNull;
 /**
- * @author: tao
- * @date: Create in 2018-01-19 15:21
- **/
-public final class PixelsTableHandle
-        implements ConnectorTableHandle {
+ * @author tao
+ */
+public final class PixelsTableHandle implements ConnectorTableHandle
+{
     private final String connectorId;
     private final String schemaName;
     private final String tableName;

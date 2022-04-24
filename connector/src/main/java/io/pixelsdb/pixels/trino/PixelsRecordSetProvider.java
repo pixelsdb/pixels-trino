@@ -19,24 +19,82 @@
  */
 package io.pixelsdb.pixels.trino;
 
-import com.google.common.collect.ImmutableList;
+import com.google.inject.Inject;
+import io.pixelsdb.pixels.cache.MemoryMappedFile;
+import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.common.physical.StorageFactory;
+import io.pixelsdb.pixels.core.PixelsFooterCache;
+import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
+import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
+import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 
+import java.io.IOException;
 import java.util.List;
 
-public class PixelsRecordSetProvider
-        implements ConnectorRecordSetProvider
-{
-    @Override
-    public RecordSet getRecordSet(ConnectorTransactionHandle transaction, ConnectorSession session, ConnectorSplit split, ConnectorTableHandle table, List<? extends ColumnHandle> columns)
-    {
-        PixelsSplit pixelsSplit = (PixelsSplit) split;
+import static com.google.common.base.Preconditions.checkArgument;
+import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.toList;
 
-        ImmutableList.Builder<PixelsColumnHandle> handles = ImmutableList.builder();
-        for (ColumnHandle handle : columns) {
-            handles.add((PixelsColumnHandle) handle);
+/**
+ * @author hank
+ */
+public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
+{
+    private final String connectorId;
+    private final MemoryMappedFile cacheFile;
+    private final MemoryMappedFile indexFile;
+    private final PixelsFooterCache pixelsFooterCache;
+    private final PixelsTrinoConfig config;
+
+    @Inject
+    public PixelsRecordSetProvider(PixelsConnectorId connectorId, PixelsTrinoConfig config)
+            throws Exception
+    {
+        this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
+        if (config.getConfigFactory().getProperty("cache.enabled").equalsIgnoreCase("true"))
+        {
+            // NOTICE: creating a MemoryMappedFile is efficient, usually cost tens of us.
+            this.cacheFile = new MemoryMappedFile(
+                    config.getConfigFactory().getProperty("cache.location"),
+                    Long.parseLong(config.getConfigFactory().getProperty("cache.size")));
+            this.indexFile = new MemoryMappedFile(
+                    config.getConfigFactory().getProperty("index.location"),
+                    Long.parseLong(config.getConfigFactory().getProperty("index.size")));
+        } else
+        {
+            this.cacheFile = null;
+            this.indexFile = null;
+        }
+        this.pixelsFooterCache = new PixelsFooterCache();
+        this.config = config;
+    }
+
+    @Override
+    public RecordSet getRecordSet(ConnectorTransactionHandle transaction, ConnectorSession session,
+                                  ConnectorSplit split, ConnectorTableHandle table, List<? extends ColumnHandle> columns)
+    {
+        if (config.isLambdaEnabled())
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR,
+                    "PixelsRecordSet does not support lambda coprocessor.");
+        }
+        List<PixelsColumnHandle> pixelsColumns = columns.stream()
+                .map(PixelsColumnHandle.class::cast)
+                .collect(toList());
+        requireNonNull(split, "split is null");
+        PixelsSplit pixelsSplit = (PixelsSplit) split;
+        checkArgument(pixelsSplit.getConnectorId().equals(connectorId), "connectorId is not for this connector");
+
+        Storage storage;
+        try
+        {
+            storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
+        } catch (IOException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
         }
 
-        return new PixelsRecordSet(pixelsSplit, handles.build());
+        return new PixelsRecordSet(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile, pixelsFooterCache, connectorId);
     }
 }

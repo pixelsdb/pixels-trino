@@ -21,11 +21,8 @@ package io.pixelsdb.pixels.trino;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
-import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -34,7 +31,10 @@ import io.trino.spi.connector.*;
 import io.trino.spi.security.TrinoPrincipal;
 
 import javax.inject.Inject;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
@@ -42,14 +42,12 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
 /**
- * @author: tao
+ * @author tao
  * @author hank
- * @date: Create in 2018-01-19 14:16
  **/
-public class PixelsMetadata
-        implements ConnectorMetadata
+public class PixelsMetadata implements ConnectorMetadata
 {
-    private static final Logger logger = Logger.get(PixelsMetadata.class);
+    // private static final Logger logger = Logger.get(PixelsMetadata.class);
     private final String connectorId;
 
     private final PixelsMetadataProxy pixelsMetadataProxy;

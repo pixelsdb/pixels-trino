@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -27,8 +27,7 @@ import io.trino.spi.ErrorType;
 import static io.trino.spi.ErrorType.*;
 
 
-public enum PixelsErrorCode
-        implements ErrorCodeSupplier
+public enum PixelsErrorCode implements ErrorCodeSupplier
 {
     PIXELS_METASTORE_ERROR(0, EXTERNAL),
     PIXELS_CURSOR_ERROR(1, EXTERNAL),

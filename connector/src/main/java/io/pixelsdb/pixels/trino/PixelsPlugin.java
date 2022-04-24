@@ -26,8 +26,7 @@ import io.trino.spi.Plugin;
 import io.trino.spi.block.BlockEncoding;
 import io.trino.spi.connector.ConnectorFactory;
 
-public class PixelsPlugin
-        implements Plugin
+public class PixelsPlugin implements Plugin
 {
     @Override
     public Iterable<BlockEncoding> getBlockEncodings()

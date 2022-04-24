@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -34,8 +34,7 @@ import static io.pixelsdb.pixels.trino.block.EncoderUtil.*;
  *
  * We reimplemented writeBlock and readBlock
  *
- * Created at: 19-6-1
- * Author: hank
+ * @author hank
  */
 public class VarcharArrayBlockEncoding implements BlockEncoding
 {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -18,21 +18,20 @@
  * <https://www.gnu.org/licenses/>.
  */
 package io.pixelsdb.pixels.trino;
+
 import com.google.inject.Inject;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
 import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeManager;
-import io.trino.spi.type.TypeSignature;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * Parse column type signature to Presto or Pixels data type.
  *
- * Created at: 19-6-1
- * Author: hank
+ * @author hank
  */
 public class PixelsTypeParser
 {

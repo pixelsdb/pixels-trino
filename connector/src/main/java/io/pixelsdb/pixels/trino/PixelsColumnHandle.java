@@ -31,8 +31,7 @@ import java.util.Objects;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
-public final class PixelsColumnHandle
-        implements ColumnHandle
+public final class PixelsColumnHandle implements ColumnHandle
 {
     private final String connectorId;
     private final String columnName;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -31,11 +31,9 @@ import static io.pixelsdb.pixels.trino.block.EncoderUtil.encodeNullsAsBits;
 /**
  * This class is derived from io.trino.spi.block.IntArrayBlockEncoding.
  *
- * Created at: 26/04/2021
- * Author: hank
+ * @author hank
  */
-public class TimeArrayBlockEncoding
-        implements BlockEncoding
+public class TimeArrayBlockEncoding implements BlockEncoding
 {
     public static final String NAME = "TIME_ARRAY";
 

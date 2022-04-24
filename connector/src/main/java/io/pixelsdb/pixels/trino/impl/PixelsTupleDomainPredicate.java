@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019 PixelsDB.
+ * Copyright 2022 PixelsDB.
  *
  * This file is part of Pixels.
  *
@@ -50,8 +50,7 @@ import static java.util.Objects.requireNonNull;
  * @author guodong
  * @author hank
  */
-public class PixelsTupleDomainPredicate<C>
-        implements PixelsPredicate
+public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
 {
     private final TupleDomain<C> predicate;
     public final List<ColumnReference<C>> columnReferences;

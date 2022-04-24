@@ -19,8 +19,6 @@
  */
 package io.pixelsdb.pixels.trino;
 
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.deser.std.FromStringDeserializer;
 import com.google.inject.Binder;
 import com.google.inject.Module;
 import com.google.inject.Scopes;
@@ -28,20 +26,13 @@ import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
 import io.pixelsdb.pixels.trino.properties.PixelsTableProperties;
-import io.trino.spi.type.Type;
 import io.trino.spi.type.TypeManager;
 
-import javax.inject.Inject;
-
-import static com.google.common.base.Preconditions.checkArgument;
 import static io.airlift.configuration.ConfigBinder.configBinder;
-import static io.airlift.json.JsonBinder.jsonBinder;
-import static io.airlift.json.JsonCodec.listJsonCodec;
-import static io.airlift.json.JsonCodecBinder.jsonCodecBinder;
 import static java.util.Objects.requireNonNull;
 
-public class PixelsModule
-        implements Module {
+public class PixelsModule implements Module
+{
     private final String connectorId;
     private final TypeManager typeManager;
 
@@ -64,26 +55,5 @@ public class PixelsModule
         binder.bind(PixelsSessionProperties.class).in(Scopes.SINGLETON);
         binder.bind(PixelsTableProperties.class).in(Scopes.SINGLETON);
         configBinder(binder).bindConfig(PixelsTrinoConfig.class);
-
-//        jsonBinder(binder).addDeserializerBinding(Type.class).to(TypeDeserializer.class);
-    }
-
-    public static final class TypeDeserializer
-            extends FromStringDeserializer<Type> {
-        private static final long serialVersionUID = -8192232141190978355L;
-        private final TypeManager typeManager;
-
-        @Inject
-        public TypeDeserializer(TypeManager typeManager) {
-            super(Type.class);
-            this.typeManager = requireNonNull(typeManager, "typeManager is null");
-        }
-
-        @Override
-        protected Type _deserialize(String value, DeserializationContext context) {
-            Type type = typeManager.fromSqlType(value);
-            checkArgument(type != null, "Unknown type %s", value);
-            return type;
-        }
     }
 }

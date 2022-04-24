@@ -29,8 +29,7 @@ import java.util.List;
 import static io.trino.spi.session.PropertyMetadata.booleanProperty;
 
 /**
- * Created at: 15/02/2022
- * Author: hank
+ * @author hank
  */
 public class PixelsSessionProperties
 {
