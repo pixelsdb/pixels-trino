@@ -33,13 +33,13 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Trino-374 requires Java 11 -->
+        <!-- Trino-375 requires Java 11 -->
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <maven.deploy.skip>true</maven.deploy.skip>
         <maven.install.skip>true</maven.install.skip>
 
-        <dep.trino.version>374</dep.trino.version>
+        <dep.trino.version>375</dep.trino.version>
         <dep.airlift.version>214</dep.airlift.version>
         <!-- override the airlift.slice version in pixels -->
         <dep.airlift.slice.version>0.41</dep.airlift.slice.version>

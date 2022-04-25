@@ -54,6 +54,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -87,7 +88,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         this.cacheSchema = config.getConfigFactory().getProperty("cache.schema");
         this.cacheTable = config.getConfigFactory().getProperty("cache.table");
     }
-    
 
     @Override
     public ConnectorSplitSource getSplits(ConnectorTransactionHandle transHandle_,
@@ -101,9 +101,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
         PixelsTableHandle tableHandle = (PixelsTableHandle) tableHandle_;
         TupleDomain<PixelsColumnHandle> constraint = constraint_.getSummary()
                 .transformKeys(PixelsColumnHandle.class::cast);
-//        TODO: get desiredColumns using projection push-down.
-//        Set<PixelsColumnHandle> desiredColumns = layoutHandle.getDesiredColumns().stream().map(PixelsColumnHandle.class::cast)
-//                .collect(toSet());
+        if (dynamicFilter.isAwaitable())
+        {
+            logger.info("Using predicate from dynamicFilter.");
+            constraint = dynamicFilter.getCurrentPredicate().transformKeys(PixelsColumnHandle.class::cast);
+        }
+        Set<PixelsColumnHandle> desiredColumns = tableHandle.getColumns().stream().map(PixelsColumnHandle.class::cast)
+                .collect(toImmutableSet());
 
         String schemaName = tableHandle.getSchemaName();
         String tableName = tableHandle.getTableName();
@@ -156,11 +160,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
             IndexName indexName = new IndexName(schemaName, tableName);
             Order order = JSON.parseObject(layout.getOrder(), Order.class);
             ColumnSet columnSet = new ColumnSet();
-//            TODO: get desiredColumns using projection push-down.
-//            for (PixelsColumnHandle column : desiredColumns)
-//            {
-//                columnSet.addColumn(column.getColumnName());
-//            }
+            for (PixelsColumnHandle column : desiredColumns)
+            {
+                columnSet.addColumn(column.getColumnName());
+            }
 
             // get split size
             int splitSize;
