@@ -25,66 +25,79 @@ import com.google.common.base.Joiner;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.SchemaTableName;
 
+import java.util.List;
 import java.util.Objects;
 
 import static java.util.Objects.requireNonNull;
+
 /**
  * @author tao
+ * @author hank
  */
 public final class PixelsTableHandle implements ConnectorTableHandle
 {
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
-    private final String path;
+    private final List<PixelsColumnHandle> columns;
 
     @JsonCreator
     public PixelsTableHandle(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
-            @JsonProperty("path") String path) {
+            @JsonProperty("columns") List<PixelsColumnHandle> columns)
+    {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
-        this.path = requireNonNull(path, "path is null");
+        this.columns = requireNonNull(columns, "columns is null");
     }
 
     @JsonProperty
-    public String getConnectorId() {
+    public String getConnectorId()
+    {
         return connectorId;
     }
 
     @JsonProperty
-    public String getSchemaName() {
+    public String getSchemaName()
+    {
         return schemaName;
     }
 
     @JsonProperty
-    public String getTableName() {
+    public String getTableName()
+    {
         return tableName;
     }
 
     @JsonProperty
-    public String getPath() {
-        return path;
+    public List<PixelsColumnHandle> getColumns()
+    {
+        return columns;
     }
 
-    public SchemaTableName toSchemaTableName() {
+    public SchemaTableName toSchemaTableName()
+    {
         return new SchemaTableName(schemaName, tableName);
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(connectorId, schemaName, tableName, path);
+    public int hashCode()
+    {
+        return Objects.hash(connectorId, schemaName, tableName, columns);
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
+    public boolean equals(Object obj)
+    {
+        if (this == obj)
+        {
             return true;
         }
-        if ((obj == null) || (getClass() != obj.getClass())) {
+        if ((obj == null) || (getClass() != obj.getClass()))
+        {
             return false;
         }
 
@@ -92,11 +105,13 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         return Objects.equals(this.connectorId, other.connectorId) &&
                 Objects.equals(this.schemaName, other.schemaName) &&
                 Objects.equals(this.tableName, other.tableName) &&
-                Objects.equals(this.path, other.path);
+                Objects.equals(this.columns, other.columns);
     }
 
     @Override
-    public String toString() {
-        return Joiner.on(":").join(connectorId, schemaName, tableName, path);
+    public String toString()
+    {
+        return Joiner.on(":").join(connectorId, schemaName, tableName,
+                Joiner.on(",").join(columns));
     }
 }

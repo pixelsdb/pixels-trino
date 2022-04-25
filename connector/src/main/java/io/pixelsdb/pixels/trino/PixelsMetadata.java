@@ -21,6 +21,7 @@ package io.pixelsdb.pixels.trino;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.physical.Storage;
@@ -28,15 +29,15 @@ import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
+import io.trino.spi.expression.ConnectorExpression;
 import io.trino.spi.security.TrinoPrincipal;
 
 import javax.inject.Inject;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Verify.verify;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
@@ -44,12 +45,12 @@ import static java.util.stream.Collectors.toList;
 /**
  * @author tao
  * @author hank
+ * @author tianxiao
  **/
 public class PixelsMetadata implements ConnectorMetadata
 {
     // private static final Logger logger = Logger.get(PixelsMetadata.class);
     private final String connectorId;
-
     private final PixelsMetadataProxy pixelsMetadataProxy;
 
     @Inject
@@ -98,8 +99,17 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             if (this.pixelsMetadataProxy.existTable(tableName.getSchemaName(), tableName.getTableName()))
             {
+                List<PixelsColumnHandle> columns;
+                try
+                {
+                    columns = pixelsMetadataProxy.getTableColumn(
+                            connectorId, tableName.getSchemaName(), tableName.getTableName());
+                } catch (MetadataException e)
+                {
+                    throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+                }
                 PixelsTableHandle tableHandle = new PixelsTableHandle(
-                        connectorId, tableName.getSchemaName(), tableName.getTableName(), "");
+                        connectorId, tableName.getSchemaName(), tableName.getTableName(), columns);
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -108,28 +118,6 @@ public class PixelsMetadata implements ConnectorMetadata
         }
         return null;
     }
-
-//    TODO: table layouts are deprecated since Presto 306
-//
-//    @Override
-//    public List<ConnectorTableLayoutResult> getTableLayouts(ConnectorSession session, ConnectorTableHandle table,
-//                                                            Constraint<ColumnHandle> constraint,
-//                                                            Optional<Set<ColumnHandle>> desiredColumns)
-//    {
-//        PixelsTableHandle tableHandle = (PixelsTableHandle) table;
-//        PixelsTableLayoutHandle tableLayout = new PixelsTableLayoutHandle(tableHandle);
-//        tableLayout.setConstraint(constraint.getSummary());
-//        if(desiredColumns.isPresent())
-//            tableLayout.setDesiredColumns(desiredColumns.get());
-//        ConnectorTableLayout layout = getTableLayout(session, tableLayout);
-//        return ImmutableList.of(new ConnectorTableLayoutResult(layout, constraint.getSummary()));
-//    }
-//
-//    @Override
-//    public ConnectorTableLayout getTableLayout(ConnectorSession session, ConnectorTableLayoutHandle handle)
-//    {
-//        return new ConnectorTableLayout(handle);
-//    }
 
     @Override
     public ConnectorTableMetadata getTableMetadata(ConnectorSession session, ConnectorTableHandle table)
@@ -360,7 +348,78 @@ public class PixelsMetadata implements ConnectorMetadata
     }
 
     @Override
-    public void createView(ConnectorSession session, SchemaTableName viewName, ConnectorViewDefinition definition, boolean replace)
+    public Optional<LimitApplicationResult<ConnectorTableHandle>> applyLimit(
+            ConnectorSession session, ConnectorTableHandle handle, long limit)
+    {
+        return ConnectorMetadata.super.applyLimit(session, handle, limit);
+    }
+
+    @Override
+    public Optional<ConstraintApplicationResult<ConnectorTableHandle>> applyFilter(
+            ConnectorSession session, ConnectorTableHandle handle, Constraint constraint)
+    {
+        return ConnectorMetadata.super.applyFilter(session, handle, constraint);
+    }
+
+    @Override
+    public Optional<ProjectionApplicationResult<ConnectorTableHandle>> applyProjection(
+            ConnectorSession session, ConnectorTableHandle handle, List<ConnectorExpression> projections,
+            Map<String, ColumnHandle> assignments)
+    {
+        PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+
+        List<PixelsColumnHandle> newColumns = assignments.values().stream()
+                .map(PixelsColumnHandle.class::cast).collect(toImmutableList());
+
+        Set<PixelsColumnHandle> newColumnSet = ImmutableSet.copyOf(newColumns);
+        Set<PixelsColumnHandle> tableColumnSet = ImmutableSet.copyOf(tableHandle.getColumns());
+        if (newColumnSet.equals(tableColumnSet))
+        {
+            return Optional.empty();
+        }
+
+        verify(tableColumnSet.containsAll(newColumnSet),
+                "applyProjection called with columns %s and some are not available in existing query: %s",
+                newColumnSet, tableColumnSet);
+
+        return Optional.of(new ProjectionApplicationResult<>(
+                new PixelsTableHandle(connectorId, tableHandle.getSchemaName(), tableHandle.getTableName(), newColumns),
+                projections,
+                assignments.entrySet().stream().map(assignment -> new Assignment(
+                        assignment.getKey(), assignment.getValue(),
+                        ((PixelsColumnHandle) assignment.getValue()).getColumnType()
+                )).collect(toImmutableList()),
+                // always pushdown by setting precalculateStatistics to false.
+                false));
+    }
+
+    @Override
+    public Optional<AggregationApplicationResult<ConnectorTableHandle>> applyAggregation(
+            ConnectorSession session, ConnectorTableHandle handle, List<AggregateFunction> aggregates,
+            Map<String, ColumnHandle> assignments, List<List<ColumnHandle>> groupingSets)
+    {
+        return ConnectorMetadata.super.applyAggregation(session, handle, aggregates, assignments, groupingSets);
+    }
+
+    @Override
+    public Optional<JoinApplicationResult<ConnectorTableHandle>> applyJoin(
+            ConnectorSession session, JoinType joinType, ConnectorTableHandle left, ConnectorTableHandle right,
+            List<JoinCondition> joinConditions, Map<String, ColumnHandle> leftAssignments,
+            Map<String, ColumnHandle> rightAssignments, JoinStatistics statistics)
+    {
+        return ConnectorMetadata.super.applyJoin(session, joinType, left, right, joinConditions, leftAssignments,
+                rightAssignments, statistics);
+    }
+
+    @Override
+    public void validateScan(ConnectorSession session, ConnectorTableHandle handle)
+    {
+        ConnectorMetadata.super.validateScan(session, handle);
+    }
+
+    @Override
+    public void createView(ConnectorSession session, SchemaTableName viewName,
+                           ConnectorViewDefinition definition, boolean replace)
     {
         // TODO: API change in Trino 315 https://trino.io/docs/current/release/release-315.html:
         //  Allow connectors to provide view definitions. ConnectorViewDefinition now contains the real view definition
