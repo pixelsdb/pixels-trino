@@ -56,6 +56,7 @@ public class PixelsSplit implements ConnectorSplit
     private final List<HostAddress> addresses;
     private List<String> order;
     private final List<String> cacheOrder;
+    private final String[] includeCols;
     private final TupleDomain<PixelsColumnHandle> constraint;
 
     @JsonCreator
@@ -73,6 +74,7 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("order") List<String> order,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
+            @JsonProperty("includeCols") String[] includeCols,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint) {
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
@@ -93,6 +95,7 @@ public class PixelsSplit implements ConnectorSplit
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
         this.order = requireNonNull(order, "order is null");
         this.cacheOrder = requireNonNull(cacheOrder, "cache order is null");
+        this.includeCols = requireNonNull(includeCols, "includeCols is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
     }
 
@@ -119,37 +122,49 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
-    public String getConnectorId() {
+    public String getConnectorId()
+    {
         return connectorId;
     }
 
     @JsonProperty
-    public String getSchemaName() {
+    public String getSchemaName(){
         return schemaName;
     }
 
     @JsonProperty
-    public TupleDomain<PixelsColumnHandle> getConstraint() {
+    public String[] getIncludeCols()
+    {
+        return includeCols;
+    }
+
+    @JsonProperty
+    public TupleDomain<PixelsColumnHandle> getConstraint()
+    {
         return constraint;
     }
 
     @JsonProperty
-    public String getTableName() {
+    public String getTableName()
+    {
         return tableName;
     }
 
     @JsonProperty
-    public String getStorageScheme() {
+    public String getStorageScheme()
+    {
         return storageScheme;
     }
 
     @JsonProperty
-    public List<String> getPaths() {
+    public List<String> getPaths()
+    {
         return paths;
     }
 
     @JsonProperty
-    public long getQueryId() {
+    public long getQueryId()
+    {
         return queryId;
     }
 
@@ -235,7 +250,8 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @Override
-    public Object getInfo() {
+    public Object getInfo()
+    {
         return this;
     }
 
@@ -269,7 +285,7 @@ public class PixelsSplit implements ConnectorSplit
     @Override
     public String toString()
     {
-        // No need to print order, cacheOrder, and constrain, in most cases.
+        // No need to print order, cacheOrder, and constraint, in most cases.
         return "PixelsSplit{" +
                 "connectorId=" + connectorId +
                 ", schemaName='" + schemaName + '\'' +
