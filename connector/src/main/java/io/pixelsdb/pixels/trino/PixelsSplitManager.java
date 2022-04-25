@@ -54,7 +54,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -89,25 +88,44 @@ public class PixelsSplitManager implements ConnectorSplitManager
         this.cacheTable = config.getConfigFactory().getProperty("cache.table");
     }
 
+    public static List<PixelsColumnHandle> getIncludeColumns(PixelsTableHandle tableHandle)
+    {
+        ImmutableList.Builder<PixelsColumnHandle> builder = ImmutableList.builder();
+        builder.addAll(tableHandle.getColumns());
+        if (tableHandle.getConstraint().getDomains().isPresent())
+        {
+            Set<PixelsColumnHandle> oldColumnSet = new HashSet<>(tableHandle.getColumns());
+            for (PixelsColumnHandle column : tableHandle.getConstraint().getDomains().get().keySet())
+            {
+                if (!oldColumnSet.contains(column))
+                {
+                    builder.add(column);
+                }
+            }
+        }
+        return builder.build();
+    }
+
     @Override
-    public ConnectorSplitSource getSplits(ConnectorTransactionHandle transHandle_,
+    public ConnectorSplitSource getSplits(ConnectorTransactionHandle trans,
                                           ConnectorSession session,
-                                          ConnectorTableHandle tableHandle_,
+                                          ConnectorTableHandle handle,
                                           SplitSchedulingStrategy splitSchedulingStrategy,
                                           DynamicFilter dynamicFilter,
-                                          Constraint constraint_)
+                                          Constraint extra)
     {
-        PixelsTransactionHandle transHandle = (PixelsTransactionHandle) transHandle_;
-        PixelsTableHandle tableHandle = (PixelsTableHandle) tableHandle_;
-        TupleDomain<PixelsColumnHandle> constraint = constraint_.getSummary()
-                .transformKeys(PixelsColumnHandle.class::cast);
-        if (dynamicFilter.isAwaitable())
+        PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
+        PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+        // Do not use constraint_ in the parameters, it is always TupleDomain.all().
+        TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
+        // logger.info("constraint from table handle: " + constraint.toString(session));
+        List<PixelsColumnHandle> desiredColumns = getIncludeColumns(tableHandle);
+
+        String[] includeCols = new String[desiredColumns.size()];
+        for (int i = 0; i < desiredColumns.size(); ++i)
         {
-            logger.info("Using predicate from dynamicFilter.");
-            constraint = dynamicFilter.getCurrentPredicate().transformKeys(PixelsColumnHandle.class::cast);
+            includeCols[i] = desiredColumns.get(i).getColumnName();
         }
-        Set<PixelsColumnHandle> desiredColumns = tableHandle.getColumns().stream().map(PixelsColumnHandle.class::cast)
-                .collect(toImmutableSet());
 
         String schemaName = tableHandle.getSchemaName();
         String tableName = tableHandle.getTableName();
@@ -296,7 +314,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             Collections.nCopies(paths.size(), 0),
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
-                                            order.getColumnOrder(), new ArrayList<>(0), constraint);
+                                            order.getColumnOrder(), new ArrayList<>(0),
+                                            includeCols, constraint);
                                     // log.debug("Split in orderPath: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -333,7 +352,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, order.getColumnOrder(),
-                                                cacheColumnletOrders, constraint);
+                                                cacheColumnletOrders, includeCols, constraint);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPath" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -392,7 +411,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     Collections.nCopies(paths.size(), 0),
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
-                                    order.getColumnOrder(), new ArrayList<>(0), constraint);
+                                    order.getColumnOrder(), new ArrayList<>(0),
+                                    includeCols, constraint);
                             // logger.debug("Split in orderPath: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -415,7 +435,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
-                                        order.getColumnOrder(), new ArrayList<>(0), constraint);
+                                        order.getColumnOrder(), new ArrayList<>(0),
+                                        includeCols, constraint);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }
@@ -451,7 +472,15 @@ public class PixelsSplitManager implements ConnectorSplitManager
             for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
             {
                 ColumnFilter<?> columnFilter = createColumnFilter(entry.getKey(), entry.getValue());
-                columnFilters.put(colToCid.get(entry.getKey().getColumnName()), columnFilter);
+                if (colToCid.containsKey(entry.getKey().getColumnName()))
+                {
+                    columnFilters.put(colToCid.get(entry.getKey().getColumnName()), columnFilter);
+                }
+                else
+                {
+                    throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR,
+                            "column '" + entry.getKey().getColumnName() + "' does not exist in the includeCols");
+                }
             }
         }
 

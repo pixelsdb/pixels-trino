@@ -42,8 +42,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.pixelsdb.pixels.trino.PixelsSplitManager.getIncludeColumns;
 import static java.util.Objects.requireNonNull;
-import static java.util.stream.Collectors.toList;
 
 /**
  * Provider Class for Pixels Page Source class.
@@ -88,18 +88,14 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                                                 ConnectorSession session, ConnectorSplit split,
                                                 ConnectorTableHandle table, List<ColumnHandle> columns,
                                                 DynamicFilter dynamicFilter) {
-        List<PixelsColumnHandle> pixelsColumns = columns.stream()
-                .map(PixelsColumnHandle.class::cast).collect(toList());
+        requireNonNull(table, "table is null");
+        PixelsTableHandle tableHandle = (PixelsTableHandle) table;
+        List<PixelsColumnHandle> pixelsColumns = getIncludeColumns(tableHandle);
         requireNonNull(split, "split is null");
         PixelsSplit pixelsSplit = (PixelsSplit) split;
         checkArgument(pixelsSplit.getConnectorId().equals(connectorId),
                 "connectorId is not for this connector");
-
-        String[] includeCols = new String[pixelsColumns.size()];
-        for (int i = 0; i < pixelsColumns.size(); i++)
-        {
-            includeCols[i] = pixelsColumns.get(i).getColumnName();
-        }
+        String[] includeCols = pixelsSplit.getIncludeCols();
 
         try
         {
@@ -144,7 +140,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         TableScanFilter filter = PixelsSplitManager.createTableScanFilter(inputSplit.getSchemaName(),
                 inputSplit.getTableName(), includeCols, inputSplit.getConstraint());
         scanInput.setFilter(JSON.toJSONString(filter));
-        logger.info("table scan filter: " + scanInput.getFilter());
+        // logger.info("table scan filter: " + scanInput.getFilter());
         String folder = config.getMinioOutputFolderForQuery(inputSplit.getQueryId());
         String endpoint = config.getMinioEndpoint();
         String accessKey = config.getMinioAccessKey();

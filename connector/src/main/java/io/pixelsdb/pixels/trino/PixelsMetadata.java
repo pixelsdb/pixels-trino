@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.physical.Storage;
@@ -30,6 +31,7 @@ import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 import io.trino.spi.expression.ConnectorExpression;
+import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.security.TrinoPrincipal;
 
 import javax.inject.Inject;
@@ -49,7 +51,7 @@ import static java.util.stream.Collectors.toList;
  **/
 public class PixelsMetadata implements ConnectorMetadata
 {
-    // private static final Logger logger = Logger.get(PixelsMetadata.class);
+    private static final Logger logger = Logger.get(PixelsMetadata.class);
     private final String connectorId;
     private final PixelsMetadataProxy pixelsMetadataProxy;
 
@@ -102,6 +104,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 List<PixelsColumnHandle> columns;
                 try
                 {
+                    // initially, get all the columns from the table.
                     columns = pixelsMetadataProxy.getTableColumn(
                             connectorId, tableName.getSchemaName(), tableName.getTableName());
                 } catch (MetadataException e)
@@ -109,7 +112,8 @@ public class PixelsMetadata implements ConnectorMetadata
                     throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
                 }
                 PixelsTableHandle tableHandle = new PixelsTableHandle(
-                        connectorId, tableName.getSchemaName(), tableName.getTableName(), columns);
+                        connectorId, tableName.getSchemaName(), tableName.getTableName(),
+                        columns, TupleDomain.all()); // match all tuples at the beginning.
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -358,7 +362,34 @@ public class PixelsMetadata implements ConnectorMetadata
     public Optional<ConstraintApplicationResult<ConnectorTableHandle>> applyFilter(
             ConnectorSession session, ConnectorTableHandle handle, Constraint constraint)
     {
-        return ConnectorMetadata.super.applyFilter(session, handle, constraint);
+        PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+        TupleDomain<PixelsColumnHandle> oldDomain = tableHandle.getConstraint();
+        TupleDomain<PixelsColumnHandle> newDomain = oldDomain.intersect(constraint.getSummary()
+            .transformKeys(PixelsColumnHandle.class::cast));
+        TupleDomain<ColumnHandle> remainingFilter;
+
+        if (newDomain.isNone())
+        {
+            // all is the default constraint.
+            remainingFilter = TupleDomain.all();
+        }
+        else
+        {
+            remainingFilter = TupleDomain.withColumnDomains(new HashMap<>());
+        }
+
+        if (oldDomain.equals(newDomain))
+        {
+            // returns empty means reject filter pushdown.
+            return Optional.empty();
+        }
+
+        tableHandle = new PixelsTableHandle(tableHandle.getConnectorId(),
+                tableHandle.getSchemaName(), tableHandle.getTableName(),
+                tableHandle.getColumns(), newDomain);
+
+        // pushing down without statistics pre-calculation.
+        return Optional.of(new ConstraintApplicationResult<>(tableHandle, remainingFilter, false));
     }
 
     @Override
@@ -383,14 +414,14 @@ public class PixelsMetadata implements ConnectorMetadata
                 newColumnSet, tableColumnSet);
 
         return Optional.of(new ProjectionApplicationResult<>(
-                new PixelsTableHandle(connectorId, tableHandle.getSchemaName(), tableHandle.getTableName(), newColumns),
+                new PixelsTableHandle(connectorId, tableHandle.getSchemaName(), tableHandle.getTableName(),
+                        newColumns, tableHandle.getConstraint()),
                 projections,
                 assignments.entrySet().stream().map(assignment -> new Assignment(
                         assignment.getKey(), assignment.getValue(),
                         ((PixelsColumnHandle) assignment.getValue()).getColumnType()
                 )).collect(toImmutableList()),
-                // always pushdown by setting precalculateStatistics to false.
-                false));
+                false)); // pushing down without statistics pre-calculation.
     }
 
     @Override
