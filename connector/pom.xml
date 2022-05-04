@@ -34,6 +34,11 @@
             <artifactId>pixels-core</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-executor</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!-- trino -->
         <dependency>
