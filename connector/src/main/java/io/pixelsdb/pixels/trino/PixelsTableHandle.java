@@ -41,6 +41,10 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
+    /**
+     * The assignments, i.e., the columns that appear in the select statement.
+     * The columns that only appear in the constraint are not included.
+     */
     private final List<PixelsColumnHandle> columns;
     private TupleDomain<PixelsColumnHandle> constraint;
 

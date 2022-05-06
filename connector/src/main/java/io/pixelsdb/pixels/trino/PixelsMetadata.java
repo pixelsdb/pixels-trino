@@ -429,15 +429,54 @@ public class PixelsMetadata implements ConnectorMetadata
             ConnectorSession session, ConnectorTableHandle handle, List<AggregateFunction> aggregates,
             Map<String, ColumnHandle> assignments, List<List<ColumnHandle>> groupingSets)
     {
+        PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+        logger.info("aggregation push down on: " + tableHandle.getSchemaName() + "." + tableHandle.getTableName());
+        for (ColumnHandle columnHandle : assignments.values())
+        {
+            logger.info("aggregation assignment: " + columnHandle.toString());
+        }
         return ConnectorMetadata.super.applyAggregation(session, handle, aggregates, assignments, groupingSets);
     }
 
     @Override
     public Optional<JoinApplicationResult<ConnectorTableHandle>> applyJoin(
-            ConnectorSession session, JoinType joinType, ConnectorTableHandle left, ConnectorTableHandle right,
-            List<JoinCondition> joinConditions, Map<String, ColumnHandle> leftAssignments,
-            Map<String, ColumnHandle> rightAssignments, JoinStatistics statistics)
+            ConnectorSession session, JoinType joinType,
+            ConnectorTableHandle left, ConnectorTableHandle right,
+            List<JoinCondition> joinConditions,
+            Map<String, ColumnHandle> leftAssignments,
+            Map<String, ColumnHandle> rightAssignments,
+            JoinStatistics statistics)
     {
+        PixelsTableHandle leftTable = (PixelsTableHandle) left;
+        PixelsTableHandle rightTable = (PixelsTableHandle) right;
+        StringBuilder builder = new StringBuilder("join push down - ");
+        builder.append("left table: ").append(leftTable.getTableName()).append(", columns: ");
+        for (PixelsColumnHandle columnHandle : leftTable.getColumns())
+        {
+            builder.append(columnHandle.getColumnName()).append(":");
+        }
+        builder.append(", assignments: ");
+        for (String column : leftAssignments.keySet())
+        {
+            builder.append(column).append(":");
+        }
+        builder.append(", right table: ").append(rightTable.getTableName()).append(", columns: ");
+        for (PixelsColumnHandle columnHandle : rightTable.getColumns())
+        {
+            builder.append(columnHandle.getColumnName()).append(":");
+        }
+        builder.append(", assignments: ");
+        for (String column : rightAssignments.keySet())
+        {
+            builder.append(column).append(":");
+        }
+        builder.append(", join conditions: ");
+        for (JoinCondition condition : joinConditions)
+        {
+            builder.append(condition.toString()).append(":");
+        }
+        builder.append(", join type: ").append(joinType.name());
+        logger.info(builder.toString());
         return ConnectorMetadata.super.applyJoin(session, joinType, left, right, joinConditions, leftAssignments,
                 rightAssignments, statistics);
     }
