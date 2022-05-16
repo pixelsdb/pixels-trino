@@ -80,8 +80,8 @@ public class PixelsRecordCursor implements RecordCursor
      * has not been read.
      */
     private VectorizedRowBatch rowBatch;
-    private volatile int rowBatchSize;
-    private volatile int rowIndex;
+    private int rowBatchSize;
+    private int rowIndex;
 
     public PixelsRecordCursor(PixelsSplit split, List<PixelsColumnHandle> columnHandles, Storage storage,
                               MemoryMappedFile cacheFile, MemoryMappedFile indexFile, PixelsFooterCache footerCache,
@@ -268,6 +268,11 @@ public class PixelsRecordCursor implements RecordCursor
     @Override
     public boolean advanceNextPosition()
     {
+        if (this.closed)
+        {
+            return false;
+        }
+
         if (++this.rowIndex < this.rowBatchSize)
         {
             return true;
