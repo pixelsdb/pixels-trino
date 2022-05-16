@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
+import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.PixelsReader;
@@ -30,6 +31,8 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
+import io.pixelsdb.pixels.core.retina.RetinaService;
+import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
 import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
@@ -60,16 +63,23 @@ class PixelsPageSource implements ConnectorPageSource
 {
     private static final Logger logger = Logger.get(PixelsPageSource.class);
     private final int BatchSize;
-    private PixelsSplit split;
+    private final PixelsSplit split;
     private final List<PixelsColumnHandle> columns;
     private final String[] includeCols;
     private final Storage storage;
     private boolean closed;
     private PixelsReader pixelsReader;
     private PixelsRecordReader recordReader;
+    private RetinaService retinaService;
+
+    private Bitmap visibility;
+    /**
+     * The number of rows that have been read from the current row group.
+     */
+    private int offset = 0;
+    private long transTS;
     private final PixelsCacheReader cacheReader;
     private final PixelsFooterCache footerCache;
-    private final CompletableFuture<?> lambdaOutput;
     private final AtomicInteger localSplitCounter;
     private final CompletableFuture<?> blocked;
     private long completedBytes = 0L;
@@ -82,7 +92,7 @@ class PixelsPageSource implements ConnectorPageSource
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, String[] includeCols,
                             Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
                             PixelsFooterCache pixelsFooterCache, CompletableFuture<?> lambdaOutput,
-                            AtomicInteger localSplitCounter)
+                            AtomicInteger localSplitCounter, RetinaService retinaService, long transTS)
     {
         this.split = split;
         this.storage = storage;
@@ -90,7 +100,6 @@ class PixelsPageSource implements ConnectorPageSource
         this.includeCols = includeCols;
         this.numColumnToRead = columnHandles.size();
         this.footerCache = pixelsFooterCache;
-        this.lambdaOutput = lambdaOutput;
         this.localSplitCounter = localSplitCounter;
         this.batchId = 0;
         this.closed = false;
@@ -102,14 +111,22 @@ class PixelsPageSource implements ConnectorPageSource
                 .setIndexFile(indexFile)
                 .build();
 
-        if (this.lambdaOutput == null)
+        this.retinaService = retinaService;
+        this.transTS = transTS;
+
+        if (lambdaOutput == null)
         {
-            readFirstPath();
+            if (!split.getIsRetinaWriteBuffer()) {
+                readFirstPath();
+            }
             this.blocked = NOT_BLOCKED;
         }
         else
         {
-            this.blocked = this.lambdaOutput.whenComplete(((ret, err) -> {
+            if (split.getIsRetinaWriteBuffer()) {
+                throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR, "Retina write buffer is not supported in lambda mode");
+            }
+            this.blocked = lambdaOutput.whenComplete(((ret, err) -> {
                 if (err != null)
                 {
                     logger.error(err);
@@ -135,6 +152,9 @@ class PixelsPageSource implements ConnectorPageSource
         }
     }
 
+    /**
+     * Create recordReader of the first path.
+     */
     private void readFirstPath()
     {
         if (split.isEmpty())
@@ -167,9 +187,18 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.skipCorruptRecords(true);
         this.option.tolerantSchemaEvolution(true);
         this.option.includeCols(includeCols);
-        this.option.predicate(predicate);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.queryId(split.getQueryId());
+        try {
+            // FIXME: should get multiple bitmaps for different rgs?
+            this.visibility = this.retinaService.getVisibility(split.getSchemaName(), split.getTableName(), split.getRgStart(), transTS);
+        } catch (Exception e) {
+            logger.error(e, "error in get visibility.");
+            throw new TrinoException(PixelsErrorCode.PIXELS_RETINA_SERVICE_ERROR,
+                    "error in get visibility.", e);
+        }
+        this.option.predicate(predicate);
+
 
         try
         {
@@ -229,6 +258,9 @@ class PixelsPageSource implements ConnectorPageSource
                             .setPixelsFooterCache(this.footerCache)
                             .build();
                     this.option.rgRange(split.getRgStart(), split.getRgLength());
+                    // FIXME: should get multiple bitmaps for different rgs?
+                    this.visibility = this.retinaService.getVisibility(split.getSchemaName(), split.getTableName(), split.getRgStart(), transTS);
+                    this.offset = 0;
                     if (this.pixelsReader.getRowGroupNum() <= this.option.getRGStart())
                     {
                         /**
@@ -337,8 +369,19 @@ class PixelsPageSource implements ConnectorPageSource
         {
             try
             {
-                rowBatch = recordReader.readBatch(BatchSize, false);
-                rowBatchSize = rowBatch.size;
+                if (this.split.getIsRetinaWriteBuffer()) {
+                    try {
+                        rowBatch = this.retinaService.queryRecords(split.getSchemaName(), split.getTableName(), split.getRgStart(), transTS);
+                        rowBatchSize = rowBatch.size;
+                    } catch (Exception e) {
+                        logger.error(e, "error in query retina write buffer.");
+                        throw new TrinoException(PixelsErrorCode.PIXELS_RETINA_SERVICE_ERROR,
+                                "error in query retina write buffer.", e);
+                    }
+                } else {
+                    rowBatch = recordReader.readBatch(BatchSize, false);
+                    rowBatchSize = rowBatch.size;
+                }
                 if (rowBatchSize <= 0)
                 {
                     if (readNextPath())
@@ -350,6 +393,10 @@ class PixelsPageSource implements ConnectorPageSource
                         return null;
                     }
                 }
+                Bitmap vis = this.visibility.slice(this.offset, rowBatchSize);
+                rowBatch.applyFilter(vis);
+                this.offset += rowBatchSize;
+                rowBatchSize = vis.cardinality();
                 for (int fieldId = 0; fieldId < blocks.length; ++fieldId)
                 {
                     Type type = columns.get(fieldId).getColumnType();

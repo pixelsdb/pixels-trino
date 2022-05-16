@@ -27,6 +27,7 @@ import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.physical.storage.MinIO;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
+import io.pixelsdb.pixels.core.retina.RetinaService;
 import io.pixelsdb.pixels.executor.lambda.ScanInput;
 import io.pixelsdb.pixels.executor.lambda.ScanInvoker;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
@@ -58,7 +59,11 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     private final PixelsFooterCache pixelsFooterCache;
     private final PixelsTrinoConfig config;
     private final AtomicInteger localSplitCounter;
+    private RetinaService retinaService;
 
+    public void setRetinaService(RetinaService retinaService) {
+        this.retinaService = retinaService;
+    }
     @Inject
     public PixelsPageSourceProvider(PixelsConnectorId connectorId, PixelsTrinoConfig config)
             throws Exception
@@ -93,6 +98,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         List<PixelsColumnHandle> pixelsColumns = getIncludeColumns(tableHandle);
         requireNonNull(split, "split is null");
         PixelsSplit pixelsSplit = (PixelsSplit) split;
+        PixelsTransactionHandle trans = (PixelsTransactionHandle) transactionHandle;
         checkArgument(pixelsSplit.getConnectorId().equals(connectorId),
                 "connectorId is not for this connector");
         String[] includeCols = pixelsSplit.getIncludeCols();
@@ -105,14 +111,14 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
                 IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
-                        pixelsFooterCache, getLambdaOutput(pixelsSplit, includeCols), null);
+                        pixelsFooterCache, getLambdaOutput(pixelsSplit, includeCols), null, retinaService, trans.getTimestamp());
             }
             else
             {
                 this.localSplitCounter.incrementAndGet();
                 Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage,
-                        cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter);
+                        cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter, retinaService, trans.getTimestamp());
             }
         } catch (IOException e)
         {

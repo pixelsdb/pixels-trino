@@ -58,6 +58,7 @@ public class PixelsSplit implements ConnectorSplit
     private final List<String> cacheOrder;
     private final String[] includeCols;
     private final TupleDomain<PixelsColumnHandle> constraint;
+    private final boolean isRetinaWriteBuffer;
 
     @JsonCreator
     public PixelsSplit(
@@ -75,7 +76,8 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("order") List<String> order,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("includeCols") String[] includeCols,
-            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint) {
+            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
+            @JsonProperty("isRetinaWriteBuffer") boolean isRetinaWriteBuffer) {
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
@@ -97,6 +99,7 @@ public class PixelsSplit implements ConnectorSplit
         this.cacheOrder = requireNonNull(cacheOrder, "cache order is null");
         this.includeCols = requireNonNull(includeCols, "includeCols is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
+        this.isRetinaWriteBuffer = isRetinaWriteBuffer;
     }
 
     /**
@@ -184,6 +187,12 @@ public class PixelsSplit implements ConnectorSplit
     public boolean getCached()
     {
         return cached;
+    }
+
+    @JsonProperty
+    public boolean getIsRetinaWriteBuffer()
+    {
+        return isRetinaWriteBuffer;
     }
 
     @Override

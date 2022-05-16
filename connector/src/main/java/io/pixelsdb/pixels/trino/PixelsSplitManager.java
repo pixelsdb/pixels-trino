@@ -33,6 +33,7 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.retina.RetinaService;
 import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
@@ -169,6 +170,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
          */
         boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
         boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
+        boolean retinaPathEnabled = PixelsSessionProperties.getRetinaPathEnabled(session);
 
         List<PixelsSplit> pixelsSplits = new ArrayList<>();
         for (Layout layout : layouts)
@@ -254,6 +256,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
             if(usingCache)
             {
+                if (retinaPathEnabled)
+                {
+                    throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR,
+                            "retinaPathEnabled not supported yet when cache enabled.");
+                }
+
                 Compact compact = layout.getCompactObject();
                 int cacheBorder = compact.getCacheBorder();
                 List<String> cacheColumnletOrders = compact.getColumnletOrder().subList(0, cacheBorder);
@@ -315,7 +323,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
                                             order.getColumnOrder(), new ArrayList<>(0),
-                                            includeCols, constraint);
+                                            includeCols, constraint, false);
                                     // log.debug("Split in orderPath: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -352,7 +360,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, order.getColumnOrder(),
-                                                cacheColumnletOrders, includeCols, constraint);
+                                                cacheColumnletOrders, includeCols, constraint, false);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPath" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -412,7 +420,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
                                     order.getColumnOrder(), new ArrayList<>(0),
-                                    includeCols, constraint);
+                                    includeCols, constraint, false);
                             // logger.debug("Split in orderPath: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -436,11 +444,48 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         order.getColumnOrder(), new ArrayList<>(0),
-                                        includeCols, constraint);
+                                        includeCols, constraint, false);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }
                         }
+                    }
+                    // 3. add splits in retinaPath
+                    if (retinaPathEnabled)
+                    {
+                        List<String> orderedPaths = storage.listPaths(layout.getOrderPath());
+
+                        // FIXME: What's the correct RGid for retina files? Is there only one RG per file?
+                        int curFileRGIdx = 0;
+
+                        for (String path: orderedPaths)
+                        {
+
+                            List<HostAddress> retinaAddresses = toHostAddresses(
+                                    storage.getLocations(path));
+
+                            PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
+                                    tableHandle.getSchemaName(), tableHandle.getTableName(),
+                                    table.getStorageScheme(), List.of(path), transHandle.getTransId(),
+                                    List.of(curFileRGIdx),
+                                    List.of(1),
+                                    false, storage.hasLocality(), retinaAddresses,
+                                    order.getColumnOrder(), new ArrayList<>(0),
+                                    includeCols, constraint, false);
+                            pixelsSplits.add(pixelsSplit);
+                            curFileRGIdx += 1;
+                        }
+
+                        // FIXME: Is the next RGid for write buffer?
+                        PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
+                                tableHandle.getSchemaName(), tableHandle.getTableName(),
+                                table.getStorageScheme(), List.of(), transHandle.getTransId(),
+                                List.of(curFileRGIdx),
+                                List.of(1),
+                                false, storage.hasLocality(), List.of(),
+                                order.getColumnOrder(), new ArrayList<>(0),
+                                includeCols, constraint, true);
+                        pixelsSplits.add(pixelsSplit);
                     }
                 }
                 catch (IOException e)

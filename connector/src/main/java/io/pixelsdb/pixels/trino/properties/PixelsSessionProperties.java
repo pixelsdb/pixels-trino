@@ -36,6 +36,8 @@ public class PixelsSessionProperties
     private static final String ORDERED_PATH_ENABLED = "ordered_path_enabled";
     private static final String COMPACT_PATH_ENABLED = "compact_path_enabled";
 
+    private static final String RETINA_PATH_ENABLED = "compact_path_enabled";
+
     private final List<PropertyMetadata<?>> sessionProperties;
 
     @Inject
@@ -49,7 +51,11 @@ public class PixelsSessionProperties
                 COMPACT_PATH_ENABLED,
                 "Set to true to enable the compact path for queries.", true, false);
 
-        sessionProperties = ImmutableList.of(s1, s2);
+        PropertyMetadata<Boolean> s3 = booleanProperty(
+                RETINA_PATH_ENABLED,
+                "Set to true to enable the compact path for queries.", true, false);
+
+        sessionProperties = ImmutableList.of(s1, s2, s3);
     }
 
     public List<PropertyMetadata<?>> getSessionProperties()
@@ -65,5 +71,10 @@ public class PixelsSessionProperties
     public static boolean getCompactPathEnabled(ConnectorSession session)
     {
         return session.getProperty(COMPACT_PATH_ENABLED, Boolean.class);
+    }
+
+    public static boolean getRetinaPathEnabled(ConnectorSession session)
+    {
+        return session.getProperty(RETINA_PATH_ENABLED, Boolean.class);
     }
 }
