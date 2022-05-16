@@ -26,9 +26,9 @@ import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.predicate.TupleDomain;
 
-import javax.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -46,8 +46,25 @@ public final class PixelsTableHandle implements ConnectorTableHandle
      * The columns that only appear in the constraint are not included.
      */
     private final List<PixelsColumnHandle> columns;
-    private TupleDomain<PixelsColumnHandle> constraint;
+    private final TupleDomain<PixelsColumnHandle> constraint;
 
+    public enum TableType
+    {
+        BASE, JOINED, AGGREGATED
+    }
+
+    private final TableType tableType;
+    private final Optional<PixelsTableHandle> leftTable;
+    private final Optional<PixelsTableHandle> rightTable;
+
+    /**
+     * The constructor for bast table handle.
+     * @param connectorId
+     * @param schemaName
+     * @param tableName
+     * @param columns
+     * @param constraint
+     */
     @JsonCreator
     public PixelsTableHandle(
             @JsonProperty("connectorId") String connectorId,
@@ -60,6 +77,34 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         this.tableName = requireNonNull(tableName, "tableName is null");
         this.columns = requireNonNull(columns, "columns is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
+        this.tableType = TableType.BASE;
+        this.leftTable = Optional.empty();
+        this.rightTable = Optional.empty();
+    }
+
+    /**
+     * The constructor for the join result handle.
+     * @param connectorId
+     * @param tableName
+     * @param columns
+     * @param leftTable
+     * @param rightTable
+     */
+    @JsonCreator
+    public PixelsTableHandle(
+            @JsonProperty("connectorId") String connectorId,
+            @JsonProperty("tableName") String tableName,
+            @JsonProperty("columns") List<PixelsColumnHandle> columns,
+            @JsonProperty("leftTable") PixelsTableHandle leftTable,
+            @JsonProperty("rightTable") PixelsTableHandle rightTable) {
+        this.connectorId = requireNonNull(connectorId, "connectorId is null");
+        this.schemaName = null;
+        this.tableName = requireNonNull(tableName, "tableName is null");
+        this.columns = requireNonNull(columns, "columns is null");
+        this.constraint = null;
+        this.tableType = TableType.JOINED;
+        this.leftTable = Optional.of(requireNonNull(leftTable, "leftTable is null"));
+        this.rightTable = Optional.of(requireNonNull(rightTable, "rightTable is null"));
     }
 
     @JsonProperty
@@ -92,10 +137,22 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         return constraint;
     }
 
-    public void setConstraint(@NotNull TupleDomain<PixelsColumnHandle> constraint)
+    @JsonProperty
+    public TableType getTableType()
     {
-        requireNonNull(constraint, "constraint is null");
-        this.constraint = constraint;
+        return tableType;
+    }
+
+    @JsonProperty
+    public Optional<PixelsTableHandle> getLeftTable()
+    {
+        return leftTable;
+    }
+
+    @JsonProperty
+    public Optional<PixelsTableHandle> getRightTable()
+    {
+        return rightTable;
     }
 
     public SchemaTableName toSchemaTableName()
@@ -106,7 +163,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     @Override
     public int hashCode()
     {
-        return Objects.hash(connectorId, schemaName, tableName, columns);
+        return Objects.hash(connectorId, schemaName, tableName, columns,
+                tableType, leftTable, rightTable);
     }
 
     @Override
@@ -125,13 +183,16 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         return Objects.equals(this.connectorId, other.connectorId) &&
                 Objects.equals(this.schemaName, other.schemaName) &&
                 Objects.equals(this.tableName, other.tableName) &&
-                Objects.equals(this.columns, other.columns);
+                Objects.equals(this.columns, other.columns) &&
+                Objects.equals(this.tableType, other.tableType) &&
+                Objects.equals(this.leftTable, other.leftTable) &&
+                Objects.equals(this.rightTable, other.rightTable);
     }
 
     @Override
     public String toString()
     {
-        return Joiner.on(":").join(connectorId, schemaName, tableName,
-                Joiner.on(",").join(columns));
+        return Joiner.on(":").join(connectorId, schemaName == null ? "" : schemaName,
+                tableName, tableType, Joiner.on(",").join(columns));
     }
 }
