@@ -184,7 +184,18 @@ class PixelsPageSource implements ConnectorPageSource
                         .setPixelsCacheReader(cacheReader)
                         .setPixelsFooterCache(footerCache)
                         .build();
-                this.recordReader = this.pixelsReader.read(this.option);
+                if (this.pixelsReader.getRowGroupNum() <= this.option.getRGStart())
+                {
+                    /**
+                     * As PixelsSplitManager does not check the exact number of row groups
+                     * in the file, the start row group index might be invalid. in this case,
+                     * we can simply close this page source.
+                     */
+                    this.close();
+                } else
+                {
+                    this.recordReader = this.pixelsReader.read(this.option);
+                }
             } else
             {
                 logger.error("pixelsReader error: storage handler is null");
@@ -218,6 +229,15 @@ class PixelsPageSource implements ConnectorPageSource
                             .setPixelsFooterCache(this.footerCache)
                             .build();
                     this.option.rgRange(split.getRgStart(), split.getRgLength());
+                    if (this.pixelsReader.getRowGroupNum() <= this.option.getRGStart())
+                    {
+                        /**
+                         * As PixelsSplitManager does not check the exact number of row groups
+                         * in the file, the start row group index might be invalid. In this case,
+                         * we can simply return false, and the page source will be closed outside.
+                         */
+                        return false;
+                    }
                     this.recordReader = this.pixelsReader.read(this.option);
                 } else
                 {
