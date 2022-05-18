@@ -589,17 +589,26 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         break;
                 }
             }
-            if (javaType == double.class)
+            else if (javaType == int.class)
             {
-                bound = new Bound<>(boundType, (Double) value);
+                bound = new Bound<>(boundType, (Integer) value);
             }
-            if (javaType == boolean.class)
+            else if (javaType == double.class)
+            {
+                bound = new Bound<>(boundType, Double.doubleToLongBits((Double) value));
+            }
+            else if (javaType == boolean.class)
             {
                 bound = new Bound<>(boundType, (byte) ((Boolean) value ? 1 : 0));
             }
-            if (javaType == Slice.class)
+            else if (javaType == Slice.class)
             {
                 bound = new Bound<>(boundType, ((Slice) value).toString(StandardCharsets.UTF_8).trim());
+            }
+            else
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_DATA_TYPE_ERROR,
+                        "unsupported data type for filter bound: " + javaType.getName());
             }
         }
 
