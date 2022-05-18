@@ -47,6 +47,7 @@ import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.TupleDomain;
+import io.trino.spi.type.StandardTypes;
 import io.trino.spi.type.Type;
 
 import javax.inject.Inject;
@@ -577,7 +578,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
             requireNonNull(value, "the value of the bound is null");
             if (javaType == long.class)
             {
-                bound = new Bound<>(boundType, (Long) value);
+                switch (prestoType.getTypeSignature().getBase())
+                {
+                    case StandardTypes.DATE:
+                    case StandardTypes.TIME:
+                        bound = new Bound<>(boundType, ((Long) value).intValue());
+                        break;
+                    default:
+                        bound = new Bound<>(boundType, (Long) value);
+                        break;
+                }
             }
             if (javaType == double.class)
             {

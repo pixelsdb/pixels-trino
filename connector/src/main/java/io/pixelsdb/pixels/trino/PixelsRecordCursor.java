@@ -32,7 +32,9 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
+import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
+import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.impl.PixelsTupleDomainPredicate;
@@ -66,6 +68,9 @@ public class PixelsRecordCursor implements RecordCursor
     private PixelsRecordReader recordReader;
     private final PixelsCacheReader cacheReader;
     private final PixelsFooterCache footerCache;
+    private final TableScanFilter filter;
+    private final Bitmap filtered;
+    private final Bitmap tmp;
     private long completedBytes = 0L;
     private long readTimeNanos = 0L;
     private long memoryUsage = 0L;
@@ -97,6 +102,11 @@ public class PixelsRecordCursor implements RecordCursor
         this.rowIndex = -1;
         this.rowBatch = null;
         this.rowBatchSize = 0;
+        this.filter = PixelsSplitManager.createTableScanFilter(
+                split.getSchemaName(), split.getTableName(),
+                split.getIncludeCols(), split.getConstraint());
+        this.filtered = new Bitmap(this.BatchSize, true);
+        this.tmp = new Bitmap(this.BatchSize, false);
 
         this.cacheReader = PixelsCacheReader
                 .newBuilder()
@@ -301,7 +311,11 @@ public class PixelsRecordCursor implements RecordCursor
                 {
                     // VectorizedRowBatch may be reused by PixelsRecordReader.
                     this.rowBatch = newRowBatch;
-                    // this.setColumnVectors();
+                }
+                if (this.rowBatch.size > 0 && !this.filter.getColumnFilters().isEmpty())
+                {
+                    this.filter.doFilter(this.rowBatch, this.filtered, this.tmp);
+                    this.rowBatch.applyFilter(this.filtered);
                 }
                 this.rowBatchSize = this.rowBatch.size;
                 this.rowIndex = -1;

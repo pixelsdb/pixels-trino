@@ -30,7 +30,9 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
+import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
+import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
@@ -60,7 +62,7 @@ class PixelsPageSource implements ConnectorPageSource
 {
     private static final Logger logger = Logger.get(PixelsPageSource.class);
     private final int BatchSize;
-    private PixelsSplit split;
+    private final PixelsSplit split;
     private final List<PixelsColumnHandle> columns;
     private final String[] includeCols;
     private final Storage storage;
@@ -69,14 +71,17 @@ class PixelsPageSource implements ConnectorPageSource
     private PixelsRecordReader recordReader;
     private final PixelsCacheReader cacheReader;
     private final PixelsFooterCache footerCache;
-    private final CompletableFuture<?> lambdaOutput;
     private final AtomicInteger localSplitCounter;
     private final CompletableFuture<?> blocked;
+    private final int numColumnToRead;
+    private final Optional<TableScanFilter> filter;
+    private final Bitmap filtered;
+    private final Bitmap tmp;
     private long completedBytes = 0L;
     private long readTimeNanos = 0L;
     private long memoryUsage = 0L;
     private PixelsReaderOption option;
-    private final int numColumnToRead;
+
     private int batchId;
 
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, String[] includeCols,
@@ -90,11 +95,12 @@ class PixelsPageSource implements ConnectorPageSource
         this.includeCols = includeCols;
         this.numColumnToRead = columnHandles.size();
         this.footerCache = pixelsFooterCache;
-        this.lambdaOutput = lambdaOutput;
         this.localSplitCounter = localSplitCounter;
         this.batchId = 0;
         this.closed = false;
         this.BatchSize = PixelsTrinoConfig.getBatchSize();
+        this.filtered = new Bitmap(this.BatchSize, true);
+        this.tmp = new Bitmap(this.BatchSize, false);
 
         this.cacheReader = PixelsCacheReader
                 .newBuilder()
@@ -102,14 +108,26 @@ class PixelsPageSource implements ConnectorPageSource
                 .setIndexFile(indexFile)
                 .build();
 
-        if (this.lambdaOutput == null)
+        if (lambdaOutput == null)
         {
+            TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
+                    split.getSchemaName(), split.getTableName(),
+                    split.getIncludeCols(), split.getConstraint());
+            if (scanFilter.getColumnFilters().isEmpty())
+            {
+                this.filter = Optional.empty();
+            }
+            else
+            {
+                this.filter = Optional.of(scanFilter);
+            }
             readFirstPath();
             this.blocked = NOT_BLOCKED;
         }
         else
         {
-            this.blocked = this.lambdaOutput.whenComplete(((ret, err) -> {
+            this.filter = Optional.empty();
+            this.blocked = lambdaOutput.whenComplete(((ret, err) -> {
                 if (err != null)
                 {
                     logger.error(err);
@@ -338,6 +356,11 @@ class PixelsPageSource implements ConnectorPageSource
             try
             {
                 rowBatch = recordReader.readBatch(BatchSize, false);
+                if (this.filter.isPresent() && rowBatch.size > 0)
+                {
+                    this.filter.get().doFilter(rowBatch, this.filtered, this.tmp);
+                    rowBatch.applyFilter(this.filtered);
+                }
                 rowBatchSize = rowBatch.size;
                 if (rowBatchSize <= 0)
                 {
