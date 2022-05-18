@@ -113,7 +113,8 @@ public class PixelsMetadata implements ConnectorMetadata
                 }
                 PixelsTableHandle tableHandle = new PixelsTableHandle(
                         connectorId, tableName.getSchemaName(), tableName.getTableName(),
-                        columns, TupleDomain.all()); // match all tuples at the beginning.
+                        columns, TupleDomain.all(), // match all tuples at the beginning.
+                        PixelsTableHandle.TableType.BASE, null);
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -386,7 +387,8 @@ public class PixelsMetadata implements ConnectorMetadata
 
         tableHandle = new PixelsTableHandle(tableHandle.getConnectorId(),
                 tableHandle.getSchemaName(), tableHandle.getTableName(),
-                tableHandle.getColumns(), newDomain);
+                tableHandle.getColumns(), newDomain, tableHandle.getTableType(),
+                tableHandle.getJoinHandle());
 
         // pushing down without statistics pre-calculation.
         return Optional.of(new ConstraintApplicationResult<>(tableHandle, remainingFilter, false));
@@ -415,7 +417,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
         return Optional.of(new ProjectionApplicationResult<>(
                 new PixelsTableHandle(connectorId, tableHandle.getSchemaName(), tableHandle.getTableName(),
-                        newColumns, tableHandle.getConstraint()),
+                        newColumns, tableHandle.getConstraint(), tableHandle.getTableType(), tableHandle.getJoinHandle()),
                 projections,
                 assignments.entrySet().stream().map(assignment -> new Assignment(
                         assignment.getKey(), assignment.getValue(),

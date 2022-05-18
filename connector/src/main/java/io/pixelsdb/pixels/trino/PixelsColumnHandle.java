@@ -46,7 +46,8 @@ public final class PixelsColumnHandle implements ColumnHandle
             @JsonProperty("columnName") String columnName,
             @JsonProperty("columnType") Type columnType,
             @JsonProperty("typeCategory") TypeDescription.Category typeCategory,
-            @JsonProperty("columnComment") String columnComment, @JsonProperty("ordinalPosition") int ordinalPosition)
+            @JsonProperty("columnComment") String columnComment,
+            @JsonProperty("ordinalPosition") int ordinalPosition)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.columnName = requireNonNull(columnName, "columnName is null");
