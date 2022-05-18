@@ -50,6 +50,8 @@ public class PixelsSplit implements ConnectorSplit
     private final long queryId;
     private List<Integer> rgStarts;
     private List<Integer> rgLengths;
+    private List<Long> rgIds;
+    private List<Boolean> isWriteBuffers;
     private int pathIndex;
     private boolean cached;
     private final boolean ensureLocality;
@@ -69,6 +71,8 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("queryId") long queryId,
             @JsonProperty("rgStarts") List<Integer> rgStarts,
             @JsonProperty("rgLengths") List<Integer> rgLengths,
+            @JsonProperty("rgIds") List<Long> rgIds,
+            @JsonProperty("isWriteBuffers") List<Boolean> isWriteBuffers,
             @JsonProperty("cached") boolean cached,
             @JsonProperty("ensureLocality") boolean ensureLocality,
             @JsonProperty("addresses") List<HostAddress> addresses,
@@ -90,6 +94,12 @@ public class PixelsSplit implements ConnectorSplit
         this.rgLengths = requireNonNull(rgLengths, "rgLengths is null");
         checkArgument(rgLengths.size() == paths.size(),
                 "the size of rgLengths and paths are different");
+        this.rgIds = requireNonNull(rgIds, "rgIds is null");
+        checkArgument(rgIds.size() == paths.size(),
+                "the size of rgIds and paths are different");
+        this.isWriteBuffers = requireNonNull(isWriteBuffers, "isWriteBuffers is null");
+        checkArgument(isWriteBuffers.size() == paths.size(),
+                "the size of isWriteBuffers and paths are different");
         this.cached = cached;
         this.ensureLocality = ensureLocality;
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
