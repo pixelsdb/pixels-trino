@@ -188,7 +188,8 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.predicate(predicate);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.queryId(split.getQueryId());
-
+        // TODO: get visibility from retina using RgId
+        // TODO: check isWriteBuffer
         try
         {
             if (this.storage != null)

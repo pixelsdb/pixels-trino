@@ -34,6 +34,8 @@ import io.trino.spi.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -127,6 +129,15 @@ public class PixelsMetadataProxy
     public List<Layout> getDataLayouts (String schemaName, String tableName) throws MetadataException
     {
         return metadataService.getLayouts(schemaName, tableName);
+    }
+
+    /**
+     * LayoutId -> RowGroups
+     */
+    public Map<Long, List<RowGroup>> getRowGroups(String schemaName, String tableName) throws MetadataException {
+        return metadataService.getRowGroups(schemaName, tableName)
+                .stream()
+                .collect(Collectors.groupingBy(RowGroup::getId, Collectors.toList()));
     }
 
     public boolean createSchema (String schemaName) throws MetadataException

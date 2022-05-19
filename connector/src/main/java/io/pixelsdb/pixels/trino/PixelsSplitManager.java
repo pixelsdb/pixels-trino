@@ -133,11 +133,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
         Table table;
         Storage storage;
         List<Layout> layouts;
+        Map<Long, List<RowGroup>> rowGroups;
         try
         {
             table = metadataProxy.getTable(schemaName, tableName);
             storage = StorageFactory.Instance().getStorage(table.getStorageScheme());
             layouts = metadataProxy.getDataLayouts(schemaName, tableName);
+            rowGroups = metadataProxy.getRowGroups(schemaName, tableName);
         }
         catch (MetadataException e)
         {
@@ -216,6 +218,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             logger.debug("using split size: " + splitSize);
             int rowGroupNum = splits.getNumRowGroupInBlock();
 
+            // TODO: deprecate compactPath & orderPath
             // get compact path
             String compactPath;
             if (projectionReadEnabled)
@@ -314,6 +317,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             table.getStorageScheme(), paths, transHandle.getTransId(),
                                             Collections.nCopies(paths.size(), 0),
                                             Collections.nCopies(paths.size(), 1),
+                                            Collections.nCopies(paths.size(), 0L),
+                                            Collections.nCopies(paths.size(), false),
                                             false, storage.hasLocality(), orderedAddresses,
                                             order.getColumnOrder(), new ArrayList<>(0),
                                             includeCols, constraint);
@@ -352,6 +357,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 tableHandle.getSchemaName(), tableHandle.getTableName(),
                                                 table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
+                                                Arrays.asList(0L), Arrays.asList(false),
                                                 true, ensureLocality, compactAddresses, order.getColumnOrder(),
                                                 cacheColumnletOrders, includeCols, constraint);
                                         pixelsSplits.add(pixelsSplit);
@@ -411,6 +417,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     table.getStorageScheme(), paths, transHandle.getTransId(),
                                     Collections.nCopies(paths.size(), 0),
                                     Collections.nCopies(paths.size(), 1),
+                                    Collections.nCopies(paths.size(), 0L),
+                                    Collections.nCopies(paths.size(), false),
                                     false, storage.hasLocality(), orderedAddresses,
                                     order.getColumnOrder(), new ArrayList<>(0),
                                     includeCols, constraint);
@@ -435,12 +443,32 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         tableHandle.getSchemaName(), tableHandle.getTableName(),
                                         table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
+                                        Arrays.asList(0L), Arrays.asList(false),
                                         false, storage.hasLocality(), compactAddresses,
                                         order.getColumnOrder(), new ArrayList<>(0),
                                         includeCols, constraint);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }
+                        }
+                    }
+                    // Add splits by row groups.
+                    // TODO: deprecate compactPath & orderPath
+                    // TODO: support when using cache
+                    {
+                        for (RowGroup rg : rowGroups.get(layout.getId())) {
+                            String path = rg.getFilePath();
+                            List<HostAddress> address = toHostAddresses(storage.getLocations(path));
+
+                            PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
+                                    tableHandle.getSchemaName(), tableHandle.getTableName(),
+                                    table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
+                                    Arrays.asList(rg.getFileRgIdx()), Arrays.asList(1),
+                                    Arrays.asList(rg.getId()), Arrays.asList(rg.isWriteBuffer()),
+                                    false, storage.hasLocality(), address,
+                                    order.getColumnOrder(), new ArrayList<>(0),
+                                    includeCols, constraint);
+                            pixelsSplits.add(pixelsSplit);
                         }
                     }
                 }
