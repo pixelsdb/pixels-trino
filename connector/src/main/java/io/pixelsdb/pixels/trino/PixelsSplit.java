@@ -191,6 +191,12 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
+    public List<Long> getRgIds()
+    {
+        return rgIds;
+    }
+
+    @JsonProperty
     public boolean getCached()
     {
         return cached;
