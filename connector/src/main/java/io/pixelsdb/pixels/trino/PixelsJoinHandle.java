@@ -31,17 +31,23 @@ import io.pixelsdb.pixels.executor.join.JoinType;
 public final class PixelsJoinHandle
 {
     private final PixelsTableHandle leftTable;
+    private final PixelsColumnHandle leftKeyColumn;
     private final PixelsTableHandle rightTable;
+    private final PixelsColumnHandle rightKeyColumn;
     private final JoinType joinType;
 
     @JsonCreator
     public PixelsJoinHandle(
             @JsonProperty("leftTable") PixelsTableHandle leftTable,
+            @JsonProperty("leftKeyColumn") PixelsColumnHandle leftKeyColumn,
             @JsonProperty("rightTable") PixelsTableHandle rightTable,
+            @JsonProperty("rightKeyColumn") PixelsColumnHandle rightKeyColumn,
             @JsonProperty("joinType") JoinType joinType)
     {
         this.leftTable = leftTable;
+        this.leftKeyColumn = leftKeyColumn;
         this.rightTable = rightTable;
+        this.rightKeyColumn = rightKeyColumn;
         this.joinType = joinType;
     }
 
@@ -52,9 +58,21 @@ public final class PixelsJoinHandle
     }
 
     @JsonProperty
+    public PixelsColumnHandle getLeftKeyColumn()
+    {
+        return leftKeyColumn;
+    }
+
+    @JsonProperty
     public PixelsTableHandle getRightTable()
     {
         return rightTable;
+    }
+
+    @JsonProperty
+    public PixelsColumnHandle getRightKeyColumn()
+    {
+        return rightKeyColumn;
     }
 
     @JsonProperty
@@ -70,13 +88,16 @@ public final class PixelsJoinHandle
         if (o == null || getClass() != o.getClass()) return false;
         PixelsJoinHandle that = (PixelsJoinHandle) o;
         return Objects.equal(leftTable, that.leftTable) &&
+                Objects.equal(leftKeyColumn, that.leftKeyColumn) &&
                 Objects.equal(rightTable, that.rightTable) &&
+                Objects.equal(rightKeyColumn, that.rightKeyColumn) &&
                 joinType == that.joinType;
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hashCode(leftTable, rightTable, joinType);
+        return Objects.hashCode(leftTable, leftKeyColumn,
+                rightTable, rightKeyColumn, joinType);
     }
 }

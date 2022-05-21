@@ -31,6 +31,7 @@ import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 import io.trino.spi.expression.ConnectorExpression;
+import io.trino.spi.expression.Variable;
 import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.security.TrinoPrincipal;
 
@@ -39,6 +40,7 @@ import java.util.*;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
+import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
 import static java.util.Objects.requireNonNull;
@@ -449,38 +451,97 @@ public class PixelsMetadata implements ConnectorMetadata
             Map<String, ColumnHandle> rightAssignments,
             JoinStatistics statistics)
     {
+        // TODO: use statistics to choose the small table as the left table.
         PixelsTableHandle leftTable = (PixelsTableHandle) left;
         PixelsTableHandle rightTable = (PixelsTableHandle) right;
+        if (joinConditions.size() > 1 ||
+                joinConditions.get(0).getOperator() != JoinCondition.Operator.EQUAL)
+        {
+            // We only support single equal-join.
+            return Optional.empty();
+        }
+        io.pixelsdb.pixels.executor.join.JoinType pixelsJoinType;
+        switch (joinType)
+        {
+            case INNER:
+                pixelsJoinType = io.pixelsdb.pixels.executor.join.JoinType.EQUI_INNER;
+                break;
+            case LEFT_OUTER:
+                pixelsJoinType = io.pixelsdb.pixels.executor.join.JoinType.EQUI_LEFT;
+                break;
+            case RIGHT_OUTER:
+                pixelsJoinType = io.pixelsdb.pixels.executor.join.JoinType.EQUI_RIGHT;
+                break;
+            case FULL_OUTER:
+                pixelsJoinType = io.pixelsdb.pixels.executor.join.JoinType.EQUI_FULL;
+                break;
+            default:
+                // We only support the above types of joins.
+                return Optional.empty();
+        }
+
+
+        JoinCondition joinCondition = joinConditions.get(0);
+        Optional<PixelsColumnHandle> leftColumn = getVariableColumnHandle(
+                leftAssignments, joinCondition.getLeftExpression());
+        Optional<PixelsColumnHandle> rightColumn = getVariableColumnHandle(
+                rightAssignments, joinCondition.getRightExpression());
+        if (leftColumn.isEmpty() || rightColumn.isEmpty())
+        {
+            return Optional.empty();
+        }
+        PixelsJoinHandle joinHandle = new PixelsJoinHandle(leftTable, leftColumn.get(),
+                rightTable, rightColumn.get(), pixelsJoinType);
+
+        ImmutableList.Builder<PixelsColumnHandle> assignments = ImmutableList.builder();
         StringBuilder builder = new StringBuilder("join push down - ");
-        builder.append("left table: ").append(leftTable.getTableName()).append(", columns: ");
-        for (PixelsColumnHandle columnHandle : leftTable.getColumns())
+        builder.append("left table: ").append(leftTable.getTableName()).append(", key column: ").
+                append(leftColumn.get().getColumnName());
+        for (Map.Entry<String, ColumnHandle> entry : leftAssignments.entrySet())
         {
-            builder.append(columnHandle.getColumnName()).append(":");
+            assignments.add((PixelsColumnHandle) entry.getValue());
         }
-        builder.append(", assignments: ");
-        for (String column : leftAssignments.keySet())
+        builder.append(", right table: ").append(rightTable.getTableName()).append(", key column: ").
+                append(rightColumn.get().getColumnName());
+        for (Map.Entry<String, ColumnHandle> entry : rightAssignments.entrySet())
         {
-            builder.append(column).append(":");
+            assignments.add((PixelsColumnHandle) entry.getValue());
         }
-        builder.append(", right table: ").append(rightTable.getTableName()).append(", columns: ");
-        for (PixelsColumnHandle columnHandle : rightTable.getColumns())
+        String joinedSchema;
+        if (leftTable.getSchemaName().equals(rightTable.getSchemaName()))
         {
-            builder.append(columnHandle.getColumnName()).append(":");
+            joinedSchema = leftTable.getSchemaName();
         }
-        builder.append(", assignments: ");
-        for (String column : rightAssignments.keySet())
+        else
         {
-            builder.append(column).append(":");
+            joinedSchema = "join_" + UUID.randomUUID().toString().replace("-", "");
         }
-        builder.append(", join conditions: ");
-        for (JoinCondition condition : joinConditions)
-        {
-            builder.append(condition.toString()).append(":");
-        }
-        builder.append(", join type: ").append(joinType.name());
+        String joinedTable = leftTable.getTableName() + "_join_" + rightTable.getTableName() + "_" +
+                UUID.randomUUID().toString().replace("-", "");
+        PixelsTableHandle newHandle = new PixelsTableHandle(connectorId, joinedSchema, joinedTable,
+                assignments.build(), TupleDomain.all(), PixelsTableHandle.TableType.JOINED, joinHandle);
+        builder.append(", joined schema: ").append(joinedSchema).append(", joined table: ").append(joinedTable)
+                .append(", join type: ").append(pixelsJoinType);
         logger.info(builder.toString());
+
         return ConnectorMetadata.super.applyJoin(session, joinType, left, right, joinConditions, leftAssignments,
                 rightAssignments, statistics);
+    }
+
+    private static Optional<PixelsColumnHandle> getVariableColumnHandle(
+            Map<String, ColumnHandle> assignments, ConnectorExpression expression)
+    {
+        requireNonNull(assignments, "assignments is null");
+        requireNonNull(expression, "expression is null");
+        if (!(expression instanceof Variable))
+        {
+            return Optional.empty();
+        }
+
+        String name = ((Variable) expression).getName();
+        ColumnHandle columnHandle = assignments.get(name);
+        verifyNotNull(columnHandle, "No assignment for %s", name);
+        return Optional.of(((PixelsColumnHandle) columnHandle));
     }
 
     @Override
