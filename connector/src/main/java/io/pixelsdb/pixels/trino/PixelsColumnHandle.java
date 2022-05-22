@@ -130,4 +130,84 @@ public final class PixelsColumnHandle implements ColumnHandle
                 .add("ordinalPosition", ordinalPosition)
                 .toString();
     }
+
+    public static Builder builder()
+    {
+        return new Builder();
+    }
+
+    public static Builder builderFrom(PixelsColumnHandle handle)
+    {
+        return new Builder(handle);
+    }
+
+    public static class Builder
+    {
+        private String builderConnectorId;
+        private String builderColumnName;
+        private Type builderColumnType;
+        private TypeDescription.Category builderTypeCategory;
+        private String builderColumnComment;
+        private int builderOrdinalPosition;
+
+        private Builder() {}
+
+        private Builder(PixelsColumnHandle columnHandle)
+        {
+            this.builderConnectorId = columnHandle.connectorId;
+            this.builderColumnName = columnHandle.columnName;
+            this.builderColumnType = columnHandle.columnType;
+            this.builderTypeCategory = columnHandle.typeCategory;
+            this.builderColumnComment = columnHandle.columnComment;
+            this.builderOrdinalPosition = columnHandle.ordinalPosition;
+        }
+
+        public Builder setBuilderConnectorId(String builderConnectorId)
+        {
+            this.builderConnectorId = builderConnectorId;
+            return this;
+        }
+
+        public Builder setBuilderColumnName(String builderColumnName)
+        {
+            this.builderColumnName = builderColumnName;
+            return this;
+        }
+
+        public Builder setBuilderColumnType(Type builderColumnType)
+        {
+            this.builderColumnType = builderColumnType;
+            return this;
+        }
+
+        public Builder setBuilderTypeCategory(TypeDescription.Category builderTypeCategory)
+        {
+            this.builderTypeCategory = builderTypeCategory;
+            return this;
+        }
+
+        public Builder setBuilderColumnComment(String builderColumnComment)
+        {
+            this.builderColumnComment = builderColumnComment;
+            return this;
+        }
+
+        public Builder setBuilderOrdinalPosition(int builderOrdinalPosition)
+        {
+            this.builderOrdinalPosition = builderOrdinalPosition;
+            return this;
+        }
+
+        public PixelsColumnHandle build()
+        {
+            return new PixelsColumnHandle(
+                    builderConnectorId,
+                    builderColumnName,
+                    builderColumnType,
+                    builderTypeCategory,
+                    builderColumnComment,
+                    builderOrdinalPosition
+            );
+        }
+    }
 }

@@ -55,6 +55,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     private final TableType tableType;
     private final PixelsJoinHandle joinHandle;
 
+    private final int nextSyntheticColumnId;
+
     /**
      * The constructor for bast table handle.
      * @param connectorId the connector id
@@ -73,7 +75,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             @JsonProperty("columns") List<PixelsColumnHandle> columns,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("tableType") TableType tableType,
-            @JsonProperty("joinHandle") PixelsJoinHandle joinHandle) {
+            @JsonProperty("joinHandle") PixelsJoinHandle joinHandle,
+            @JsonProperty("nextSyntheticColumnId") int nextSyntheticColumnId) {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -88,6 +91,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         {
             this.joinHandle = null;
         }
+        this.nextSyntheticColumnId = nextSyntheticColumnId;
     }
 
     @JsonProperty
@@ -135,6 +139,12 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     public SchemaTableName toSchemaTableName()
     {
         return new SchemaTableName(schemaName, tableName);
+    }
+
+    @JsonProperty
+    public int getNextSyntheticColumnId()
+    {
+        return nextSyntheticColumnId;
     }
 
     @Override

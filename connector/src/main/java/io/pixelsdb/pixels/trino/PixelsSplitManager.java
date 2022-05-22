@@ -117,6 +117,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+
+        if (tableHandle.getTableType() == PixelsTableHandle.TableType.JOINED)
+        {
+            // TODO: generate splits for join.
+        }
+
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
         TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
         // logger.info("constraint from table handle: " + constraint.toString(session));
