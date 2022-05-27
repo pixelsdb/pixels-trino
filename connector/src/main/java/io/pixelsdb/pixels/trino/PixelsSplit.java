@@ -23,7 +23,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
-import io.pixelsdb.pixels.executor.lambda.ScanOutput;
+import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
+import io.pixelsdb.pixels.executor.lambda.LambdaOutput;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
@@ -58,6 +59,9 @@ public class PixelsSplit implements ConnectorSplit
     private final List<String> cacheOrder;
     private final String[] includeCols;
     private final TupleDomain<PixelsColumnHandle> constraint;
+    private final PixelsTableHandle.TableType tableType;
+    private final JoinAlgorithm joinAlgorithm;
+    private final String joinInput;
 
     @JsonCreator
     public PixelsSplit(
@@ -75,7 +79,10 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("order") List<String> order,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("includeCols") String[] includeCols,
-            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint) {
+            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
+            @JsonProperty("tableType")PixelsTableHandle.TableType tableType,
+            @JsonProperty("joinAlgorithm") JoinAlgorithm joinAlgorithm,
+            @JsonProperty("joinInput") String joinInput) {
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
@@ -94,9 +101,20 @@ public class PixelsSplit implements ConnectorSplit
         this.ensureLocality = ensureLocality;
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
         this.order = requireNonNull(order, "order is null");
-        this.cacheOrder = requireNonNull(cacheOrder, "cache order is null");
+        this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
         this.includeCols = requireNonNull(includeCols, "includeCols is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
+        this.tableType = requireNonNull(tableType, "tableType is null");
+        if (tableType == PixelsTableHandle.TableType.JOINED)
+        {
+            this.joinAlgorithm = requireNonNull(joinAlgorithm, "joinAlgorithm is null");
+            this.joinInput = requireNonNull(joinInput, "joinInput is null");
+        }
+        else
+        {
+            this.joinAlgorithm = null;
+            this.joinInput = null;
+        }
     }
 
     /**
@@ -104,18 +122,18 @@ public class PixelsSplit implements ConnectorSplit
      * intermediate files produced by serverless.
      * @param scheme the storage scheme of intermediate files
      * @param includeCols the columns that will be included in the intermediate files
-     * @param scanOutput the output of serverless
+     * @param lambdaOutput the output of serverless
      */
-    public void permute(Storage.Scheme scheme, String[] includeCols, ScanOutput scanOutput)
+    public void permute(Storage.Scheme scheme, String[] includeCols, LambdaOutput lambdaOutput)
     {
         requireNonNull(scheme, "scheme is null");
-        requireNonNull(scanOutput, "scanOutput is null");
-        requireNonNull(scanOutput.getOutputs(), "scanOutput.outputs is null");
-        requireNonNull(scanOutput.getRowGroupNums(), "scanOutput.rowGroupNums is null");
+        requireNonNull(lambdaOutput, "scanOutput is null");
+        requireNonNull(lambdaOutput.getOutputs(), "scanOutput.outputs is null");
+        requireNonNull(lambdaOutput.getRowGroupNums(), "scanOutput.rowGroupNums is null");
         this.storageScheme = scheme.name();
-        this.paths = scanOutput.getOutputs();
-        this.rgStarts = Collections.nCopies(scanOutput.getOutputs().size(), 0);
-        this.rgLengths = scanOutput.getRowGroupNums();
+        this.paths = lambdaOutput.getOutputs();
+        this.rgStarts = Collections.nCopies(lambdaOutput.getOutputs().size(), 0);
+        this.rgLengths = lambdaOutput.getRowGroupNums();
         this.order = Arrays.asList(includeCols);
         this.cached = false;
         this.cacheOrder.clear();
@@ -247,6 +265,24 @@ public class PixelsSplit implements ConnectorSplit
     public List<String> getCacheOrder()
     {
         return cacheOrder;
+    }
+
+    @JsonProperty
+    public PixelsTableHandle.TableType getTableType()
+    {
+        return tableType;
+    }
+
+    @JsonProperty
+    public JoinAlgorithm getJoinAlgorithm()
+    {
+        return joinAlgorithm;
+    }
+
+    @JsonProperty
+    public String getJoinInput()
+    {
+        return joinInput;
     }
 
     @Override

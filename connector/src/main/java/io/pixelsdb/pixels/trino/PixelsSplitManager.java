@@ -33,6 +33,10 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.utils.Pair;
+import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
+import io.pixelsdb.pixels.executor.lambda.BroadcastJoinInput;
+import io.pixelsdb.pixels.executor.lambda.ScanInput;
 import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
@@ -100,6 +104,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 if (!oldColumnSet.contains(column))
                 {
+                    logger.info("get column from filter, table name: " + tableHandle.getTableName() +
+                            ", column name: " + column.getColumnName());
                     builder.add(column);
                 }
             }
@@ -117,12 +123,66 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
-
-        if (tableHandle.getTableType() == PixelsTableHandle.TableType.JOINED)
+        if (tableHandle.getTableType() == PixelsTableHandle.TableType.BASE)
         {
-            // TODO: generate splits for join.
+            List<PixelsSplit> pixelsSplits = getScanSplits(transHandle, session, tableHandle);
+            Collections.shuffle(pixelsSplits);
+            return new PixelsSplitSource(pixelsSplits);
         }
+        else if (tableHandle.getTableType() == PixelsTableHandle.TableType.JOINED)
+        {
+            // TODO: choose join algorithm according to statistics.
+            JoinAlgorithm joinAlgorithm = JoinAlgorithm.BROADCAST;
+            PixelsJoinHandle joinHandle = tableHandle.getJoinHandle();
+            PixelsTableHandle leftTable = joinHandle.getLeftTable();
+            PixelsTableHandle rightTable = joinHandle.getRightTable();
+            List<PixelsSplit> leftSplits = getScanSplits(transHandle, session, leftTable);
+            List<PixelsSplit> rightSplits = getScanSplits(transHandle, session, rightTable);
+            Pair<Integer, List<ScanInput.InputInfo>> leftInputs = getInputInfos(leftSplits);
+            Pair<Integer, List<ScanInput.InputInfo>> rightInputs = getInputInfos(rightSplits);
+            if (joinAlgorithm == JoinAlgorithm.BROADCAST)
+            {
+                for (PixelsSplit rightSplit : rightSplits)
+                {
+                    BroadcastJoinInput joinInput = new BroadcastJoinInput();
+                    joinInput.setQueryId(transHandle.getTransId());
+                    joinInput.setLeftInputs(leftInputs.getRight());
+                    joinInput.setLeftSplitSize(leftInputs.getLeft());
+                }
+            }
+            else if (joinAlgorithm == JoinAlgorithm.PARTITIONED)
+            {
 
+            }
+
+        }
+        throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type not supported");
+    }
+
+    private Pair<Integer, List<ScanInput.InputInfo>> getInputInfos(List<PixelsSplit> splits)
+    {
+        ArrayList<ScanInput.InputInfo> inputInfos = new ArrayList<>();
+        double numRg = 0;
+        for (PixelsSplit split : splits)
+        {
+            List<String> paths = split.getPaths();
+            List<Integer> rgStarts = split.getRgStarts();
+            List<Integer> rgLengths = split.getRgLengths();
+
+            for (int i = 0; i < paths.size(); ++i)
+            {
+                inputInfos.add(new ScanInput.InputInfo(paths.get(i), rgStarts.get(i), rgLengths.get(i)));
+                numRg += rgLengths.get(i);
+            }
+        }
+        int splitSize = (int) Math.ceil(numRg / splits.size());
+        return new Pair<>(splitSize, inputInfos);
+    }
+
+
+    private List<PixelsSplit> getScanSplits(PixelsTransactionHandle transHandle,
+                                          ConnectorSession session, PixelsTableHandle tableHandle)
+    {
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
         TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
         // logger.info("constraint from table handle: " + constraint.toString(session));
@@ -322,7 +382,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
                                             order.getColumnOrder(), new ArrayList<>(0),
-                                            includeCols, constraint);
+                                            includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                            null, null);
                                     // log.debug("Split in orderPath: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -359,7 +420,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, order.getColumnOrder(),
-                                                cacheColumnletOrders, includeCols, constraint);
+                                                cacheColumnletOrders, includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                                null, null);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPath" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -419,7 +481,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
                                     order.getColumnOrder(), new ArrayList<>(0),
-                                    includeCols, constraint);
+                                    includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                    null, null);
                             // logger.debug("Split in orderPath: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -443,7 +506,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         order.getColumnOrder(), new ArrayList<>(0),
-                                        includeCols, constraint);
+                                        includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                        null, null);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }
@@ -457,9 +521,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
         }
 
-        Collections.shuffle(pixelsSplits);
-
-        return new PixelsSplitSource(pixelsSplits);
+        return pixelsSplits;
     }
 
     public static TableScanFilter createTableScanFilter(

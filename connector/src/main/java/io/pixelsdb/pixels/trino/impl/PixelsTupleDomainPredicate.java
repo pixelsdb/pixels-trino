@@ -53,7 +53,7 @@ import static java.util.Objects.requireNonNull;
 public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
 {
     private final TupleDomain<C> predicate;
-    public final List<ColumnReference<C>> columnReferences;
+    private final List<ColumnReference<C>> columnReferences;
 
     public PixelsTupleDomainPredicate(TupleDomain<C> predicate, List<ColumnReference<C>> columnReferences)
     {
