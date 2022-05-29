@@ -79,7 +79,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
-        this.tableAlias = requireNonNull(tableName, "tableAlias is null");
+        this.tableAlias = requireNonNull(tableAlias, "tableAlias is null");
         this.columns = requireNonNull(columns, "columns is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
         this.tableType = requireNonNull(tableType, "tableType is null");
