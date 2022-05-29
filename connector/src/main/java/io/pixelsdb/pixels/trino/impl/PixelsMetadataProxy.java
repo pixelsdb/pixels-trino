@@ -42,7 +42,7 @@ import static java.util.Objects.requireNonNull;
  */
 public class PixelsMetadataProxy
 {
-    private static final Logger log = Logger.get(PixelsMetadataProxy.class);
+    private static final Logger logger = Logger.get(PixelsMetadataProxy.class);
     private final MetadataService metadataService;
     private final PixelsTypeParser typeParser;
 
@@ -118,7 +118,7 @@ public class PixelsMetadataProxy
             }
             String name = c.getName();
             PixelsColumnHandle pixelsColumnHandle = new PixelsColumnHandle(connectorId, name,
-                    trinoType, pixelsType.getCategory(), "", i);
+                    name, trinoType, pixelsType.getCategory(), "", i);
             columns.add(pixelsColumnHandle);
         }
         return columns;

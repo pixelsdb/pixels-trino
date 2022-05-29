@@ -123,6 +123,8 @@ public class PixelsMetadata implements ConnectorMetadata
                 }
                 PixelsTableHandle tableHandle = new PixelsTableHandle(
                         connectorId, tableName.getSchemaName(), tableName.getTableName(),
+                        tableName.getTableName() + "_" + UUID.randomUUID()
+                                .toString().replace("-", ""),
                         columns, TupleDomain.all(), // match all tuples at the beginning.
                         PixelsTableHandle.TableType.BASE, null, 0);
                 return tableHandle;
@@ -415,8 +417,9 @@ public class PixelsMetadata implements ConnectorMetadata
 
         tableHandle = new PixelsTableHandle(tableHandle.getConnectorId(),
                 tableHandle.getSchemaName(), tableHandle.getTableName(),
-                tableHandle.getColumns(), newDomain, tableHandle.getTableType(),
-                tableHandle.getJoinHandle(), tableHandle.getNextSyntheticColumnId());
+                tableHandle.getTableAlias(), tableHandle.getColumns(), newDomain,
+                tableHandle.getTableType(), tableHandle.getJoinHandle(),
+                tableHandle.getNextSyntheticColumnId());
 
         // pushing down without statistics pre-calculation.
         return Optional.of(new ConstraintApplicationResult<>(tableHandle, remainingFilter, false));
@@ -456,7 +459,8 @@ public class PixelsMetadata implements ConnectorMetadata
                 newColumnSet, tableColumnSet);
 
         return Optional.of(new ProjectionApplicationResult<>(
-                new PixelsTableHandle(connectorId, tableHandle.getSchemaName(), tableHandle.getTableName(),
+                new PixelsTableHandle(connectorId, tableHandle.getSchemaName(),
+                        tableHandle.getTableName(),tableHandle.getTableAlias(),
                         newColumns, tableHandle.getConstraint(), tableHandle.getTableType(),
                         tableHandle.getJoinHandle(), tableHandle.getNextSyntheticColumnId()),
                 projections,
@@ -596,6 +600,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 joinConditions.get(0).getOperator() != JoinCondition.Operator.EQUAL)
         {
             // We only support single equal-join.
+            logger.info("[join push down is rejected for multi-join-condition].");
             return Optional.empty();
         }
         io.pixelsdb.pixels.executor.join.JoinType pixelsJoinType;
@@ -615,6 +620,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 break;
             default:
                 // We only support the above types of joins.
+                logger.info("[join push down is rejected for unsupported join type (" + joinType + ")]");
                 return Optional.empty();
         }
         // create the join handle.
@@ -625,65 +631,61 @@ public class PixelsMetadata implements ConnectorMetadata
                 rightAssignments, joinCondition.getRightExpression());
         if (leftKeyColumn.isEmpty() || rightKeyColumn.isEmpty())
         {
+            logger.info("[join push down is rejected for missing join keys].");
             return Optional.empty();
         }
         PixelsJoinHandle joinHandle = new PixelsJoinHandle(
                 leftTable, leftKeyColumn.get(), rightTable, rightKeyColumn.get(), pixelsJoinType);
 
-        // generate the joinedAssignments and new left/right column handles.
+        // generate the joinedColumns and new left/right column handles.
         int nextSyntheticColumnId = max(leftTable.getNextSyntheticColumnId(), rightTable.getNextSyntheticColumnId());
         ImmutableMap.Builder<ColumnHandle, ColumnHandle> newLeftColumnsBuilder = ImmutableMap.builder();
-        ImmutableList.Builder<PixelsColumnHandle> joinedAssignments = ImmutableList.builder();
-        StringBuilder builder = new StringBuilder("join push down - ");
-        builder.append("left table: ").append(leftTable.getTableName()).append(", key column: ").
-                append(leftKeyColumn.get().getColumnName()).append(", columns: ");
+        ImmutableList.Builder<PixelsColumnHandle> joinedColumns = ImmutableList.builder();
+        StringBuilder builder = new StringBuilder("[join push down] - ");
+        builder.append("left table: ").append(leftTable.getTableName()).append(", key column: ")
+                .append(leftKeyColumn.get().getColumnName()).append("(")
+                .append(leftKeyColumn.get().getColumnAlias()).append(")").append(", columns: ");
         for (PixelsColumnHandle column : leftTable.getColumns())
         {
-            builder.append(column.getColumnName()).append(":");
+            builder.append(column.getColumnName()).append("(").append(column.getColumnAlias()).append(")").append(":");
             PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
-                    .setBuilderColumnName(column.getColumnName()// + "_" + nextSyntheticColumnId++
-                    ).build();
+                    .setColumnName(column.getColumnName())
+                    .setColumnAlias(column.getColumnName() + "_" + nextSyntheticColumnId++).build();
             newLeftColumnsBuilder.put(column, newColumn);
-            joinedAssignments.add(newColumn);
+            joinedColumns.add(newColumn);
         }
         builder.append(", assignments: ");
         for (ColumnHandle column : leftAssignments.values())
         {
-            builder.append(((PixelsColumnHandle)column).getColumnName()).append(":");
+            builder.append(((PixelsColumnHandle)column).getColumnName()).append("(")
+                    .append(((PixelsColumnHandle)column).getColumnAlias()).append(")").append(":");
         }
         ImmutableMap.Builder<ColumnHandle, ColumnHandle> newRightColumnsBuilder = ImmutableMap.builder();
-        builder.append(", right table: ").append(rightTable.getTableName()).append(", key column: ").
-                append(rightKeyColumn.get().getColumnName()).append(", columns: ");
+        builder.append(", right table: ").append(rightTable.getTableName()).append(", key column: ")
+                .append(rightKeyColumn.get().getColumnName()).append("(")
+                .append(rightKeyColumn.get().getColumnAlias()).append(")").append(", columns: ");
         for (PixelsColumnHandle column : rightTable.getColumns())
         {
-            builder.append(column.getColumnName()).append(":");
+            builder.append(column.getColumnName()).append("(").append(column.getColumnAlias()).append(")").append(":");
             PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
-                    .setBuilderColumnName(column.getColumnName()// + "_" + nextSyntheticColumnId++
-                    ).build();
+                    .setColumnName(column.getColumnName())
+                    .setColumnAlias(column.getColumnName() + "_" + nextSyntheticColumnId++).build();
             newRightColumnsBuilder.put(column, newColumn);
-            joinedAssignments.add(newColumn);
+            joinedColumns.add(newColumn);
         }
         builder.append(", assignments: ");
         for (ColumnHandle column : rightAssignments.values())
         {
-            builder.append(((PixelsColumnHandle)column).getColumnName()).append(":");
+            builder.append(((PixelsColumnHandle)column).getColumnName()).append("(")
+                    .append(((PixelsColumnHandle)column).getColumnAlias()).append(")").append(":");
         }
         // setup schema and table names.
-        String joinedSchema;
-        if (leftTable.getSchemaName().equals(rightTable.getSchemaName()))
-        {
-            joinedSchema = leftTable.getSchemaName();
-        }
-        else
-        {
-            joinedSchema = "join_" + UUID.randomUUID().toString().replace("-", "");
-        }
-        String joinedTable = leftTable.getTableName() + "_join_" + rightTable.getTableName() + "_" +
-                UUID.randomUUID().toString().replace("-", "");
+        String schemaName = "join_" + UUID.randomUUID().toString().replace("-", "");
+        String tableName = leftTable.getTableName() + "_join_" + rightTable.getTableName();
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
-                connectorId, joinedSchema, joinedTable, joinedAssignments.build(), TupleDomain.all(),
+                connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),
                 PixelsTableHandle.TableType.JOINED, joinHandle, nextSyntheticColumnId);
-        builder.append(", joined schema: ").append(joinedSchema).append(", joined table: ").append(joinedTable)
+        builder.append(", joined schema: ").append(schemaName).append(", joined table: ").append(tableName)
                 .append(", join type: ").append(pixelsJoinType);
         logger.info(builder.toString());
 

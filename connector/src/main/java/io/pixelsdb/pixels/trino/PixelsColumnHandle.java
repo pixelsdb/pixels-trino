@@ -35,6 +35,7 @@ public final class PixelsColumnHandle implements ColumnHandle
 {
     private final String connectorId;
     private final String columnName;
+    private final String columnAlias;
     private final Type columnType;
     private final TypeDescription.Category typeCategory;
     private final String columnComment;
@@ -44,6 +45,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     public PixelsColumnHandle(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("columnName") String columnName,
+            @JsonProperty("columnAlias") String columnAlias,
             @JsonProperty("columnType") Type columnType,
             @JsonProperty("typeCategory") TypeDescription.Category typeCategory,
             @JsonProperty("columnComment") String columnComment,
@@ -51,6 +53,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.columnName = requireNonNull(columnName, "columnName is null");
+        this.columnAlias = requireNonNull(columnAlias, "columnAlias is null");
         this.columnType = requireNonNull(columnType, "columnType is null");
         this.typeCategory = requireNonNull(typeCategory, "typeCategory is null");
         this.columnComment = requireNonNull(columnComment, "columnComment is null");
@@ -61,6 +64,12 @@ public final class PixelsColumnHandle implements ColumnHandle
     public String getConnectorId()
     {
         return connectorId;
+    }
+
+    @JsonProperty
+    public String getColumnAlias()
+    {
+        return columnAlias;
     }
 
     @JsonProperty
@@ -100,7 +109,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     @Override
     public int hashCode()
     {
-        return Objects.hash(connectorId, columnName);
+        return Objects.hash(connectorId, columnName, columnAlias, columnType);
     }
 
     @Override
@@ -116,6 +125,7 @@ public final class PixelsColumnHandle implements ColumnHandle
         PixelsColumnHandle other = (PixelsColumnHandle) obj;
         return Objects.equals(this.connectorId, other.connectorId) &&
                 Objects.equals(this.columnName, other.columnName) &&
+                Objects.equals(this.columnAlias, other.columnAlias) &&
                 Objects.equals(this.ordinalPosition, other.ordinalPosition);
     }
 
@@ -125,6 +135,7 @@ public final class PixelsColumnHandle implements ColumnHandle
         return toStringHelper(this)
                 .add("connectorId", connectorId)
                 .add("columnName", columnName)
+                .add("columnAlias", columnAlias)
                 .add("columnType", columnType)
                 .add("columnComment", columnComment)
                 .add("ordinalPosition", ordinalPosition)
@@ -145,6 +156,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     {
         private String builderConnectorId;
         private String builderColumnName;
+        private String builderColumnAlias;
         private Type builderColumnType;
         private TypeDescription.Category builderTypeCategory;
         private String builderColumnComment;
@@ -156,45 +168,52 @@ public final class PixelsColumnHandle implements ColumnHandle
         {
             this.builderConnectorId = columnHandle.connectorId;
             this.builderColumnName = columnHandle.columnName;
+            this.builderColumnAlias = columnHandle.columnAlias;
             this.builderColumnType = columnHandle.columnType;
             this.builderTypeCategory = columnHandle.typeCategory;
             this.builderColumnComment = columnHandle.columnComment;
             this.builderOrdinalPosition = columnHandle.ordinalPosition;
         }
 
-        public Builder setBuilderConnectorId(String builderConnectorId)
+        public Builder setConnectorId(String connectorId)
         {
-            this.builderConnectorId = builderConnectorId;
+            this.builderConnectorId = connectorId;
             return this;
         }
 
-        public Builder setBuilderColumnName(String builderColumnName)
+        public Builder setColumnName(String columnName)
         {
-            this.builderColumnName = builderColumnName;
+            this.builderColumnName = columnName;
             return this;
         }
 
-        public Builder setBuilderColumnType(Type builderColumnType)
+        public Builder setColumnAlias(String columnAlias)
         {
-            this.builderColumnType = builderColumnType;
+            this.builderColumnAlias = columnAlias;
             return this;
         }
 
-        public Builder setBuilderTypeCategory(TypeDescription.Category builderTypeCategory)
+        public Builder setColumnType(Type columnType)
         {
-            this.builderTypeCategory = builderTypeCategory;
+            this.builderColumnType = columnType;
             return this;
         }
 
-        public Builder setBuilderColumnComment(String builderColumnComment)
+        public Builder setTypeCategory(TypeDescription.Category typeCategory)
         {
-            this.builderColumnComment = builderColumnComment;
+            this.builderTypeCategory = typeCategory;
             return this;
         }
 
-        public Builder setBuilderOrdinalPosition(int builderOrdinalPosition)
+        public Builder setColumnComment(String columnComment)
         {
-            this.builderOrdinalPosition = builderOrdinalPosition;
+            this.builderColumnComment = columnComment;
+            return this;
+        }
+
+        public Builder setOrdinalPosition(int ordinalPosition)
+        {
+            this.builderOrdinalPosition = ordinalPosition;
             return this;
         }
 
@@ -203,6 +222,7 @@ public final class PixelsColumnHandle implements ColumnHandle
             return new PixelsColumnHandle(
                     builderConnectorId,
                     builderColumnName,
+                    builderColumnAlias,
                     builderColumnType,
                     builderTypeCategory,
                     builderColumnComment,
