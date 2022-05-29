@@ -43,6 +43,9 @@ public final class PixelsColumnHandle implements ColumnHandle
      * The ordinal (index) in the columns of the table on which project and filter
      * push-down have not been applied. This is a logical ordinal, not the index in
      * the physical column order in the storage layout.
+     * <p/>
+     * <b>Note: </b> logical ordinal is not used in {@link #equals(Object) equals} and
+     * {@link #hashCode() hashCode}.
      */
     private final int logicalOrdinal;
 
@@ -131,7 +134,7 @@ public final class PixelsColumnHandle implements ColumnHandle
         return Objects.equals(this.connectorId, other.connectorId) &&
                 Objects.equals(this.columnName, other.columnName) &&
                 Objects.equals(this.columnAlias, other.columnAlias) &&
-                Objects.equals(this.logicalOrdinal, other.logicalOrdinal);
+                Objects.equals(this.columnType, other.columnType);
     }
 
     @Override
@@ -143,7 +146,7 @@ public final class PixelsColumnHandle implements ColumnHandle
                 .add("columnAlias", columnAlias)
                 .add("columnType", columnType)
                 .add("columnComment", columnComment)
-                .add("ordinalPosition", logicalOrdinal)
+                .add("logicalOrdinal", logicalOrdinal)
                 .toString();
     }
 
