@@ -145,7 +145,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             List<PixelsColumnHandle> columnHandleList = tableHandle.getColumns();
             List<ColumnMetadata> columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
-                    .collect(toList());
+                    .collect(toImmutableList());
             return new ConnectorTableMetadata(
                     new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns);
         }
@@ -215,7 +215,7 @@ public class PixelsMetadata implements ConnectorMetadata
         checkArgument(pixelsTableHandle.getConnectorId().equals(connectorId),
                 "tableHandle is not for this connector");
 
-        List<PixelsColumnHandle> columnHandleList = null;
+        List<PixelsColumnHandle> columnHandleList;
         if (((PixelsTableHandle) tableHandle).getColumns() != null)
         {
             columnHandleList = ((PixelsTableHandle) tableHandle).getColumns();

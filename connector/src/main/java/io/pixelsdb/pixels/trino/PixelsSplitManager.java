@@ -99,10 +99,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
         builder.addAll(tableHandle.getColumns());
         if (tableHandle.getConstraint().getDomains().isPresent())
         {
-            Set<PixelsColumnHandle> oldColumnSet = new HashSet<>(tableHandle.getColumns());
+            Set<PixelsColumnHandle> columnSet = new HashSet<>(tableHandle.getColumns());
             for (PixelsColumnHandle column : tableHandle.getConstraint().getDomains().get().keySet())
             {
-                if (!oldColumnSet.contains(column))
+                if (!columnSet.contains(column))
                 {
                     logger.info("get column from filter, table name: " + tableHandle.getTableName() +
                             ", column name: " + column.getColumnName());
