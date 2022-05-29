@@ -47,7 +47,6 @@ import static com.google.common.base.Verify.verify;
 import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
-import static java.lang.Math.max;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -126,7 +125,7 @@ public class PixelsMetadata implements ConnectorMetadata
                         tableName.getTableName() + "_" + UUID.randomUUID()
                                 .toString().replace("-", ""),
                         columns, TupleDomain.all(), // match all tuples at the beginning.
-                        PixelsTableHandle.TableType.BASE, null, 0);
+                        PixelsTableHandle.TableType.BASE, null);
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -418,8 +417,7 @@ public class PixelsMetadata implements ConnectorMetadata
         tableHandle = new PixelsTableHandle(tableHandle.getConnectorId(),
                 tableHandle.getSchemaName(), tableHandle.getTableName(),
                 tableHandle.getTableAlias(), tableHandle.getColumns(), newDomain,
-                tableHandle.getTableType(), tableHandle.getJoinHandle(),
-                tableHandle.getNextSyntheticColumnId());
+                tableHandle.getTableType(), tableHandle.getJoinHandle());
 
         // pushing down without statistics pre-calculation.
         return Optional.of(new ConstraintApplicationResult<>(tableHandle, remainingFilter, false));
@@ -462,7 +460,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 new PixelsTableHandle(connectorId, tableHandle.getSchemaName(),
                         tableHandle.getTableName(),tableHandle.getTableAlias(),
                         newColumns, tableHandle.getConstraint(), tableHandle.getTableType(),
-                        tableHandle.getJoinHandle(), tableHandle.getNextSyntheticColumnId()),
+                        tableHandle.getJoinHandle()),
                 projections,
                 assignments.entrySet().stream().map(assignment -> new Assignment(
                         assignment.getKey(), assignment.getValue(),
@@ -593,7 +591,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             return Optional.empty();
         }
-        // TODO: use statistics to choose the small table as the left table.
+
         PixelsTableHandle leftTable = (PixelsTableHandle) left;
         PixelsTableHandle rightTable = (PixelsTableHandle) right;
         if (joinConditions.size() > 1 ||
@@ -638,19 +636,18 @@ public class PixelsMetadata implements ConnectorMetadata
                 leftTable, leftKeyColumn.get(), rightTable, rightKeyColumn.get(), pixelsJoinType);
 
         // generate the joinedColumns and new left/right column handles.
-        int nextSyntheticColumnId = max(leftTable.getNextSyntheticColumnId(), rightTable.getNextSyntheticColumnId());
+        int logicalOrdinal = 0;
         ImmutableMap.Builder<ColumnHandle, ColumnHandle> newLeftColumnsBuilder = ImmutableMap.builder();
         ImmutableList.Builder<PixelsColumnHandle> joinedColumns = ImmutableList.builder();
         StringBuilder builder = new StringBuilder("[join push down] - ");
         builder.append("left table: ").append(leftTable.getTableName()).append(", key column: ")
                 .append(leftKeyColumn.get().getColumnName()).append("(")
-                .append(leftKeyColumn.get().getColumnAlias()).append(")").append(", columns: ");
+                .append(leftKeyColumn.get().getLogicalOrdinal()).append(")").append(", columns: ");
         for (PixelsColumnHandle column : leftTable.getColumns())
         {
-            builder.append(column.getColumnName()).append("(").append(column.getColumnAlias()).append(")").append(":");
+            builder.append(column.getColumnName()).append("(").append(column.getLogicalOrdinal()).append(")").append(":");
             PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
-                    .setColumnName(column.getColumnName())
-                    .setColumnAlias(column.getColumnName() + "_" + nextSyntheticColumnId++).build();
+                    .setLogicalOrdinal(logicalOrdinal++).build();
             newLeftColumnsBuilder.put(column, newColumn);
             joinedColumns.add(newColumn);
         }
@@ -658,18 +655,17 @@ public class PixelsMetadata implements ConnectorMetadata
         for (ColumnHandle column : leftAssignments.values())
         {
             builder.append(((PixelsColumnHandle)column).getColumnName()).append("(")
-                    .append(((PixelsColumnHandle)column).getColumnAlias()).append(")").append(":");
+                    .append(((PixelsColumnHandle)column).getLogicalOrdinal()).append(")").append(":");
         }
         ImmutableMap.Builder<ColumnHandle, ColumnHandle> newRightColumnsBuilder = ImmutableMap.builder();
         builder.append(", right table: ").append(rightTable.getTableName()).append(", key column: ")
                 .append(rightKeyColumn.get().getColumnName()).append("(")
-                .append(rightKeyColumn.get().getColumnAlias()).append(")").append(", columns: ");
+                .append(rightKeyColumn.get().getLogicalOrdinal()).append(")").append(", columns: ");
         for (PixelsColumnHandle column : rightTable.getColumns())
         {
-            builder.append(column.getColumnName()).append("(").append(column.getColumnAlias()).append(")").append(":");
+            builder.append(column.getColumnName()).append("(").append(column.getLogicalOrdinal()).append(")").append(":");
             PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
-                    .setColumnName(column.getColumnName())
-                    .setColumnAlias(column.getColumnName() + "_" + nextSyntheticColumnId++).build();
+                    .setLogicalOrdinal(logicalOrdinal++).build();
             newRightColumnsBuilder.put(column, newColumn);
             joinedColumns.add(newColumn);
         }
@@ -677,14 +673,14 @@ public class PixelsMetadata implements ConnectorMetadata
         for (ColumnHandle column : rightAssignments.values())
         {
             builder.append(((PixelsColumnHandle)column).getColumnName()).append("(")
-                    .append(((PixelsColumnHandle)column).getColumnAlias()).append(")").append(":");
+                    .append(((PixelsColumnHandle)column).getLogicalOrdinal()).append(")").append(":");
         }
         // setup schema and table names.
         String schemaName = "join_" + UUID.randomUUID().toString().replace("-", "");
         String tableName = leftTable.getTableName() + "_join_" + rightTable.getTableName();
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),
-                PixelsTableHandle.TableType.JOINED, joinHandle, nextSyntheticColumnId);
+                PixelsTableHandle.TableType.JOINED, joinHandle);
         builder.append(", joined schema: ").append(schemaName).append(", joined table: ").append(tableName)
                 .append(", join type: ").append(pixelsJoinType);
         logger.info(builder.toString());

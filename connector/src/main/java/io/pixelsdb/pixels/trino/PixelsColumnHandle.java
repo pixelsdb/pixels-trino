@@ -39,7 +39,12 @@ public final class PixelsColumnHandle implements ColumnHandle
     private final Type columnType;
     private final TypeDescription.Category typeCategory;
     private final String columnComment;
-    private final int ordinalPosition;
+    /**
+     * The ordinal (index) in the columns of the table on which project and filter
+     * push-down have not been applied. This is a logical ordinal, not the index in
+     * the physical column order in the storage layout.
+     */
+    private final int logicalOrdinal;
 
     @JsonCreator
     public PixelsColumnHandle(
@@ -49,7 +54,7 @@ public final class PixelsColumnHandle implements ColumnHandle
             @JsonProperty("columnType") Type columnType,
             @JsonProperty("typeCategory") TypeDescription.Category typeCategory,
             @JsonProperty("columnComment") String columnComment,
-            @JsonProperty("ordinalPosition") int ordinalPosition)
+            @JsonProperty("logicalOrdinal") int logicalOrdinal)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.columnName = requireNonNull(columnName, "columnName is null");
@@ -57,7 +62,7 @@ public final class PixelsColumnHandle implements ColumnHandle
         this.columnType = requireNonNull(columnType, "columnType is null");
         this.typeCategory = requireNonNull(typeCategory, "typeCategory is null");
         this.columnComment = requireNonNull(columnComment, "columnComment is null");
-        this.ordinalPosition = ordinalPosition;
+        this.logicalOrdinal = logicalOrdinal;
     }
 
     @JsonProperty
@@ -96,9 +101,9 @@ public final class PixelsColumnHandle implements ColumnHandle
     }
 
     @JsonProperty
-    public int getOrdinalPosition()
+    public int getLogicalOrdinal()
     {
-        return ordinalPosition;
+        return logicalOrdinal;
     }
 
     public ColumnMetadata getColumnMetadata()
@@ -126,7 +131,7 @@ public final class PixelsColumnHandle implements ColumnHandle
         return Objects.equals(this.connectorId, other.connectorId) &&
                 Objects.equals(this.columnName, other.columnName) &&
                 Objects.equals(this.columnAlias, other.columnAlias) &&
-                Objects.equals(this.ordinalPosition, other.ordinalPosition);
+                Objects.equals(this.logicalOrdinal, other.logicalOrdinal);
     }
 
     @Override
@@ -138,7 +143,7 @@ public final class PixelsColumnHandle implements ColumnHandle
                 .add("columnAlias", columnAlias)
                 .add("columnType", columnType)
                 .add("columnComment", columnComment)
-                .add("ordinalPosition", ordinalPosition)
+                .add("ordinalPosition", logicalOrdinal)
                 .toString();
     }
 
@@ -160,7 +165,7 @@ public final class PixelsColumnHandle implements ColumnHandle
         private Type builderColumnType;
         private TypeDescription.Category builderTypeCategory;
         private String builderColumnComment;
-        private int builderOrdinalPosition;
+        private int builderLogicalOrdinal;
 
         private Builder() {}
 
@@ -172,7 +177,7 @@ public final class PixelsColumnHandle implements ColumnHandle
             this.builderColumnType = columnHandle.columnType;
             this.builderTypeCategory = columnHandle.typeCategory;
             this.builderColumnComment = columnHandle.columnComment;
-            this.builderOrdinalPosition = columnHandle.ordinalPosition;
+            this.builderLogicalOrdinal = columnHandle.logicalOrdinal;
         }
 
         public Builder setConnectorId(String connectorId)
@@ -211,9 +216,9 @@ public final class PixelsColumnHandle implements ColumnHandle
             return this;
         }
 
-        public Builder setOrdinalPosition(int ordinalPosition)
+        public Builder setLogicalOrdinal(int logicalOrdinal)
         {
-            this.builderOrdinalPosition = ordinalPosition;
+            this.builderLogicalOrdinal = logicalOrdinal;
             return this;
         }
 
@@ -226,7 +231,7 @@ public final class PixelsColumnHandle implements ColumnHandle
                     builderColumnType,
                     builderTypeCategory,
                     builderColumnComment,
-                    builderOrdinalPosition
+                    builderLogicalOrdinal
             );
         }
     }
