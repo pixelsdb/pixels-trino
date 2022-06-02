@@ -35,7 +35,8 @@ import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
-import io.pixelsdb.pixels.executor.lambda.ScanInput;
+import io.pixelsdb.pixels.executor.lambda.domain.InputInfo;
+import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
 import io.pixelsdb.pixels.executor.plan.BaseTable;
 import io.pixelsdb.pixels.executor.plan.JoinLink;
 import io.pixelsdb.pixels.executor.plan.JoinedTable;
@@ -264,24 +265,20 @@ public class PixelsSplitManager implements ConnectorSplitManager
         joinPlan.add(joinedTable);
     }
 
-    private Pair<Integer, List<ScanInput.InputInfo>> getInputInfos(List<PixelsSplit> splits)
+    public static Pair<Integer, InputSplit> getInputSplit(PixelsSplit split)
     {
-        ArrayList<ScanInput.InputInfo> inputInfos = new ArrayList<>();
-        double numRg = 0;
-        for (PixelsSplit split : splits)
-        {
-            List<String> paths = split.getPaths();
-            List<Integer> rgStarts = split.getRgStarts();
-            List<Integer> rgLengths = split.getRgLengths();
+        ArrayList<InputInfo> inputInfos = new ArrayList<>();
+        int splitSize = 0;
+        List<String> paths = split.getPaths();
+        List<Integer> rgStarts = split.getRgStarts();
+        List<Integer> rgLengths = split.getRgLengths();
 
-            for (int i = 0; i < paths.size(); ++i)
-            {
-                inputInfos.add(new ScanInput.InputInfo(paths.get(i), rgStarts.get(i), rgLengths.get(i)));
-                numRg += rgLengths.get(i);
-            }
+        for (int i = 0; i < paths.size(); ++i)
+        {
+            inputInfos.add(new InputInfo(paths.get(i), rgStarts.get(i), rgLengths.get(i)));
+            splitSize += rgLengths.get(i);
         }
-        int splitSize = (int) Math.ceil(numRg / splits.size());
-        return new Pair<>(splitSize, inputInfos);
+        return new Pair<>(splitSize, new InputSplit(inputInfos));
     }
 
 

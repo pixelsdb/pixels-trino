@@ -27,8 +27,12 @@ import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.physical.storage.MinIO;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
-import io.pixelsdb.pixels.executor.lambda.ScanInput;
+import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.lambda.ScanInvoker;
+import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
+import io.pixelsdb.pixels.executor.lambda.domain.OutputInfo;
+import io.pixelsdb.pixels.executor.lambda.domain.ScanTableInfo;
+import io.pixelsdb.pixels.executor.lambda.input.ScanInput;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -36,13 +40,13 @@ import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.pixelsdb.pixels.trino.PixelsSplitManager.getIncludeColumns;
+import static io.pixelsdb.pixels.trino.PixelsSplitManager.*;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -124,29 +128,22 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     {
         ScanInput scanInput = new ScanInput();
         scanInput.setQueryId(inputSplit.getQueryId());
-        List<String> paths = inputSplit.getPaths();
-        List<Integer> rgStarts = inputSplit.getRgStarts();
-        List<Integer> rgLengths = inputSplit.getRgLengths();
-        int splitSize = 0;
-        ArrayList<ScanInput.InputInfo> inputInfos = new ArrayList<>(paths.size());
-        for (int i = 0; i < paths.size(); ++i)
-        {
-            inputInfos.add(new ScanInput.InputInfo(paths.get(i), rgStarts.get(i), rgLengths.get(i)));
-            splitSize += rgLengths.get(i);
-        }
-        scanInput.setInputs(inputInfos);
-        scanInput.setCols(includeCols);
-        scanInput.setSplitSize(splitSize);
-        TableScanFilter filter = PixelsSplitManager.createTableScanFilter(inputSplit.getSchemaName(),
+        ScanTableInfo tableInfo = new ScanTableInfo();
+        tableInfo.setTableName(inputSplit.getTableName());
+        tableInfo.setColumnsToRead(includeCols);
+        Pair<Integer, InputSplit> inputSplitPair = getInputSplit(inputSplit);
+        tableInfo.setInputSplits(Arrays.asList(inputSplitPair.getRight()));
+        TableScanFilter filter = createTableScanFilter(inputSplit.getSchemaName(),
                 inputSplit.getTableName(), includeCols, inputSplit.getConstraint());
-        scanInput.setFilter(JSON.toJSONString(filter));
-        // logger.info("table scan filter: " + scanInput.getFilter());
+        tableInfo.setFilter(JSON.toJSONString(filter));
+        scanInput.setTableInfo(tableInfo);
+        // logger.info("table scan filter: " + tableInfo.getFilter());
         String folder = config.getMinioOutputFolderForQuery(inputSplit.getQueryId());
         String endpoint = config.getMinioEndpoint();
         String accessKey = config.getMinioAccessKey();
         String secretKey = config.getMinioSecretKey();
-        ScanInput.OutputInfo outputInfo = new ScanInput.OutputInfo(folder,
-                endpoint, accessKey, secretKey, true);
+        OutputInfo outputInfo = new OutputInfo(folder, true,
+                Storage.Scheme.minio, endpoint, accessKey, secretKey, true);
         scanInput.setOutput(outputInfo);
 
         return ScanInvoker.invoke(scanInput).whenComplete(((scanOutput, err) -> {

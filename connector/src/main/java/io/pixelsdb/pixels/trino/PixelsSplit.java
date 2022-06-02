@@ -24,7 +24,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
-import io.pixelsdb.pixels.executor.lambda.LambdaOutput;
+import io.pixelsdb.pixels.executor.lambda.output.ScanOutput;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
@@ -124,7 +124,7 @@ public class PixelsSplit implements ConnectorSplit
      * @param includeCols the columns that will be included in the intermediate files
      * @param lambdaOutput the output of serverless
      */
-    public void permute(Storage.Scheme scheme, String[] includeCols, LambdaOutput lambdaOutput)
+    public void permute(Storage.Scheme scheme, String[] includeCols, ScanOutput lambdaOutput)
     {
         requireNonNull(scheme, "scheme is null");
         requireNonNull(lambdaOutput, "scanOutput is null");
