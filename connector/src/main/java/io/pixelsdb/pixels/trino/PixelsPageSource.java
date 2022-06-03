@@ -86,7 +86,7 @@ class PixelsPageSource implements ConnectorPageSource
     private PixelsReaderOption option;
 
     private int batchId;
-    private RetinaService retinaService;
+    private final RetinaService retinaService;
     private long transTS;
 
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, String[] includeCols,
@@ -198,7 +198,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.queryId(split.getQueryId());
 
         // get visibility from retina using RgId
-        List<Bitmap> visibilities = split.getRgIds()
+        Bitmap[] visibilities = split.getRgIds()
                 .stream()
                 .map(rgId ->
                 {
@@ -209,10 +209,22 @@ class PixelsPageSource implements ConnectorPageSource
                                 "get visibility error.", e);
                     }
                 })
-                .collect(Collectors.toList());
+                .toArray(Bitmap[]::new);
         this.option.visibilities(visibilities);
+        this.option.version(transTS);
 
-        // TODO: check isWriteBuffer
+        if (split.getIsWriteBuffer())
+        {
+            assert split.getRgIds().size() == 1;
+            int rgId = split.getRgIds().get(0);
+            try {
+                retinaService.queryRecords(split.getSchemaName(), split.getTableName(), rgId, transTS);
+            } catch (RetinaException e) {
+                throw new TrinoException(PixelsErrorCode.PIXELS_RETINA_SERVICE_ERROR,
+                        "query records error.", e);
+            }
+        }
+
         try
         {
             if (this.storage != null)

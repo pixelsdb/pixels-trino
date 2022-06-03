@@ -50,7 +50,7 @@ public class PixelsSplit implements ConnectorSplit
     private final long queryId;
     private List<Integer> rgStarts;
     private List<Integer> rgLengths;
-    private List<Long> rgIds;
+    private List<Integer> rgIds;
     private List<Boolean> isWriteBuffers;
     private int pathIndex;
     private boolean cached;
@@ -71,7 +71,7 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("queryId") long queryId,
             @JsonProperty("rgStarts") List<Integer> rgStarts,
             @JsonProperty("rgLengths") List<Integer> rgLengths,
-            @JsonProperty("rgIds") List<Long> rgIds,
+            @JsonProperty("rgIds") List<Integer> rgIds,
             @JsonProperty("isWriteBuffers") List<Boolean> isWriteBuffers,
             @JsonProperty("cached") boolean cached,
             @JsonProperty("ensureLocality") boolean ensureLocality,
@@ -191,7 +191,7 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
-    public List<Long> getRgIds()
+    public List<Integer> getRgIds()
     {
         return rgIds;
     }
@@ -244,6 +244,11 @@ public class PixelsSplit implements ConnectorSplit
     public int getRgLength()
     {
         return this.rgLengths.get(pathIndex);
+    }
+
+    public boolean getIsWriteBuffer()
+    {
+        return this.isWriteBuffers.get(pathIndex);
     }
 
     @JsonProperty

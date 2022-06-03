@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino;
 import io.airlift.bootstrap.LifeCycleManager;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.TransException;
+import io.pixelsdb.pixels.common.metadata.MetadataService;
 import io.pixelsdb.pixels.common.transaction.QueryTransInfo;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
@@ -75,8 +76,11 @@ public class PixelsConnector implements Connector {
         this.recordCursorEnabled = Boolean.parseBoolean(config.getConfigFactory().getProperty("record.cursor.enabled"));
         this.transService = new TransService(config.getConfigFactory().getProperty("trans.server.host"),
                 Integer.parseInt(config.getConfigFactory().getProperty("trans.server.port")));
+
+        MetadataService metadataService = new MetadataService(config.getConfigFactory().getProperty("metadata.server.host"),
+                Integer.parseInt(config.getConfigFactory().getProperty("metadata.server.port")));
         RetinaService retinaService = new RetinaService(config.getConfigFactory().getProperty("retina.server.host"),
-                Integer.parseInt(config.getConfigFactory().getProperty("retina.server.port")));
+                Integer.parseInt(config.getConfigFactory().getProperty("retina.server.port")), metadataService);
         this.pageSourceProvider.setRetinaService(retinaService);
     }
 
