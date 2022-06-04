@@ -88,6 +88,7 @@ class PixelsPageSource implements ConnectorPageSource
     private int batchId;
     private final RetinaService retinaService;
     private long transTS;
+    private VectorizedRowBatch writeBufferRowBatch;
 
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, String[] includeCols,
                             Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
@@ -215,10 +216,12 @@ class PixelsPageSource implements ConnectorPageSource
 
         if (split.getIsWriteBuffer())
         {
+            // There should be only one row group in the split.
             assert split.getRgIds().size() == 1;
             int rgId = split.getRgIds().get(0);
             try {
-                retinaService.queryRecords(split.getSchemaName(), split.getTableName(), rgId, transTS);
+                writeBufferRowBatch = retinaService.queryRecords(split.getSchemaName(), split.getTableName(), rgId, transTS);
+                return;
             } catch (RetinaException e) {
                 throw new TrinoException(PixelsErrorCode.PIXELS_RETINA_SERVICE_ERROR,
                         "query records error.", e);
@@ -391,7 +394,12 @@ class PixelsPageSource implements ConnectorPageSource
         {
             try
             {
-                rowBatch = recordReader.readBatch(BatchSize, false);
+                if (writeBufferRowBatch != null) {
+                    rowBatch = writeBufferRowBatch;
+                    assert writeBufferRowBatch.size <= BatchSize;
+                } else {
+                    rowBatch = recordReader.readBatch(BatchSize, false);
+                }
                 if (this.filter.isPresent() && rowBatch.size > 0)
                 {
                     this.filter.get().doFilter(rowBatch, this.filtered, this.tmp);
@@ -425,6 +433,7 @@ class PixelsPageSource implements ConnectorPageSource
         }
         else
         {
+            assert writeBufferRowBatch == null;
             // No column to read.
             try
             {
