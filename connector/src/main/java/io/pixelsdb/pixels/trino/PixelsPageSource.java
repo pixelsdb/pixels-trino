@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
+import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.PixelsReader;
@@ -30,6 +31,7 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
+import io.pixelsdb.pixels.core.retina.RetinaService;
 import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
@@ -49,6 +51,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
@@ -83,11 +86,14 @@ class PixelsPageSource implements ConnectorPageSource
     private PixelsReaderOption option;
 
     private int batchId;
+    private final RetinaService retinaService;
+    private long transTS;
+    private VectorizedRowBatch writeBufferRowBatch;
 
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, String[] includeCols,
                             Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
                             PixelsFooterCache pixelsFooterCache, CompletableFuture<?> lambdaOutput,
-                            AtomicInteger localSplitCounter)
+                            AtomicInteger localSplitCounter, RetinaService retinaService, long transTS)
     {
         this.split = split;
         this.storage = storage;
@@ -107,6 +113,9 @@ class PixelsPageSource implements ConnectorPageSource
                 .setCacheFile(cacheFile)
                 .setIndexFile(indexFile)
                 .build();
+
+        this.retinaService = retinaService;
+        this.transTS = transTS;
 
         if (lambdaOutput == null)
         {
@@ -188,8 +197,37 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.predicate(predicate);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.queryId(split.getQueryId());
-        // TODO: get visibility from retina using RgId
-        // TODO: check isWriteBuffer
+
+        // get visibility from retina using RgId
+        Bitmap[] visibilities = split.getRgIds()
+                .stream()
+                .map(rgId ->
+                {
+                    try {
+                        return this.retinaService.getVisibility(split.getSchemaName(), split.getTableName(), Math.toIntExact(rgId), transTS);
+                    } catch (RetinaException e) {
+                        throw new TrinoException(PixelsErrorCode.PIXELS_RETINA_SERVICE_ERROR,
+                                "get visibility error.", e);
+                    }
+                })
+                .toArray(Bitmap[]::new);
+        this.option.visibilities(visibilities);
+        this.option.version(transTS);
+
+        if (split.getIsWriteBuffer())
+        {
+            // There should be only one row group in the split.
+            assert split.getRgIds().size() == 1;
+            int rgId = split.getRgIds().get(0);
+            try {
+                writeBufferRowBatch = retinaService.queryRecords(split.getSchemaName(), split.getTableName(), rgId, transTS);
+                return;
+            } catch (RetinaException e) {
+                throw new TrinoException(PixelsErrorCode.PIXELS_RETINA_SERVICE_ERROR,
+                        "query records error.", e);
+            }
+        }
+
         try
         {
             if (this.storage != null)
@@ -356,7 +394,12 @@ class PixelsPageSource implements ConnectorPageSource
         {
             try
             {
-                rowBatch = recordReader.readBatch(BatchSize, false);
+                if (writeBufferRowBatch != null) {
+                    rowBatch = writeBufferRowBatch;
+                    assert writeBufferRowBatch.size <= BatchSize;
+                } else {
+                    rowBatch = recordReader.readBatch(BatchSize, false);
+                }
                 if (this.filter.isPresent() && rowBatch.size > 0)
                 {
                     this.filter.get().doFilter(rowBatch, this.filtered, this.tmp);
@@ -390,6 +433,7 @@ class PixelsPageSource implements ConnectorPageSource
         }
         else
         {
+            assert writeBufferRowBatch == null;
             // No column to read.
             try
             {
