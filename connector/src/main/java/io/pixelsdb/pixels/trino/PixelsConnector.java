@@ -105,15 +105,17 @@ public class PixelsConnector implements Connector {
     }
 
     @Override
-    public void commit(ConnectorTransactionHandle transactionHandle)
-    {
-        if (transactionHandle instanceof PixelsTransactionHandle)
-        {
+    public void commit(ConnectorTransactionHandle transactionHandle) {
+        if (transactionHandle instanceof PixelsTransactionHandle) {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             TransContext.Instance().commitQuery(handle.getTransId());
+            try {
+                transService.finishQueryTrans(handle.getTransId(), handle.getTimestamp());
+            } catch (TransException e) {
+                throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
+            }
             cleanIntermediatePathForQuery(handle.getTransId());
-        } else
-        {
+        } else {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
                     "The transaction handle is not an instance of PixelsTransactionHandle.");
         }
