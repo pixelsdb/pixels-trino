@@ -23,6 +23,9 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Objects;
 import io.pixelsdb.pixels.executor.join.JoinType;
+import io.pixelsdb.pixels.executor.plan.JoinEndian;
+
+import java.util.List;
 
 /**
  * @author hank
@@ -32,22 +35,37 @@ public final class PixelsJoinHandle
 {
     private final PixelsTableHandle leftTable;
     private final PixelsColumnHandle leftKeyColumn;
+    private final List<PixelsColumnHandle> leftJoinedColumns;
     private final PixelsTableHandle rightTable;
     private final PixelsColumnHandle rightKeyColumn;
+    private final List<PixelsColumnHandle> rightJoinedColumns;
+    /**
+     * Whether the joined columns contain key columns.
+     */
+    private final boolean includeKeyColumns;
+    private final JoinEndian joinEndian;
     private final JoinType joinType;
 
     @JsonCreator
     public PixelsJoinHandle(
             @JsonProperty("leftTable") PixelsTableHandle leftTable,
             @JsonProperty("leftKeyColumn") PixelsColumnHandle leftKeyColumn,
+            @JsonProperty("leftJoinedColumns") List<PixelsColumnHandle> leftJoinedColumns,
             @JsonProperty("rightTable") PixelsTableHandle rightTable,
             @JsonProperty("rightKeyColumn") PixelsColumnHandle rightKeyColumn,
+            @JsonProperty("rightJoinedColumns") List<PixelsColumnHandle> rightJoinedColumns,
+            @JsonProperty("includeKeyColumns") boolean includeKeyColumns,
+            @JsonProperty("joinEndian") JoinEndian joinEndian,
             @JsonProperty("joinType") JoinType joinType)
     {
         this.leftTable = leftTable;
         this.leftKeyColumn = leftKeyColumn;
+        this.leftJoinedColumns = leftJoinedColumns;
         this.rightTable = rightTable;
         this.rightKeyColumn = rightKeyColumn;
+        this.rightJoinedColumns = rightJoinedColumns;
+        this.includeKeyColumns = includeKeyColumns;
+        this.joinEndian = joinEndian;
         this.joinType = joinType;
     }
 
@@ -76,6 +94,30 @@ public final class PixelsJoinHandle
     }
 
     @JsonProperty
+    public List<PixelsColumnHandle> getLeftJoinedColumns()
+    {
+        return leftJoinedColumns;
+    }
+
+    @JsonProperty
+    public List<PixelsColumnHandle> getRightJoinedColumns()
+    {
+        return rightJoinedColumns;
+    }
+
+    @JsonProperty
+    public boolean isIncludeKeyColumns()
+    {
+        return includeKeyColumns;
+    }
+
+    @JsonProperty
+    public JoinEndian getJoinEndian()
+    {
+        return joinEndian;
+    }
+
+    @JsonProperty
     public JoinType getJoinType()
     {
         return joinType;
@@ -89,15 +131,17 @@ public final class PixelsJoinHandle
         PixelsJoinHandle that = (PixelsJoinHandle) o;
         return Objects.equal(leftTable, that.leftTable) &&
                 Objects.equal(leftKeyColumn, that.leftKeyColumn) &&
+                Objects.equal(leftJoinedColumns, that.leftJoinedColumns) &&
                 Objects.equal(rightTable, that.rightTable) &&
                 Objects.equal(rightKeyColumn, that.rightKeyColumn) &&
+                Objects.equal(rightJoinedColumns, that.rightJoinedColumns) &&
                 joinType == that.joinType;
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hashCode(leftTable, leftKeyColumn,
-                rightTable, rightKeyColumn, joinType);
+        return Objects.hashCode(leftTable, leftKeyColumn, leftJoinedColumns,
+                rightTable, rightKeyColumn, rightJoinedColumns, joinType);
     }
 }
