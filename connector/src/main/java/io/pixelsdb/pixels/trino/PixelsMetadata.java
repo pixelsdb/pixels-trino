@@ -638,25 +638,17 @@ public class PixelsMetadata implements ConnectorMetadata
         int logicalOrdinal = 0;
         ImmutableMap.Builder<ColumnHandle, ColumnHandle> newLeftColumnsBuilder = ImmutableMap.builder();
         ImmutableList.Builder<PixelsColumnHandle> joinedColumns = ImmutableList.builder();
-        ImmutableList.Builder<PixelsColumnHandle> leftJoinedColumns = ImmutableList.builder();
-        ImmutableList.Builder<PixelsColumnHandle> rightJoinedColumns = ImmutableList.builder();
-        boolean includeLeftKeyColumn = false, includeRightKeyColumn = false;
         StringBuilder builder = new StringBuilder("[join push down] - ");
         builder.append("left table: ").append(leftTable.getTableName()).append(", key column: ")
                 .append(leftKeyColumn.get().getColumnName()).append("(")
                 .append(leftKeyColumn.get().getLogicalOrdinal()).append(")").append(", columns: ");
         for (PixelsColumnHandle column : leftTable.getColumns())
         {
-            if (column.getColumnName().equals(leftKeyColumn.get().getColumnName()))
-            {
-                includeLeftKeyColumn = true;
-            }
             builder.append(column.getColumnName()).append("(").append(column.getLogicalOrdinal()).append(")").append(":");
             PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
                     .setLogicalOrdinal(logicalOrdinal++).build();
             newLeftColumnsBuilder.put(column, newColumn);
             joinedColumns.add(newColumn);
-            leftJoinedColumns.add(newColumn);
         }
         builder.append(", assignments: ");
         for (ColumnHandle column : leftAssignments.values())
@@ -670,16 +662,11 @@ public class PixelsMetadata implements ConnectorMetadata
                 .append(rightKeyColumn.get().getLogicalOrdinal()).append(")").append(", columns: ");
         for (PixelsColumnHandle column : rightTable.getColumns())
         {
-            if (column.getColumnName().equals(rightKeyColumn.get().getColumnName()))
-            {
-                includeRightKeyColumn = true;
-            }
             builder.append(column.getColumnName()).append("(").append(column.getLogicalOrdinal()).append(")").append(":");
             PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
                     .setLogicalOrdinal(logicalOrdinal++).build();
             newRightColumnsBuilder.put(column, newColumn);
             joinedColumns.add(newColumn);
-            rightJoinedColumns.add(newColumn);
         }
         builder.append(", assignments: ");
         for (ColumnHandle column : rightAssignments.values())
@@ -691,18 +678,10 @@ public class PixelsMetadata implements ConnectorMetadata
         String schemaName = "join_" + UUID.randomUUID().toString().replace("-", "");
         String tableName = leftTable.getTableName() + "_join_" + rightTable.getTableName();
 
-        if (includeLeftKeyColumn != includeRightKeyColumn)
-        {
-            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
-                    "includeLeftKeyColumn != includeRightKeyColumn");
-        }
-        boolean includeKeyColumns = includeLeftKeyColumn && includeRightKeyColumn;
-
         // TODO: choose join endian according to statistics.
         PixelsJoinHandle joinHandle = new PixelsJoinHandle(
-                leftTable, leftKeyColumn.get(), leftJoinedColumns.build(),
-                rightTable, rightKeyColumn.get(), rightJoinedColumns.build(),
-                includeKeyColumns, JoinEndian.SMALL_LEFT, pixelsJoinType);
+                leftTable, leftKeyColumn.get(), rightTable, rightKeyColumn.get(),
+                JoinEndian.SMALL_LEFT, pixelsJoinType);
 
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),

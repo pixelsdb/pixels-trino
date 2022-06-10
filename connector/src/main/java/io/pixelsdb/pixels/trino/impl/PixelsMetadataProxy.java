@@ -118,8 +118,9 @@ public class PixelsMetadataProxy
                         "column type '" + c.getType() + "' is not supported.");
             }
             String name = c.getName();
-            PixelsColumnHandle pixelsColumnHandle = new PixelsColumnHandle(connectorId, name,
-                    name, trinoType, pixelsType.getCategory(), "", i);
+            PixelsColumnHandle pixelsColumnHandle = new PixelsColumnHandle(
+                    connectorId, schemaName, tableName, name, name, trinoType,
+                    pixelsType.getCategory(), "", i);
             columnsBuilder.add(pixelsColumnHandle);
         }
         return columnsBuilder.build();

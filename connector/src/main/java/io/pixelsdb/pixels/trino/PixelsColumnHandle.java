@@ -34,6 +34,8 @@ import static java.util.Objects.requireNonNull;
 public final class PixelsColumnHandle implements ColumnHandle
 {
     private final String connectorId;
+    private final String schemaName;
+    private final String tableName;
     private final String columnName;
     private final String columnAlias;
     private final Type columnType;
@@ -52,6 +54,8 @@ public final class PixelsColumnHandle implements ColumnHandle
     @JsonCreator
     public PixelsColumnHandle(
             @JsonProperty("connectorId") String connectorId,
+            @JsonProperty("schemaName") String schemaName,
+            @JsonProperty("tableName") String tableName,
             @JsonProperty("columnName") String columnName,
             @JsonProperty("columnAlias") String columnAlias,
             @JsonProperty("columnType") Type columnType,
@@ -60,6 +64,8 @@ public final class PixelsColumnHandle implements ColumnHandle
             @JsonProperty("logicalOrdinal") int logicalOrdinal)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
+        this.schemaName = requireNonNull(schemaName, "schemaName is null");
+        this.tableName = requireNonNull(schemaName, "tableName is null");
         this.columnName = requireNonNull(columnName, "columnName is null");
         this.columnAlias = requireNonNull(columnAlias, "columnAlias is null");
         this.columnType = requireNonNull(columnType, "columnType is null");
@@ -75,15 +81,27 @@ public final class PixelsColumnHandle implements ColumnHandle
     }
 
     @JsonProperty
-    public String getColumnAlias()
+    public String getSchemaName()
     {
-        return columnAlias;
+        return schemaName;
+    }
+
+    @JsonProperty
+    public String getTableName()
+    {
+        return tableName;
     }
 
     @JsonProperty
     public String getColumnName()
     {
         return columnName;
+    }
+
+    @JsonProperty
+    public String getColumnAlias()
+    {
+        return columnAlias;
     }
 
     @JsonProperty
@@ -117,7 +135,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     @Override
     public int hashCode()
     {
-        return Objects.hash(connectorId, columnName, columnAlias, columnType);
+        return Objects.hash(connectorId, schemaName, tableName, columnName, columnAlias, columnType);
     }
 
     @Override
@@ -132,6 +150,8 @@ public final class PixelsColumnHandle implements ColumnHandle
 
         PixelsColumnHandle other = (PixelsColumnHandle) obj;
         return Objects.equals(this.connectorId, other.connectorId) &&
+                Objects.equals(this.schemaName, other.schemaName) &&
+                Objects.equals(this.tableName, other.tableName) &&
                 Objects.equals(this.columnName, other.columnName) &&
                 Objects.equals(this.columnAlias, other.columnAlias) &&
                 Objects.equals(this.columnType, other.columnType);
@@ -142,6 +162,8 @@ public final class PixelsColumnHandle implements ColumnHandle
     {
         return toStringHelper(this)
                 .add("connectorId", connectorId)
+                .add("schemaName", schemaName)
+                .add("tableName", tableName)
                 .add("columnName", columnName)
                 .add("columnAlias", columnAlias)
                 .add("columnType", columnType)
@@ -163,6 +185,8 @@ public final class PixelsColumnHandle implements ColumnHandle
     public static class Builder
     {
         private String builderConnectorId;
+        private String builderSchemaName;
+        private String builderTableName;
         private String builderColumnName;
         private String builderColumnAlias;
         private Type builderColumnType;
@@ -175,6 +199,8 @@ public final class PixelsColumnHandle implements ColumnHandle
         private Builder(PixelsColumnHandle columnHandle)
         {
             this.builderConnectorId = columnHandle.connectorId;
+            this.builderSchemaName = columnHandle.schemaName;
+            this.builderTableName = columnHandle.tableName;
             this.builderColumnName = columnHandle.columnName;
             this.builderColumnAlias = columnHandle.columnAlias;
             this.builderColumnType = columnHandle.columnType;
@@ -186,6 +212,18 @@ public final class PixelsColumnHandle implements ColumnHandle
         public Builder setConnectorId(String connectorId)
         {
             this.builderConnectorId = connectorId;
+            return this;
+        }
+
+        public Builder setBuilderSchemaName(String builderSchemaName)
+        {
+            this.builderSchemaName = builderSchemaName;
+            return this;
+        }
+
+        public Builder setBuilderTableName(String builderTableName)
+        {
+            this.builderTableName = builderTableName;
             return this;
         }
 
@@ -229,6 +267,8 @@ public final class PixelsColumnHandle implements ColumnHandle
         {
             return new PixelsColumnHandle(
                     builderConnectorId,
+                    builderSchemaName,
+                    builderTableName,
                     builderColumnName,
                     builderColumnAlias,
                     builderColumnType,
