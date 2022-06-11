@@ -203,17 +203,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<PixelsColumnHandle> rightJoinedColumnHandles = new ArrayList<>();
         ImmutableSet<PixelsColumnHandle> leftColumnHandleSet = ImmutableSet.copyOf(leftColumnHandles);
         ImmutableSet<PixelsColumnHandle> rightColumnHandleSet = ImmutableSet.copyOf(rightColumnHandles);
-        boolean includeLeftKeyColumns = false, includeRightKeyColumns = false;
         for (PixelsColumnHandle column : tableHandle.getColumns())
         {
-            if (column.equals(joinHandle.getLeftKeyColumn()))
-            {
-                includeLeftKeyColumns = true;
-            }
-            if (column.equals(joinHandle.getRightKeyColumn()))
-            {
-                includeRightKeyColumns = true;
-            }
             if (leftColumnHandleSet.contains(column))
             {
                 leftJoinedColumnHandles.add(column);
@@ -224,9 +215,17 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
         }
 
-        checkArgument(includeLeftKeyColumns == includeRightKeyColumns,
-                "includeLeftKeyColumns and includeRightKeyColumns are not consistent");
-        boolean includeKeyColumns = includeLeftKeyColumns && includeRightKeyColumns;
+        ImmutableSet<PixelsColumnHandle> joinedColumnHandleSet = ImmutableSet.copyOf(tableHandle.getColumns());
+        boolean[] leftProjection = new boolean[leftColumnHandles.size()];
+        for (int i = 0; i < leftProjection.length; ++i)
+        {
+            leftProjection[i] = joinedColumnHandleSet.contains(leftColumnHandles.get(i));
+        }
+        boolean[] rightProjection = new boolean[rightColumnHandles.size()];
+        for (int i = 0; i < rightProjection.length; ++i)
+        {
+            rightProjection[i] = joinedColumnHandleSet.contains(rightColumnHandles.get(i));
+        }
 
         String[] leftJoinedColumns = leftJoinedColumnHandles.stream()
                 .map(PixelsColumnHandle::getColumnName)
@@ -250,7 +249,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     leftHandle.getTableName(), leftColumns, leftHandle.getConstraint()));
             // TODO: choose join algorithm according to statistics.
             join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
-                    leftKeyColumnIds, rightKeyColumnIds, includeKeyColumns,
+                    leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
                     joinHandle.getJoinEndian(), joinHandle.getJoinType(), JoinAlgorithm.BROADCAST);
         }
         else
@@ -262,7 +261,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             JoinedTable leftTable = parseJoinPlan(joinHandle.getLeftTable());
             // TODO: choose join algorithm according to statistics.
             join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
-                    leftKeyColumnIds, rightKeyColumnIds, includeKeyColumns,
+                    leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
                     joinHandle.getJoinEndian(), joinHandle.getJoinType(), JoinAlgorithm.BROADCAST);
         }
 
