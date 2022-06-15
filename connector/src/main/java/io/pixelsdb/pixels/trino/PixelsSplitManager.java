@@ -40,6 +40,7 @@ import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.JoinOperator;
 import io.pixelsdb.pixels.executor.lambda.domain.InputInfo;
 import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
+import io.pixelsdb.pixels.executor.lambda.input.JoinInput;
 import io.pixelsdb.pixels.executor.plan.BaseTable;
 import io.pixelsdb.pixels.executor.plan.Join;
 import io.pixelsdb.pixels.executor.plan.JoinedTable;
@@ -87,7 +88,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private final int fixedSplitSize;
 
     @Inject
-    public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy, PixelsTrinoConfig config) {
+    public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
+                              PixelsTrinoConfig config) {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         String cacheEnabled = config.getConfigFactory().getProperty("cache.enabled");
@@ -140,26 +142,46 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
         else if (tableHandle.getTableType() == PixelsTableHandle.TableType.JOINED)
         {
+            // The table type is joined, means lambda has been enabled.
             JoinedTable root = parseJoinPlan(tableHandle);
             logger.info("parsed join plan: " + JSON.toJSONString(root));
             boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
             boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
+            String[] includeCols = root.getColumnNames();
+            List<String> columnOrder = Arrays.asList(includeCols);
+            List<String> cacheOrder = ImmutableList.of();
             try
             {
+                // Call executor to execute this join plan.
                 LambdaJoinExecutor executor = new LambdaJoinExecutor(
                         transHandle.getTransId(), root, orderedPathEnabled,compactPathEnabled);
                 JoinOperator joinOperator = executor.getJoinOperator();
                 logger.info("join operator: " + JSON.toJSONString(joinOperator));
+                joinOperator.executePrev();
+                ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                HostAddress address = HostAddress.fromString("localhost:8080");
+                TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
+                        columnHandle -> (PixelsColumnHandle) columnHandle);
+                for (JoinInput joinInput : joinOperator.getJoinInputs())
+                {
+                    PixelsSplit split = new PixelsSplit(connectorId, root.getSchemaName(), root.getTableName(),
+                            Storage.Scheme.minio.name(), joinInput.getOutput().getFileNames(), transHandle.getTransId(),
+                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
+                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
+                            false, false, Arrays.asList(address), columnOrder,
+                            cacheOrder, includeCols, emptyConstraint, PixelsTableHandle.TableType.JOINED,
+                            joinOperator.getJoinAlgo(), JSON.toJSONString(joinInput));
+                    splitsBuilder.add(split);
+                }
+                return new PixelsSplitSource(splitsBuilder.build());
             } catch (IOException | MetadataException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
             }
-            // Call executor to execute this join plan.
-            return new PixelsSplitSource(ImmutableList.of());
         }
         else
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type not supported");
+            throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type is not supported");
         }
     }
 

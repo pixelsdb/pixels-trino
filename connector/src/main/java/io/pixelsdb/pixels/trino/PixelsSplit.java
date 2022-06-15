@@ -24,7 +24,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
-import io.pixelsdb.pixels.executor.lambda.output.ScanOutput;
+import io.pixelsdb.pixels.executor.lambda.output.NonPartitionOutput;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
@@ -60,7 +60,7 @@ public class PixelsSplit implements ConnectorSplit
     private final String[] includeCols;
     private final TupleDomain<PixelsColumnHandle> constraint;
     private final PixelsTableHandle.TableType tableType;
-    private final JoinAlgorithm joinAlgorithm;
+    private final JoinAlgorithm joinAlgo;
     private final String joinInput;
 
     @JsonCreator
@@ -81,7 +81,7 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("includeCols") String[] includeCols,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("tableType")PixelsTableHandle.TableType tableType,
-            @JsonProperty("joinAlgorithm") JoinAlgorithm joinAlgorithm,
+            @JsonProperty("joinAlgo") JoinAlgorithm joinAlgo,
             @JsonProperty("joinInput") String joinInput) {
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
@@ -107,12 +107,12 @@ public class PixelsSplit implements ConnectorSplit
         this.tableType = requireNonNull(tableType, "tableType is null");
         if (tableType == PixelsTableHandle.TableType.JOINED)
         {
-            this.joinAlgorithm = requireNonNull(joinAlgorithm, "joinAlgorithm is null");
+            this.joinAlgo = requireNonNull(joinAlgo, "joinAlgorithm is null");
             this.joinInput = requireNonNull(joinInput, "joinInput is null");
         }
         else
         {
-            this.joinAlgorithm = null;
+            this.joinAlgo = null;
             this.joinInput = null;
         }
     }
@@ -124,7 +124,7 @@ public class PixelsSplit implements ConnectorSplit
      * @param includeCols the columns that will be included in the intermediate files
      * @param lambdaOutput the output of serverless
      */
-    public void permute(Storage.Scheme scheme, String[] includeCols, ScanOutput lambdaOutput)
+    public void permute(Storage.Scheme scheme, String[] includeCols, NonPartitionOutput lambdaOutput)
     {
         requireNonNull(scheme, "scheme is null");
         requireNonNull(lambdaOutput, "scanOutput is null");
@@ -274,9 +274,9 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
-    public JoinAlgorithm getJoinAlgorithm()
+    public JoinAlgorithm getJoinAlgo()
     {
-        return joinAlgorithm;
+        return joinAlgo;
     }
 
     @JsonProperty

@@ -28,11 +28,17 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.physical.storage.MinIO;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.utils.Pair;
+import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
+import io.pixelsdb.pixels.executor.lambda.BroadcastChainJoinInvoker;
+import io.pixelsdb.pixels.executor.lambda.BroadcastJoinInvoker;
+import io.pixelsdb.pixels.executor.lambda.PartitionedJoinInvoker;
 import io.pixelsdb.pixels.executor.lambda.ScanInvoker;
 import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
+import io.pixelsdb.pixels.executor.lambda.domain.MultiOutputInfo;
 import io.pixelsdb.pixels.executor.lambda.domain.OutputInfo;
 import io.pixelsdb.pixels.executor.lambda.domain.ScanTableInfo;
-import io.pixelsdb.pixels.executor.lambda.input.ScanInput;
+import io.pixelsdb.pixels.executor.lambda.input.*;
+import io.pixelsdb.pixels.executor.lambda.output.JoinOutput;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -103,20 +109,32 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
         try
         {
-            if (config.isLambdaEnabled() && this.localSplitCounter.get() >= config.getLocalScanConcurrency())
+            if (pixelsSplit.getTableType() == PixelsTableHandle.TableType.JOINED)
             {
+                // perform join push down.
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                 Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
                 IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
-                        pixelsFooterCache, getLambdaOutput(pixelsSplit, includeCols), null);
+                        pixelsFooterCache, getLambdaJoinOutput(pixelsSplit), null);
             }
             else
             {
-                this.localSplitCounter.incrementAndGet();
-                Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage,
-                        cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter);
+                // perform scan push down.
+                if (config.isLambdaEnabled() && this.localSplitCounter.get() >= config.getLocalScanConcurrency())
+                {
+                    MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
+                    Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
+                    IntermediateFileCleaner.Instance().registerStorage(storage);
+                    return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
+                            pixelsFooterCache, getLambdaScanOutput(pixelsSplit), null);
+                } else
+                {
+                    this.localSplitCounter.incrementAndGet();
+                    Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
+                    return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage,
+                            cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter);
+                }
             }
         } catch (IOException e)
         {
@@ -124,17 +142,80 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         }
     }
 
-    private CompletableFuture<?> getLambdaOutput(PixelsSplit inputSplit, String[] includeCols)
+    private CompletableFuture<?> getLambdaJoinOutput(PixelsSplit inputSplit)
+    {
+        String joinInputJson = inputSplit.getJoinInput();
+        JoinInput joinInput;
+        if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
+        {
+            joinInput = JSON.parseObject(joinInputJson, BroadcastChainJoinInput.class);
+        }
+        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST)
+        {
+            joinInput = JSON.parseObject(joinInputJson, BroadcastJoinInput.class);
+        }
+        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED)
+        {
+            joinInput = JSON.parseObject(joinInputJson, PartitionedJoinInput.class);
+        }
+        else
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, "join algorithm '" +
+                    inputSplit.getJoinAlgo() + "' is not supported");
+        }
+        MultiOutputInfo output = joinInput.getOutput();
+        output.setScheme(Storage.Scheme.minio);
+        output.setPath(config.getMinioOutputFolder());
+        output.setAccessKey(config.getMinioAccessKey());
+        output.setSecretKey(config.getMinioSecretKey());
+        output.setEndpoint(config.getMinioEndpoint());
+        logger.info("join input: " + JSON.toJSONString(joinInput));
+        CompletableFuture<JoinOutput> joinOutputFuture;
+        if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
+        {
+            joinOutputFuture = BroadcastChainJoinInvoker.invoke((BroadcastChainJoinInput) joinInput);
+        }
+        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST)
+        {
+            joinOutputFuture = BroadcastJoinInvoker.invoke((BroadcastJoinInput) joinInput);
+        }
+        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED)
+        {
+            joinOutputFuture = PartitionedJoinInvoker.invoke((PartitionedJoinInput) joinInput);
+        }
+        else
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, "join algorithm '" +
+                    inputSplit.getJoinAlgo() + "' is not supported");
+        }
+        return joinOutputFuture.whenComplete(((joinOutput, err) ->
+        {
+            if (err != null)
+            {
+                throw new RuntimeException("error in lambda invoke.", err);
+            }
+            try
+            {
+                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), joinOutput);
+            }
+            catch (Exception e)
+            {
+                throw new RuntimeException("error in minio read.", e);
+            }
+        }));
+    }
+
+    private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit)
     {
         ScanInput scanInput = new ScanInput();
         scanInput.setQueryId(inputSplit.getQueryId());
         ScanTableInfo tableInfo = new ScanTableInfo();
         tableInfo.setTableName(inputSplit.getTableName());
-        tableInfo.setColumnsToRead(includeCols);
+        tableInfo.setColumnsToRead(inputSplit.getIncludeCols());
         Pair<Integer, InputSplit> inputSplitPair = getInputSplit(inputSplit);
         tableInfo.setInputSplits(Arrays.asList(inputSplitPair.getRight()));
         TableScanFilter filter = createTableScanFilter(inputSplit.getSchemaName(),
-                inputSplit.getTableName(), includeCols, inputSplit.getConstraint());
+                inputSplit.getTableName(), inputSplit.getIncludeCols(), inputSplit.getConstraint());
         tableInfo.setFilter(JSON.toJSONString(filter));
         scanInput.setTableInfo(tableInfo);
         // logger.info("table scan filter: " + tableInfo.getFilter());
@@ -153,7 +234,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, includeCols, scanOutput);
+                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), scanOutput);
             }
             catch (Exception e)
             {
