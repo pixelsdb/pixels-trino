@@ -165,7 +165,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         }
         MultiOutputInfo output = joinInput.getOutput();
         output.setScheme(Storage.Scheme.minio);
-        output.setPath(config.getMinioOutputFolder());
+        output.setPath(config.getMinioOutputFolderForQuery(inputSplit.getQueryId(),
+                inputSplit.getSchemaName() + "_" + inputSplit.getTableName()));
         output.setAccessKey(config.getMinioAccessKey());
         output.setSecretKey(config.getMinioSecretKey());
         output.setEndpoint(config.getMinioEndpoint());
