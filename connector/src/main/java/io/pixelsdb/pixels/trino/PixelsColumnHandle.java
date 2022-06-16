@@ -34,26 +34,44 @@ import static java.util.Objects.requireNonNull;
 public final class PixelsColumnHandle implements ColumnHandle
 {
     private final String connectorId;
+    private final String schemaName;
+    private final String tableName;
     private final String columnName;
+    private final String columnAlias;
     private final Type columnType;
     private final TypeDescription.Category typeCategory;
     private final String columnComment;
-    private final int ordinalPosition;
+    /**
+     * The ordinal (index) in the columns of the table on which project and filter
+     * push-down have not been applied. This is a logical ordinal, not the index in
+     * the physical column order in the storage layout.
+     * <p/>
+     * <b>Note: </b> logical ordinal is not used in {@link #equals(Object) equals} and
+     * {@link #hashCode() hashCode}.
+     */
+    private final int logicalOrdinal;
 
     @JsonCreator
     public PixelsColumnHandle(
             @JsonProperty("connectorId") String connectorId,
+            @JsonProperty("schemaName") String schemaName,
+            @JsonProperty("tableName") String tableName,
             @JsonProperty("columnName") String columnName,
+            @JsonProperty("columnAlias") String columnAlias,
             @JsonProperty("columnType") Type columnType,
             @JsonProperty("typeCategory") TypeDescription.Category typeCategory,
-            @JsonProperty("columnComment") String columnComment, @JsonProperty("ordinalPosition") int ordinalPosition)
+            @JsonProperty("columnComment") String columnComment,
+            @JsonProperty("logicalOrdinal") int logicalOrdinal)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
+        this.schemaName = requireNonNull(schemaName, "schemaName is null");
+        this.tableName = requireNonNull(schemaName, "tableName is null");
         this.columnName = requireNonNull(columnName, "columnName is null");
+        this.columnAlias = requireNonNull(columnAlias, "columnAlias is null");
         this.columnType = requireNonNull(columnType, "columnType is null");
         this.typeCategory = requireNonNull(typeCategory, "typeCategory is null");
         this.columnComment = requireNonNull(columnComment, "columnComment is null");
-        this.ordinalPosition = ordinalPosition;
+        this.logicalOrdinal = logicalOrdinal;
     }
 
     @JsonProperty
@@ -63,9 +81,27 @@ public final class PixelsColumnHandle implements ColumnHandle
     }
 
     @JsonProperty
+    public String getSchemaName()
+    {
+        return schemaName;
+    }
+
+    @JsonProperty
+    public String getTableName()
+    {
+        return tableName;
+    }
+
+    @JsonProperty
     public String getColumnName()
     {
         return columnName;
+    }
+
+    @JsonProperty
+    public String getColumnAlias()
+    {
+        return columnAlias;
     }
 
     @JsonProperty
@@ -86,9 +122,9 @@ public final class PixelsColumnHandle implements ColumnHandle
     }
 
     @JsonProperty
-    public int getOrdinalPosition()
+    public int getLogicalOrdinal()
     {
-        return ordinalPosition;
+        return logicalOrdinal;
     }
 
     public ColumnMetadata getColumnMetadata()
@@ -99,7 +135,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     @Override
     public int hashCode()
     {
-        return Objects.hash(connectorId, columnName);
+        return Objects.hash(connectorId, schemaName, tableName, columnName, columnAlias, columnType);
     }
 
     @Override
@@ -114,8 +150,11 @@ public final class PixelsColumnHandle implements ColumnHandle
 
         PixelsColumnHandle other = (PixelsColumnHandle) obj;
         return Objects.equals(this.connectorId, other.connectorId) &&
+                Objects.equals(this.schemaName, other.schemaName) &&
+                Objects.equals(this.tableName, other.tableName) &&
                 Objects.equals(this.columnName, other.columnName) &&
-                Objects.equals(this.ordinalPosition, other.ordinalPosition);
+                Objects.equals(this.columnAlias, other.columnAlias) &&
+                Objects.equals(this.columnType, other.columnType);
     }
 
     @Override
@@ -123,10 +162,120 @@ public final class PixelsColumnHandle implements ColumnHandle
     {
         return toStringHelper(this)
                 .add("connectorId", connectorId)
+                .add("schemaName", schemaName)
+                .add("tableName", tableName)
                 .add("columnName", columnName)
+                .add("columnAlias", columnAlias)
                 .add("columnType", columnType)
                 .add("columnComment", columnComment)
-                .add("ordinalPosition", ordinalPosition)
+                .add("logicalOrdinal", logicalOrdinal)
                 .toString();
+    }
+
+    public static Builder builder()
+    {
+        return new Builder();
+    }
+
+    public static Builder builderFrom(PixelsColumnHandle handle)
+    {
+        return new Builder(handle);
+    }
+
+    public static class Builder
+    {
+        private String builderConnectorId;
+        private String builderSchemaName;
+        private String builderTableName;
+        private String builderColumnName;
+        private String builderColumnAlias;
+        private Type builderColumnType;
+        private TypeDescription.Category builderTypeCategory;
+        private String builderColumnComment;
+        private int builderLogicalOrdinal;
+
+        private Builder() {}
+
+        private Builder(PixelsColumnHandle columnHandle)
+        {
+            this.builderConnectorId = columnHandle.connectorId;
+            this.builderSchemaName = columnHandle.schemaName;
+            this.builderTableName = columnHandle.tableName;
+            this.builderColumnName = columnHandle.columnName;
+            this.builderColumnAlias = columnHandle.columnAlias;
+            this.builderColumnType = columnHandle.columnType;
+            this.builderTypeCategory = columnHandle.typeCategory;
+            this.builderColumnComment = columnHandle.columnComment;
+            this.builderLogicalOrdinal = columnHandle.logicalOrdinal;
+        }
+
+        public Builder setConnectorId(String connectorId)
+        {
+            this.builderConnectorId = connectorId;
+            return this;
+        }
+
+        public Builder setBuilderSchemaName(String builderSchemaName)
+        {
+            this.builderSchemaName = builderSchemaName;
+            return this;
+        }
+
+        public Builder setBuilderTableName(String builderTableName)
+        {
+            this.builderTableName = builderTableName;
+            return this;
+        }
+
+        public Builder setColumnName(String columnName)
+        {
+            this.builderColumnName = columnName;
+            return this;
+        }
+
+        public Builder setColumnAlias(String columnAlias)
+        {
+            this.builderColumnAlias = columnAlias;
+            return this;
+        }
+
+        public Builder setColumnType(Type columnType)
+        {
+            this.builderColumnType = columnType;
+            return this;
+        }
+
+        public Builder setTypeCategory(TypeDescription.Category typeCategory)
+        {
+            this.builderTypeCategory = typeCategory;
+            return this;
+        }
+
+        public Builder setColumnComment(String columnComment)
+        {
+            this.builderColumnComment = columnComment;
+            return this;
+        }
+
+        public Builder setLogicalOrdinal(int logicalOrdinal)
+        {
+            this.builderLogicalOrdinal = logicalOrdinal;
+            return this;
+        }
+
+        public PixelsColumnHandle build()
+        {
+            return new PixelsColumnHandle(
+                    builderConnectorId,
+                    builderSchemaName,
+                    builderTableName,
+                    builderColumnName,
+                    builderColumnAlias,
+                    builderColumnType,
+                    builderTypeCategory,
+                    builderColumnComment,
+                    builderLogicalOrdinal
+            );
+        }
     }
 }

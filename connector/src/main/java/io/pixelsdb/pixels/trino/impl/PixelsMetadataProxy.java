@@ -19,6 +19,7 @@
  */
 package io.pixelsdb.pixels.trino.impl;
 
+import com.google.common.collect.ImmutableList;
 import com.google.inject.Inject;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
@@ -42,7 +43,7 @@ import static java.util.Objects.requireNonNull;
  */
 public class PixelsMetadataProxy
 {
-    private static final Logger log = Logger.get(PixelsMetadataProxy.class);
+    private static final Logger logger = Logger.get(PixelsMetadataProxy.class);
     private final MetadataService metadataService;
     private final PixelsTypeParser typeParser;
 
@@ -105,7 +106,7 @@ public class PixelsMetadataProxy
 
     public List<PixelsColumnHandle> getTableColumn(String connectorId, String schemaName, String tableName) throws MetadataException
     {
-        List<PixelsColumnHandle> columns = new ArrayList<PixelsColumnHandle>();
+        ImmutableList.Builder<PixelsColumnHandle> columnsBuilder = ImmutableList.builder();
         List<Column> columnsList = metadataService.getColumns(schemaName, tableName);
         for (int i = 0; i < columnsList.size(); i++) {
             Column c = columnsList.get(i);
@@ -117,11 +118,12 @@ public class PixelsMetadataProxy
                         "column type '" + c.getType() + "' is not supported.");
             }
             String name = c.getName();
-            PixelsColumnHandle pixelsColumnHandle = new PixelsColumnHandle(connectorId, name,
-                    trinoType, pixelsType.getCategory(), "", i);
-            columns.add(pixelsColumnHandle);
+            PixelsColumnHandle pixelsColumnHandle = new PixelsColumnHandle(
+                    connectorId, schemaName, tableName, name, name, trinoType,
+                    pixelsType.getCategory(), "", i);
+            columnsBuilder.add(pixelsColumnHandle);
         }
-        return columns;
+        return columnsBuilder.build();
     }
 
     public List<Layout> getDataLayouts (String schemaName, String tableName) throws MetadataException

@@ -53,7 +53,7 @@ import static java.util.Objects.requireNonNull;
 public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
 {
     private final TupleDomain<C> predicate;
-    public final List<ColumnReference<C>> columnReferences;
+    private final List<ColumnReference<C>> columnReferences;
 
     public PixelsTupleDomainPredicate(TupleDomain<C> predicate, List<ColumnReference<C>> columnReferences)
     {
@@ -70,7 +70,7 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
      *
      * @param numberOfRows            number of rows in the corresponding horizontal data unit
      *                                (pixel, row group, file, etc.) where the statistics come from.
-     * @param statisticsByColumnIndex statistics map. key: column index in user specified schema,
+     * @param statisticsByColumnIndex statistics map. key: column index in user specified columns to read,
      *                                value: column statistic
      */
     @Override
@@ -115,7 +115,7 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
                 // no predicate on this column, so continue
                 continue;
             }
-            ColumnStats columnStats = statisticsByColumnIndex.get(columnReference.getOrdinal());
+            ColumnStats columnStats = statisticsByColumnIndex.get(columnReference.getReadOrdinal());
             if (columnStats == null)
             {
                 // no column statistics, so continue
@@ -393,14 +393,23 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
     public static class ColumnReference<C>
     {
         private final C column;
-        private final int ordinal;
+        /**
+         * The ordinal of this column in the user specified columns to read.
+         */
+        private final int readOrdinal;
         private final Type type;
 
-        public ColumnReference(C column, int ordinal, Type type)
+        /**
+         * Create a column reference used by the predicate.
+         * @param column the column
+         * @param readOrdinal the column's ordinal (index) in the columns to read
+         * @param type the data type of the column
+         */
+        public ColumnReference(C column, int readOrdinal, Type type)
         {
             this.column = requireNonNull(column, "column is null");
-            checkArgument(ordinal >= 0, "ordinal is negative");
-            this.ordinal = ordinal;
+            checkArgument(readOrdinal >= 0, "ordinal is negative");
+            this.readOrdinal = readOrdinal;
             this.type = requireNonNull(type, "type is null");
         }
 
@@ -409,9 +418,9 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
             return column;
         }
 
-        public int getOrdinal()
+        public int getReadOrdinal()
         {
-            return ordinal;
+            return readOrdinal;
         }
 
         public Type getType()

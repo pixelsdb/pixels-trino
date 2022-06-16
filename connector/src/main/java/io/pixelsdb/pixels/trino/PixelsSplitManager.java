@@ -21,6 +21,7 @@ package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import io.etcd.jetcd.KeyValue;
@@ -33,6 +34,16 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.utils.Pair;
+import io.pixelsdb.pixels.executor.LambdaJoinExecutor;
+import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
+import io.pixelsdb.pixels.executor.lambda.JoinOperator;
+import io.pixelsdb.pixels.executor.lambda.domain.InputInfo;
+import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
+import io.pixelsdb.pixels.executor.lambda.input.JoinInput;
+import io.pixelsdb.pixels.executor.plan.BaseTable;
+import io.pixelsdb.pixels.executor.plan.Join;
+import io.pixelsdb.pixels.executor.plan.JoinedTable;
 import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
@@ -54,7 +65,9 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -75,7 +88,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private final int fixedSplitSize;
 
     @Inject
-    public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy, PixelsTrinoConfig config) {
+    public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
+                              PixelsTrinoConfig config) {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         String cacheEnabled = config.getConfigFactory().getProperty("cache.enabled");
@@ -93,13 +107,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         ImmutableList.Builder<PixelsColumnHandle> builder = ImmutableList.builder();
         builder.addAll(tableHandle.getColumns());
-        if (tableHandle.getConstraint().getDomains().isPresent())
+        if (tableHandle.getTableType() == PixelsTableHandle.TableType.BASE &&
+                tableHandle.getConstraint().getDomains().isPresent())
         {
-            Set<PixelsColumnHandle> oldColumnSet = new HashSet<>(tableHandle.getColumns());
+            Set<PixelsColumnHandle> columnSet = new HashSet<>(tableHandle.getColumns());
             for (PixelsColumnHandle column : tableHandle.getConstraint().getDomains().get().keySet())
             {
-                if (!oldColumnSet.contains(column))
+                if (!columnSet.contains(column))
                 {
+                    logger.info("get column from filter, table name: " + tableHandle.getTableName() +
+                            ", column name: " + column.getColumnName());
                     builder.add(column);
                 }
             }
@@ -117,6 +134,199 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+        if (tableHandle.getTableType() == PixelsTableHandle.TableType.BASE)
+        {
+            List<PixelsSplit> pixelsSplits = getScanSplits(transHandle, session, tableHandle);
+            Collections.shuffle(pixelsSplits);
+            return new PixelsSplitSource(pixelsSplits);
+        }
+        else if (tableHandle.getTableType() == PixelsTableHandle.TableType.JOINED)
+        {
+            // The table type is joined, means lambda has been enabled.
+            JoinedTable root = parseJoinPlan(tableHandle);
+            logger.info("parsed join plan: " + JSON.toJSONString(root));
+            boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
+            boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
+            /*
+             * Do not use the column names from the root joined table like this:
+             * String[] includeCols = root.getColumnNames();
+             * Because Trino assumes the join result remains the same column order as
+             * tableHandle.getColumns(), but root.getColumnNames() might not follow this order.
+             */
+            String[] includeCols = new String[tableHandle.getColumns().size()];
+            for (int i = 0; i < tableHandle.getColumns().size(); ++i)
+            {
+                includeCols[i] = tableHandle.getColumns().get(i).getColumnName();
+            }
+            List<String> columnOrder = Arrays.asList(includeCols);
+            List<String> cacheOrder = ImmutableList.of();
+            try
+            {
+                // Call executor to execute this join plan.
+                LambdaJoinExecutor executor = new LambdaJoinExecutor(
+                        transHandle.getTransId(), root, orderedPathEnabled,compactPathEnabled);
+                JoinOperator joinOperator = executor.getJoinOperator();
+                logger.info("join operator: " + JSON.toJSONString(joinOperator));
+                joinOperator.executePrev();
+                ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                HostAddress address = HostAddress.fromString("localhost:8080");
+                TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
+                        columnHandle -> (PixelsColumnHandle) columnHandle);
+                for (JoinInput joinInput : joinOperator.getJoinInputs())
+                {
+                    PixelsSplit split = new PixelsSplit(connectorId, root.getSchemaName(), root.getTableName(),
+                            Storage.Scheme.minio.name(), joinInput.getOutput().getFileNames(), transHandle.getTransId(),
+                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
+                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
+                            false, false, Arrays.asList(address), columnOrder,
+                            cacheOrder, includeCols, emptyConstraint, PixelsTableHandle.TableType.JOINED,
+                            joinOperator.getJoinAlgo(), JSON.toJSONString(joinInput));
+                    splitsBuilder.add(split);
+                }
+                return new PixelsSplitSource(splitsBuilder.build());
+            } catch (IOException | MetadataException e)
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
+            }
+        }
+        else
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type is not supported");
+        }
+    }
+
+    private JoinedTable parseJoinPlan(PixelsTableHandle tableHandle)
+    {
+        checkArgument(tableHandle.getTableType() == PixelsTableHandle.TableType.JOINED,
+                "tableHandle is not a joined table");
+        PixelsJoinHandle joinHandle = tableHandle.getJoinHandle();
+
+        PixelsTableHandle leftHandle = joinHandle.getLeftTable();
+        PixelsTableHandle rightHandle = joinHandle.getRightTable();
+        List<PixelsColumnHandle> leftColumnHandles;
+        String[] leftColumns;
+        io.pixelsdb.pixels.executor.plan.Table leftTable;
+        if (leftHandle.getTableType() == PixelsTableHandle.TableType.BASE)
+        {
+            leftColumnHandles = getIncludeColumns(leftHandle);
+            leftColumns = new String[leftColumnHandles.size()];
+            for (int i = 0; i < leftColumns.length; ++i)
+            {
+                leftColumns[i] = leftColumnHandles.get(i).getColumnName();
+            }
+            leftTable = new BaseTable(leftHandle.getSchemaName(), leftHandle.getTableName(),
+                    leftHandle.getTableAlias(), leftColumns, createTableScanFilter(leftHandle.getSchemaName(),
+                    leftHandle.getTableName(), leftColumns, leftHandle.getConstraint()));
+        }
+        else
+        {
+            checkArgument(joinHandle.getLeftTable().getTableType() == PixelsTableHandle.TableType.JOINED &&
+                            joinHandle.getRightTable().getTableType() == PixelsTableHandle.TableType.BASE,
+                    "this is not a left-deep join");
+            // recursive deep left.
+            leftTable = parseJoinPlan(joinHandle.getLeftTable());
+            leftColumns = leftTable.getColumnNames();
+            List<PixelsColumnHandle> columnHandles = getIncludeColumns(leftHandle);
+            ImmutableList.Builder<PixelsColumnHandle> leftColumnHandlesBuilder = ImmutableList.builder();
+            for (int i = 0; i < leftColumns.length; ++i)
+            {
+                for (int j = 0; j < leftColumns.length; ++j)
+                {
+                    // TODO: consider using column alias.
+                    if (leftColumns[i].equals(columnHandles.get(j).getColumnName()))
+                    {
+                        leftColumnHandlesBuilder.add(columnHandles.get(i));
+                    }
+                }
+            }
+            leftColumnHandles = leftColumnHandlesBuilder.build();
+        }
+
+        List<PixelsColumnHandle> rightColumnHandles = getIncludeColumns(rightHandle);
+
+        /*
+         * We must ensure that left/right joined column handles remain the same
+         * column order of left/right column handles.
+         */
+        List<PixelsColumnHandle> leftJoinedColumnHandles = new LinkedList<>();
+        List<PixelsColumnHandle> rightJoinedColumnHandles = new ArrayList<>();
+        int[] leftKeyColumnIds = new int[1];
+        String[] rightColumns = new String[rightColumnHandles.size()];
+        int[] rightKeyColumnIds = new int[1];
+
+        ImmutableSet<PixelsColumnHandle> joinedColumnHandleSet = ImmutableSet.copyOf(tableHandle.getColumns());
+        boolean[] leftProjection = new boolean[leftColumnHandles.size()];
+        for (int i = 0; i < leftProjection.length; ++i)
+        {
+            PixelsColumnHandle leftColumnHandle = leftColumnHandles.get(i);
+            if (leftColumnHandle.equals(joinHandle.getLeftKeyColumn()) &&
+                    leftColumnHandle.getLogicalOrdinal() == joinHandle.getLeftKeyColumn().getLogicalOrdinal())
+            {
+                leftKeyColumnIds[0] = i;
+            }
+            leftProjection[i] = joinedColumnHandleSet.contains(leftColumnHandle);
+            if (leftProjection[i])
+            {
+                leftJoinedColumnHandles.add(leftColumnHandle);
+            }
+        }
+        boolean[] rightProjection = new boolean[rightColumnHandles.size()];
+        for (int i = 0; i < rightProjection.length; ++i)
+        {
+            PixelsColumnHandle rightColumnHandle = rightColumnHandles.get(i);
+            rightColumns[i] = rightColumnHandle.getColumnName();
+            if (rightColumnHandle.equals(joinHandle.getRightKeyColumn()) &&
+                    rightColumnHandle.getLogicalOrdinal() == joinHandle.getRightKeyColumn().getLogicalOrdinal())
+            {
+                rightKeyColumnIds[0] = i;
+            }
+            rightProjection[i] = joinedColumnHandleSet.contains(rightColumnHandle);
+            if (rightProjection[i])
+            {
+                rightJoinedColumnHandles.add(rightColumnHandle);
+            }
+        }
+
+        String[] leftJoinedColumns = leftJoinedColumnHandles.stream()
+                .map(PixelsColumnHandle::getColumnName)
+                .collect(Collectors.toUnmodifiableList())
+                .toArray(new String[0]);
+        String[] rightJoinedColumns = rightJoinedColumnHandles.stream()
+                .map(PixelsColumnHandle::getColumnName)
+                .collect(Collectors.toUnmodifiableList())
+                .toArray(new String[0]);
+
+        BaseTable rightTable = new BaseTable(rightHandle.getSchemaName(), rightHandle.getTableName(),
+                rightHandle.getTableAlias(), rightColumns, createTableScanFilter(rightHandle.getSchemaName(),
+                rightHandle.getTableName(), rightColumns, rightHandle.getConstraint()));
+
+        Join join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
+                leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
+                joinHandle.getJoinEndian(), joinHandle.getJoinType(), JoinAlgorithm.BROADCAST);
+
+        return new JoinedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),
+                tableHandle.getTableAlias(), join);
+    }
+
+    public static Pair<Integer, InputSplit> getInputSplit(PixelsSplit split)
+    {
+        ArrayList<InputInfo> inputInfos = new ArrayList<>();
+        int splitSize = 0;
+        List<String> paths = split.getPaths();
+        List<Integer> rgStarts = split.getRgStarts();
+        List<Integer> rgLengths = split.getRgLengths();
+
+        for (int i = 0; i < paths.size(); ++i)
+        {
+            inputInfos.add(new InputInfo(paths.get(i), rgStarts.get(i), rgLengths.get(i)));
+            splitSize += rgLengths.get(i);
+        }
+        return new Pair<>(splitSize, new InputSplit(inputInfos));
+    }
+
+    private List<PixelsSplit> getScanSplits(PixelsTransactionHandle transHandle,
+                                          ConnectorSession session, PixelsTableHandle tableHandle)
+    {
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
         TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
         // logger.info("constraint from table handle: " + constraint.toString(session));
@@ -316,7 +526,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
                                             order.getColumnOrder(), new ArrayList<>(0),
-                                            includeCols, constraint);
+                                            includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                            null, null);
                                     // log.debug("Split in orderPath: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -353,7 +564,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, order.getColumnOrder(),
-                                                cacheColumnletOrders, includeCols, constraint);
+                                                cacheColumnletOrders, includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                                null, null);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPath" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -413,7 +625,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
                                     order.getColumnOrder(), new ArrayList<>(0),
-                                    includeCols, constraint);
+                                    includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                    null, null);
                             // logger.debug("Split in orderPath: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -437,7 +650,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         order.getColumnOrder(), new ArrayList<>(0),
-                                        includeCols, constraint);
+                                        includeCols, constraint, PixelsTableHandle.TableType.BASE,
+                                        null, null);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }
@@ -451,9 +665,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
         }
 
-        Collections.shuffle(pixelsSplits);
-
-        return new PixelsSplitSource(pixelsSplits);
+        return pixelsSplits;
     }
 
     public static TableScanFilter createTableScanFilter(

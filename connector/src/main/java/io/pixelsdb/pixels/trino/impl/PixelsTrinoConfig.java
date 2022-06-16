@@ -220,6 +220,15 @@ public class PixelsTrinoConfig
     }
 
     @NotNull
+    public String getMinioOutputFolderForQuery(long queryId, String post)
+    {
+        /* Must end with '/', otherwise it will not be considered
+         * as a folder in S3-like storage.
+         */
+        return this.minioOutputFolder + queryId + "/" +post + "/";
+    }
+
+    @NotNull
     public String getMinioEndpointIP()
     {
         return minioEndpointIP;
