@@ -132,6 +132,15 @@ public final class PixelsColumnHandle implements ColumnHandle
         return new ColumnMetadata(columnName, columnType);
     }
 
+    /**
+     * @return the synthetic column name that can be used in joins or aggregations.
+     * It is composed of columnName_logicalOrdinal.
+     */
+    public String getSynthColumnName()
+    {
+        return this.columnName + "_" + this.logicalOrdinal;
+    }
+
     @Override
     public int hashCode()
     {
