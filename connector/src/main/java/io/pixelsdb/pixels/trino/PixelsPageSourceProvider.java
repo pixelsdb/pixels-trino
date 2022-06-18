@@ -170,7 +170,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         output.setAccessKey(config.getMinioAccessKey());
         output.setSecretKey(config.getMinioSecretKey());
         output.setEndpoint(config.getMinioEndpoint());
-        logger.info("join input: " + JSON.toJSONString(joinInput));
+        // logger.info("join input: " + JSON.toJSONString(joinInput));
         CompletableFuture<JoinOutput> joinOutputFuture;
         if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
         {

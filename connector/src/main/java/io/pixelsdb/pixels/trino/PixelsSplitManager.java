@@ -21,7 +21,6 @@ package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import io.etcd.jetcd.KeyValue;
@@ -144,11 +143,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // The table type is joined, means lambda has been enabled.
             JoinedTable root = parseJoinPlan(tableHandle);
-            logger.info("parsed join plan: " + JSON.toJSONString(root));
             boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
             boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
             /*
-             * Do not use the column names from the root joined table like this:
+             * Do not directly use the column names from the root joined table like this:
              * String[] includeCols = root.getColumnNames();
              * Because Trino assumes the join result remains the same column order as
              * tableHandle.getColumns(), but root.getColumnNames() might not follow this order.
@@ -156,7 +154,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
             String[] includeCols = new String[tableHandle.getColumns().size()];
             for (int i = 0; i < tableHandle.getColumns().size(); ++i)
             {
-                includeCols[i] = tableHandle.getColumns().get(i).getColumnName();
+                // use the synthetic column name to access the join result.
+                includeCols[i] = tableHandle.getColumns().get(i).getSynthColumnName();
             }
             List<String> columnOrder = Arrays.asList(includeCols);
             List<String> cacheOrder = ImmutableList.of();
@@ -166,9 +165,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 LambdaJoinExecutor executor = new LambdaJoinExecutor(
                         transHandle.getTransId(), root, orderedPathEnabled,compactPathEnabled);
                 JoinOperator joinOperator = executor.getJoinOperator();
-                logger.info("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.executePrev();
                 ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                // The address is not used to dispatch Pixels splits, so we use set it the localhost.
                 HostAddress address = HostAddress.fromString("localhost:8080");
                 TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
                         columnHandle -> (PixelsColumnHandle) columnHandle);
@@ -195,6 +194,15 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
     }
 
+    /**
+     * Parse the join plan from the joined table handle. In the parsed join plan, we create the
+     * synthetic column names for the result of each join. These synthetic column names can be used
+     * to read the join result, and are generated from the column name plus the logical ordinary id
+     * of the columns from the left and right tables.
+     *
+     * @param tableHandle the joined table handle
+     * @return the parsed join plan
+     */
     private JoinedTable parseJoinPlan(PixelsTableHandle tableHandle)
     {
         checkArgument(tableHandle.getTableType() == PixelsTableHandle.TableType.JOINED,
@@ -212,6 +220,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             leftColumns = new String[leftColumnHandles.size()];
             for (int i = 0; i < leftColumns.length; ++i)
             {
+                // Do not use synthetic column name for base table.
                 leftColumns[i] = leftColumnHandles.get(i).getColumnName();
             }
             leftTable = new BaseTable(leftHandle.getSchemaName(), leftHandle.getTableName(),
@@ -232,8 +241,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 for (int j = 0; j < leftColumns.length; ++j)
                 {
-                    // TODO: consider using column alias.
-                    if (leftColumns[i].equals(columnHandles.get(j).getColumnName()))
+                    // The left table is a joined table, the leftColumns are the syhthetic column names.
+                    if (leftColumns[i].equals(columnHandles.get(j).getSynthColumnName()))
                     {
                         leftColumnHandlesBuilder.add(columnHandles.get(i));
                     }
@@ -254,7 +263,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
         String[] rightColumns = new String[rightColumnHandles.size()];
         int[] rightKeyColumnIds = new int[1];
 
-        ImmutableSet<PixelsColumnHandle> joinedColumnHandleSet = ImmutableSet.copyOf(tableHandle.getColumns());
+        Map<PixelsColumnHandle, PixelsColumnHandle> joinedColumnHandleMap =
+                new HashMap<>(tableHandle.getColumns().size());
+        for (PixelsColumnHandle joinedColumn : tableHandle.getColumns())
+        {
+            joinedColumnHandleMap.put(joinedColumn, joinedColumn);
+        }
         boolean[] leftProjection = new boolean[leftColumnHandles.size()];
         for (int i = 0; i < leftProjection.length; ++i)
         {
@@ -264,35 +278,40 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 leftKeyColumnIds[0] = i;
             }
-            leftProjection[i] = joinedColumnHandleSet.contains(leftColumnHandle);
+            leftProjection[i] = joinedColumnHandleMap.containsKey(leftColumnHandle);
             if (leftProjection[i])
             {
-                leftJoinedColumnHandles.add(leftColumnHandle);
+                leftJoinedColumnHandles.add(joinedColumnHandleMap.get(leftColumnHandle));
             }
         }
         boolean[] rightProjection = new boolean[rightColumnHandles.size()];
         for (int i = 0; i < rightProjection.length; ++i)
         {
             PixelsColumnHandle rightColumnHandle = rightColumnHandles.get(i);
+            // right table is always a base table, do not use synthetic column names.
             rightColumns[i] = rightColumnHandle.getColumnName();
             if (rightColumnHandle.equals(joinHandle.getRightKeyColumn()) &&
                     rightColumnHandle.getLogicalOrdinal() == joinHandle.getRightKeyColumn().getLogicalOrdinal())
             {
                 rightKeyColumnIds[0] = i;
             }
-            rightProjection[i] = joinedColumnHandleSet.contains(rightColumnHandle);
+            rightProjection[i] = joinedColumnHandleMap.containsKey(rightColumnHandle);
             if (rightProjection[i])
             {
-                rightJoinedColumnHandles.add(rightColumnHandle);
+                rightJoinedColumnHandles.add(joinedColumnHandleMap.get(rightColumnHandle));
             }
         }
 
+        /*
+        * leftJoinedColumns and rightJoinedColumns are used to build the column names in the
+        * join result, so we should use the synthetic column names here.
+        * */
         String[] leftJoinedColumns = leftJoinedColumnHandles.stream()
-                .map(PixelsColumnHandle::getColumnName)
+                .map(PixelsColumnHandle::getSynthColumnName)
                 .collect(Collectors.toUnmodifiableList())
                 .toArray(new String[0]);
         String[] rightJoinedColumns = rightJoinedColumnHandles.stream()
-                .map(PixelsColumnHandle::getColumnName)
+                .map(PixelsColumnHandle::getSynthColumnName)
                 .collect(Collectors.toUnmodifiableList())
                 .toArray(new String[0]);
 
