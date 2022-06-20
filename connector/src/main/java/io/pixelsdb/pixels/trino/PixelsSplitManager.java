@@ -143,6 +143,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // The table type is joined, means lambda has been enabled.
             JoinedTable root = parseJoinPlan(tableHandle);
+            logger.info("join plan: " + JSON.toJSONString(root));
             boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
             boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
             /*
@@ -212,8 +213,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
         PixelsTableHandle leftHandle = joinHandle.getLeftTable();
         PixelsTableHandle rightHandle = joinHandle.getRightTable();
         List<PixelsColumnHandle> leftColumnHandles;
-        String[] leftColumns;
+        List<PixelsColumnHandle> rightColumnHandles;
+        String[] leftColumns, rightColumns;
         io.pixelsdb.pixels.executor.plan.Table leftTable;
+        io.pixelsdb.pixels.executor.plan.Table rightTable;
+        checkArgument(leftHandle.getTableType() == PixelsTableHandle.TableType.BASE ||
+                rightHandle.getTableType() == PixelsTableHandle.TableType.BASE,
+                "multi-pipeline join is currently not supported");
+        boolean rotateLeftRight = false;
         if (leftHandle.getTableType() == PixelsTableHandle.TableType.BASE)
         {
             leftColumnHandles = getIncludeColumns(leftHandle);
@@ -229,9 +236,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
         else
         {
-            checkArgument(joinHandle.getLeftTable().getTableType() == PixelsTableHandle.TableType.JOINED &&
-                            joinHandle.getRightTable().getTableType() == PixelsTableHandle.TableType.BASE,
-                    "this is not a left-deep join");
+            checkArgument(joinHandle.getLeftTable().getTableType() == PixelsTableHandle.TableType.JOINED,
+                    "left table is not a base or joined table, can not parse");
             // recursive deep left.
             leftTable = parseJoinPlan(joinHandle.getLeftTable());
             leftColumns = leftTable.getColumnNames();
@@ -241,7 +247,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 for (int j = 0; j < leftColumns.length; ++j)
                 {
-                    // The left table is a joined table, the leftColumns are the syhthetic column names.
+                    // The left table is a joined table, the leftColumns are the synthetic column names.
                     if (leftColumns[i].equals(columnHandles.get(j).getSynthColumnName()))
                     {
                         leftColumnHandlesBuilder.add(columnHandles.get(i));
@@ -251,7 +257,46 @@ public class PixelsSplitManager implements ConnectorSplitManager
             leftColumnHandles = leftColumnHandlesBuilder.build();
         }
 
-        List<PixelsColumnHandle> rightColumnHandles = getIncludeColumns(rightHandle);
+        if (rightHandle.getTableType() == PixelsTableHandle.TableType.BASE)
+        {
+            rightColumnHandles = getIncludeColumns(rightHandle);
+            rightColumns = new String[rightColumnHandles.size()];
+            for (int i = 0; i < rightColumns.length; ++i)
+            {
+                // Do not use synthetic column name for base table.
+                rightColumns[i] = rightColumnHandles.get(i).getColumnName();
+            }
+            rightTable = new BaseTable(rightHandle.getSchemaName(), rightHandle.getTableName(),
+                    rightHandle.getTableAlias(), rightColumns, createTableScanFilter(rightHandle.getSchemaName(),
+                    rightHandle.getTableName(), rightColumns, rightHandle.getConstraint()));
+        }
+        else
+        {
+            checkArgument(joinHandle.getRightTable().getTableType() == PixelsTableHandle.TableType.JOINED,
+                    "right table is not a base or joined table, can not parse");
+            /*
+             * The right table is a joined table, we need to rotate the two tables to ensure the
+             * generated join plan is deep-left (currently, join executor only supports deep-left plan).
+             */
+            rotateLeftRight = true;
+            // recursive deep right.
+            rightTable = parseJoinPlan(joinHandle.getRightTable());
+            rightColumns = rightTable.getColumnNames();
+            List<PixelsColumnHandle> columnHandles = getIncludeColumns(rightHandle);
+            ImmutableList.Builder<PixelsColumnHandle> rightColumnHandlesBuilder = ImmutableList.builder();
+            for (int i = 0; i < rightColumns.length; ++i)
+            {
+                for (int j = 0; j < rightColumns.length; ++j)
+                {
+                    // The right table is a joined table, the rightColumns are the synthetic column names.
+                    if (rightColumns[i].equals(columnHandles.get(j).getSynthColumnName()))
+                    {
+                        rightColumnHandlesBuilder.add(columnHandles.get(i));
+                    }
+                }
+            }
+            rightColumnHandles = rightColumnHandlesBuilder.build();
+        }
 
         /*
          * We must ensure that left/right joined column handles remain the same
@@ -260,7 +305,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<PixelsColumnHandle> leftJoinedColumnHandles = new LinkedList<>();
         List<PixelsColumnHandle> rightJoinedColumnHandles = new ArrayList<>();
         int[] leftKeyColumnIds = new int[1];
-        String[] rightColumns = new String[rightColumnHandles.size()];
         int[] rightKeyColumnIds = new int[1];
 
         Map<PixelsColumnHandle, PixelsColumnHandle> joinedColumnHandleMap =
@@ -288,8 +332,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         for (int i = 0; i < rightProjection.length; ++i)
         {
             PixelsColumnHandle rightColumnHandle = rightColumnHandles.get(i);
-            // right table is always a base table, do not use synthetic column names.
-            rightColumns[i] = rightColumnHandle.getColumnName();
             if (rightColumnHandle.equals(joinHandle.getRightKeyColumn()) &&
                     rightColumnHandle.getLogicalOrdinal() == joinHandle.getRightKeyColumn().getLogicalOrdinal())
             {
@@ -303,25 +345,30 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
 
         /*
-        * leftJoinedColumns and rightJoinedColumns are used to build the column names in the
-        * join result, so we should use the synthetic column names here.
-        * */
+         * leftJoinedColumns and rightJoinedColumns are used to build the column names in the
+         * join result, so we should use the synthetic column names here.
+         */
         String[] leftJoinedColumns = leftJoinedColumnHandles.stream()
                 .map(PixelsColumnHandle::getSynthColumnName)
-                .collect(Collectors.toUnmodifiableList())
-                .toArray(new String[0]);
+                .collect(Collectors.toUnmodifiableList()).toArray(new String[0]);
         String[] rightJoinedColumns = rightJoinedColumnHandles.stream()
                 .map(PixelsColumnHandle::getSynthColumnName)
-                .collect(Collectors.toUnmodifiableList())
-                .toArray(new String[0]);
+                .collect(Collectors.toUnmodifiableList()).toArray(new String[0]);
 
-        BaseTable rightTable = new BaseTable(rightHandle.getSchemaName(), rightHandle.getTableName(),
-                rightHandle.getTableAlias(), rightColumns, createTableScanFilter(rightHandle.getSchemaName(),
-                rightHandle.getTableName(), rightColumns, rightHandle.getConstraint()));
-
-        Join join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
-                leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
-                joinHandle.getJoinEndian(), joinHandle.getJoinType(), JoinAlgorithm.BROADCAST);
+        // TODO: choose the join algorithm by optimizer.
+        Join join;
+        if (rotateLeftRight)
+        {
+            join = new Join(rightTable, leftTable, rightJoinedColumns, leftJoinedColumns,
+                    rightKeyColumnIds, leftKeyColumnIds, rightProjection, leftProjection,
+                    joinHandle.getJoinEndian().flip(), joinHandle.getJoinType().flip(), JoinAlgorithm.BROADCAST);
+        }
+        else
+        {
+            join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
+                    leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
+                    joinHandle.getJoinEndian(), joinHandle.getJoinType(), JoinAlgorithm.BROADCAST);
+        }
 
         return new JoinedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),
                 tableHandle.getTableAlias(), join);
