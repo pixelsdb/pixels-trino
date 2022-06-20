@@ -31,10 +31,13 @@ import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.pixelsdb.pixels.trino.PixelsTypeParser;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
+import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.type.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -46,6 +49,7 @@ public class PixelsMetadataProxy
     private static final Logger logger = Logger.get(PixelsMetadataProxy.class);
     private final MetadataService metadataService;
     private final PixelsTypeParser typeParser;
+    private final Map<SchemaTableName, List<Column>> tableColumnsMap = new HashMap<>();
 
     @Inject
     public PixelsMetadataProxy(PixelsTrinoConfig config, PixelsTypeParser typeParser)
@@ -107,7 +111,9 @@ public class PixelsMetadataProxy
     public List<PixelsColumnHandle> getTableColumn(String connectorId, String schemaName, String tableName) throws MetadataException
     {
         ImmutableList.Builder<PixelsColumnHandle> columnsBuilder = ImmutableList.builder();
-        List<Column> columnsList = metadataService.getColumns(schemaName, tableName);
+        List<Column> columnsList = metadataService.getColumns(schemaName, tableName, true);
+        SchemaTableName schemaTableName = new SchemaTableName(schemaName, tableName);
+        this.tableColumnsMap.put(schemaTableName, columnsList);
         for (int i = 0; i < columnsList.size(); i++) {
             Column c = columnsList.get(i);
             Type trinoType = typeParser.parseTrinoType(c.getType());
@@ -124,6 +130,11 @@ public class PixelsMetadataProxy
             columnsBuilder.add(pixelsColumnHandle);
         }
         return columnsBuilder.build();
+    }
+
+    public List<Column> getColumnStatistics(String schemaName, String tableName)
+    {
+        return this.tableColumnsMap.get(new SchemaTableName(schemaName, tableName));
     }
 
     public List<Layout> getDataLayouts (String schemaName, String tableName) throws MetadataException

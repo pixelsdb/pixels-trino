@@ -458,96 +458,42 @@ public class PixelsMetadata implements ConnectorMetadata
     @Override
     public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle tableHandle, Constraint constraint)
     {
-        if (!config.isLambdaEnabled())
-        {
-            //return TableStatistics.empty();
-        }
-        TableStatistics.Builder builder = TableStatistics.builder();
+        TableStatistics.Builder tableStatBuilder = TableStatistics.builder();
         PixelsTableHandle table = (PixelsTableHandle) tableHandle;
-        switch (table.getTableName())
+        List<Column> columns = metadataProxy.getColumnStatistics(table.getSchemaName(), table.getTableName());
+        requireNonNull(columns, "columns is null");
+        Map<String, Column> columnMap = new HashMap<>(columns.size());
+        for (Column column : columns)
         {
-            case "orders":
-                builder.setRowCount(Estimate.of(150000000.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(11.0/9*1024*1024*1024));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
-            case "customer":
-                builder.setRowCount(Estimate.of(15000000.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(2.1/8*1024*1024*1024));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
-            case "lineitem":
-                builder.setRowCount(Estimate.of(600037902.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(46.5/16*1024*1024*1024));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
-            case "supplier":
-                builder.setRowCount(Estimate.of(1000000.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(135.0/7*1024*1024));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
-            case "part":
-                builder.setRowCount(Estimate.of(20000000.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(1.2/9*1024*1024*1024));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
-            case "partsupp":
-                builder.setRowCount(Estimate.of(80000000.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(10.4/5*1024*1024*1024));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
-            case "nation":
-                builder.setRowCount(Estimate.of(25.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(1024));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
-            case "region":
-                builder.setRowCount(Estimate.of(5.0));
-                for (PixelsColumnHandle column : table.getColumns())
-                {
-                    ColumnStatistics.Builder columnBuilder = ColumnStatistics.builder();
-                    //columnBuilder.setDataSize(Estimate.of(256));
-                    columnBuilder.setNullsFraction(Estimate.zero());
-                    builder.setColumnStatistics(column, columnBuilder.build());
-                }
-                break;
+            columnMap.put(column.getName(), column);
         }
-        return builder.build();
+
+        try
+        {
+            long rowCount = metadataProxy.getTable(table.getSchemaName(), table.getTableName()).getRowCount();
+            tableStatBuilder.setRowCount(Estimate.of(rowCount));
+            logger.info("table '" + table.getTableName() + "' row count: " + rowCount);
+        } catch (MetadataException e)
+        {
+            logger.error("failed to get table from metadata service", e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
+
+        for (PixelsColumnHandle columnHandle : table.getColumns())
+        {
+            ColumnStatistics.Builder columnStatBuilder = ColumnStatistics.builder();
+            Column column = columnMap.get(columnHandle.getColumnName());
+            columnStatBuilder.setDataSize(Estimate.of(column.getSize()));
+            columnStatBuilder.setNullsFraction(Estimate.of(column.getNullFraction()));
+            columnStatBuilder.setDistinctValuesCount(Estimate.of(column.getCardinality()));
+            logger.info("column '" + columnHandle.getColumnName() + "'(" + column.getName() +
+                    ") data size: " + column.getSize() + ", null frac: " + column.getNullFraction() +
+                    ", cardinality: " +column.getCardinality());
+            // TODO: set range.
+            tableStatBuilder.setColumnStatistics(columnHandle, columnStatBuilder.build());
+        }
+
+        return tableStatBuilder.build();
     }
 
     @Override
@@ -580,6 +526,8 @@ public class PixelsMetadata implements ConnectorMetadata
 
         PixelsTableHandle leftTable = (PixelsTableHandle) left;
         PixelsTableHandle rightTable = (PixelsTableHandle) right;
+        logger.info("join push down: left=" + leftTable.getTableName() +
+                ", right=" + rightTable.getTableName());
         if (joinConditions.size() > 1 ||
                 joinConditions.get(0).getOperator() != JoinCondition.Operator.EQUAL)
         {
@@ -646,7 +594,7 @@ public class PixelsMetadata implements ConnectorMetadata
         // TODO: choose join endian according to statistics.
         PixelsJoinHandle joinHandle = new PixelsJoinHandle(
                 leftTable, leftKeyColumn.get(), rightTable, rightKeyColumn.get(),
-                JoinEndian.SMALL_LEFT, pixelsJoinType);
+                JoinEndian.LARGE_LEFT, pixelsJoinType);
 
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),
