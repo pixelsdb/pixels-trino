@@ -35,6 +35,7 @@ import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.LambdaJoinExecutor;
+import io.pixelsdb.pixels.executor.join.JoinAdvisor;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.JoinOperator;
 import io.pixelsdb.pixels.executor.lambda.domain.InputInfo;
@@ -355,19 +356,27 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 .map(PixelsColumnHandle::getSynthColumnName)
                 .collect(Collectors.toUnmodifiableList()).toArray(new String[0]);
 
-        // TODO: choose the join algorithm by optimizer.
         Join join;
+        JoinAlgorithm joinAlgo;
+        try
+        {
+            joinAlgo = JoinAdvisor.Instance().getJoinAlgorithm(leftTable, rightTable, joinHandle.getJoinEndian());
+        } catch (MetadataException e)
+        {
+            logger.error("failed to get join algorithm", e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
         if (rotateLeftRight)
         {
             join = new Join(rightTable, leftTable, rightJoinedColumns, leftJoinedColumns,
                     rightKeyColumnIds, leftKeyColumnIds, rightProjection, leftProjection,
-                    joinHandle.getJoinEndian().flip(), joinHandle.getJoinType().flip(), JoinAlgorithm.BROADCAST);
+                    joinHandle.getJoinEndian().flip(), joinHandle.getJoinType().flip(), joinAlgo);
         }
         else
         {
             join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
                     leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
-                    joinHandle.getJoinEndian(), joinHandle.getJoinType(), JoinAlgorithm.BROADCAST);
+                    joinHandle.getJoinEndian(), joinHandle.getJoinType(), joinAlgo);
         }
 
         return new JoinedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),
