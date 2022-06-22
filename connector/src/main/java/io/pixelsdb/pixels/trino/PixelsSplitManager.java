@@ -35,6 +35,7 @@ import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.LambdaJoinExecutor;
+import io.pixelsdb.pixels.executor.join.JoinAdvisor;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.JoinOperator;
 import io.pixelsdb.pixels.executor.lambda.domain.InputInfo;
@@ -42,6 +43,7 @@ import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
 import io.pixelsdb.pixels.executor.lambda.input.JoinInput;
 import io.pixelsdb.pixels.executor.plan.BaseTable;
 import io.pixelsdb.pixels.executor.plan.Join;
+import io.pixelsdb.pixels.executor.plan.JoinEndian;
 import io.pixelsdb.pixels.executor.plan.JoinedTable;
 import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
@@ -250,7 +252,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // The left table is a joined table, the leftColumns are the synthetic column names.
                     if (leftColumns[i].equals(columnHandles.get(j).getSynthColumnName()))
                     {
-                        leftColumnHandlesBuilder.add(columnHandles.get(i));
+                        leftColumnHandlesBuilder.add(columnHandles.get(j));
                     }
                 }
             }
@@ -291,7 +293,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // The right table is a joined table, the rightColumns are the synthetic column names.
                     if (rightColumns[i].equals(columnHandles.get(j).getSynthColumnName()))
                     {
-                        rightColumnHandlesBuilder.add(columnHandles.get(i));
+                        rightColumnHandlesBuilder.add(columnHandles.get(j));
                     }
                 }
             }
@@ -355,19 +357,29 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 .map(PixelsColumnHandle::getSynthColumnName)
                 .collect(Collectors.toUnmodifiableList()).toArray(new String[0]);
 
-        // TODO: choose the join algorithm by optimizer.
         Join join;
+        JoinEndian joinEndian;
+        JoinAlgorithm joinAlgo;
+        try
+        {
+            joinEndian = JoinAdvisor.Instance().getJoinEndian(leftTable, rightTable);
+            joinAlgo = JoinAdvisor.Instance().getJoinAlgorithm(leftTable, rightTable, joinEndian);
+        } catch (MetadataException e)
+        {
+            logger.error("failed to get join algorithm", e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
         if (rotateLeftRight)
         {
             join = new Join(rightTable, leftTable, rightJoinedColumns, leftJoinedColumns,
                     rightKeyColumnIds, leftKeyColumnIds, rightProjection, leftProjection,
-                    joinHandle.getJoinEndian().flip(), joinHandle.getJoinType().flip(), JoinAlgorithm.BROADCAST);
+                    joinEndian.flip(), joinHandle.getJoinType().flip(), joinAlgo);
         }
         else
         {
             join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
                     leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
-                    joinHandle.getJoinEndian(), joinHandle.getJoinType(), JoinAlgorithm.BROADCAST);
+                    joinEndian, joinHandle.getJoinType(), joinAlgo);
         }
 
         return new JoinedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),

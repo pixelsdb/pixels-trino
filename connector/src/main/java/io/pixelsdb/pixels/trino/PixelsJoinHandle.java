@@ -23,7 +23,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Objects;
 import io.pixelsdb.pixels.executor.join.JoinType;
-import io.pixelsdb.pixels.executor.plan.JoinEndian;
 
 /**
  * @author hank
@@ -35,7 +34,6 @@ public final class PixelsJoinHandle
     private final PixelsColumnHandle leftKeyColumn;
     private final PixelsTableHandle rightTable;
     private final PixelsColumnHandle rightKeyColumn;
-    private final JoinEndian joinEndian;
     private final JoinType joinType;
 
     @JsonCreator
@@ -44,14 +42,12 @@ public final class PixelsJoinHandle
             @JsonProperty("leftKeyColumn") PixelsColumnHandle leftKeyColumn,
             @JsonProperty("rightTable") PixelsTableHandle rightTable,
             @JsonProperty("rightKeyColumn") PixelsColumnHandle rightKeyColumn,
-            @JsonProperty("joinEndian") JoinEndian joinEndian,
             @JsonProperty("joinType") JoinType joinType)
     {
         this.leftTable = leftTable;
         this.leftKeyColumn = leftKeyColumn;
         this.rightTable = rightTable;
         this.rightKeyColumn = rightKeyColumn;
-        this.joinEndian = joinEndian;
         this.joinType = joinType;
     }
 
@@ -80,12 +76,6 @@ public final class PixelsJoinHandle
     }
 
     @JsonProperty
-    public JoinEndian getJoinEndian()
-    {
-        return joinEndian;
-    }
-
-    @JsonProperty
     public JoinType getJoinType()
     {
         return joinType;
@@ -101,7 +91,6 @@ public final class PixelsJoinHandle
                 Objects.equal(leftKeyColumn, that.leftKeyColumn) &&
                 Objects.equal(rightTable, that.rightTable) &&
                 Objects.equal(rightKeyColumn, that.rightKeyColumn) &&
-
                 joinType == that.joinType;
     }
 
