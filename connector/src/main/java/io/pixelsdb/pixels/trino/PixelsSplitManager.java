@@ -306,8 +306,21 @@ public class PixelsSplitManager implements ConnectorSplitManager
          */
         List<PixelsColumnHandle> leftJoinedColumnHandles = new LinkedList<>();
         List<PixelsColumnHandle> rightJoinedColumnHandles = new ArrayList<>();
-        int[] leftKeyColumnIds = new int[1];
-        int[] rightKeyColumnIds = new int[1];
+        Map<PixelsColumnHandle, PixelsColumnHandle> leftKeyColumnMap =
+                new HashMap<>(joinHandle.getLeftKeyColumns().size());
+        Map<PixelsColumnHandle, PixelsColumnHandle> rightKeyColumnMap =
+                new HashMap<>(joinHandle.getRightKeyColumns().size());
+        for (PixelsColumnHandle leftKeyColumn : joinHandle.getLeftKeyColumns())
+        {
+            leftKeyColumnMap.put(leftKeyColumn, leftKeyColumn);
+        }
+        for (PixelsColumnHandle rightKeyColumn : joinHandle.getRightKeyColumns())
+        {
+            rightKeyColumnMap.put(rightKeyColumn, rightKeyColumn);
+        }
+        int[] leftKeyColumnIds = new int[joinHandle.getLeftKeyColumns().size()];
+        int[] rightKeyColumnIds = new int[joinHandle.getRightKeyColumns().size()];
+        int leftKeysIndex = 0, rightKeysIndex = 0;
 
         Map<PixelsColumnHandle, PixelsColumnHandle> joinedColumnHandleMap =
                 new HashMap<>(tableHandle.getColumns().size());
@@ -319,10 +332,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
         for (int i = 0; i < leftProjection.length; ++i)
         {
             PixelsColumnHandle leftColumnHandle = leftColumnHandles.get(i);
-            if (leftColumnHandle.equals(joinHandle.getLeftKeyColumn()) &&
-                    leftColumnHandle.getLogicalOrdinal() == joinHandle.getLeftKeyColumn().getLogicalOrdinal())
+            PixelsColumnHandle leftKeyColumn = leftKeyColumnMap.get(leftColumnHandle);
+            if (leftKeyColumn != null && leftColumnHandle.getLogicalOrdinal() == leftKeyColumn.getLogicalOrdinal())
             {
-                leftKeyColumnIds[0] = i;
+                leftKeyColumnIds[leftKeysIndex++] = i;
             }
             leftProjection[i] = joinedColumnHandleMap.containsKey(leftColumnHandle);
             if (leftProjection[i])
@@ -334,10 +347,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
         for (int i = 0; i < rightProjection.length; ++i)
         {
             PixelsColumnHandle rightColumnHandle = rightColumnHandles.get(i);
-            if (rightColumnHandle.equals(joinHandle.getRightKeyColumn()) &&
-                    rightColumnHandle.getLogicalOrdinal() == joinHandle.getRightKeyColumn().getLogicalOrdinal())
+            PixelsColumnHandle rightKeyColumn = rightKeyColumnMap.get(rightColumnHandle);
+            if (rightKeyColumn != null && rightColumnHandle.getLogicalOrdinal() == rightKeyColumn.getLogicalOrdinal())
             {
-                rightKeyColumnIds[0] = i;
+                rightKeyColumnIds[rightKeysIndex++] = i;
             }
             rightProjection[i] = joinedColumnHandleMap.containsKey(rightColumnHandle);
             if (rightProjection[i])

@@ -24,6 +24,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Objects;
 import io.pixelsdb.pixels.executor.join.JoinType;
 
+import java.util.List;
+
 /**
  * @author hank
  * @date 18/05/2022
@@ -31,23 +33,23 @@ import io.pixelsdb.pixels.executor.join.JoinType;
 public final class PixelsJoinHandle
 {
     private final PixelsTableHandle leftTable;
-    private final PixelsColumnHandle leftKeyColumn;
+    private final List<PixelsColumnHandle> leftKeyColumns;
     private final PixelsTableHandle rightTable;
-    private final PixelsColumnHandle rightKeyColumn;
+    private final List<PixelsColumnHandle> rightKeyColumns;
     private final JoinType joinType;
 
     @JsonCreator
     public PixelsJoinHandle(
             @JsonProperty("leftTable") PixelsTableHandle leftTable,
-            @JsonProperty("leftKeyColumn") PixelsColumnHandle leftKeyColumn,
+            @JsonProperty("leftKeyColumns") List<PixelsColumnHandle> leftKeyColumns,
             @JsonProperty("rightTable") PixelsTableHandle rightTable,
-            @JsonProperty("rightKeyColumn") PixelsColumnHandle rightKeyColumn,
+            @JsonProperty("rightKeyColumns") List<PixelsColumnHandle> rightKeyColumns,
             @JsonProperty("joinType") JoinType joinType)
     {
         this.leftTable = leftTable;
-        this.leftKeyColumn = leftKeyColumn;
+        this.leftKeyColumns = leftKeyColumns;
         this.rightTable = rightTable;
-        this.rightKeyColumn = rightKeyColumn;
+        this.rightKeyColumns = rightKeyColumns;
         this.joinType = joinType;
     }
 
@@ -58,9 +60,9 @@ public final class PixelsJoinHandle
     }
 
     @JsonProperty
-    public PixelsColumnHandle getLeftKeyColumn()
+    public List<PixelsColumnHandle> getLeftKeyColumns()
     {
-        return leftKeyColumn;
+        return leftKeyColumns;
     }
 
     @JsonProperty
@@ -70,9 +72,9 @@ public final class PixelsJoinHandle
     }
 
     @JsonProperty
-    public PixelsColumnHandle getRightKeyColumn()
+    public List<PixelsColumnHandle> getRightKeyColumns()
     {
-        return rightKeyColumn;
+        return rightKeyColumns;
     }
 
     @JsonProperty
@@ -88,15 +90,15 @@ public final class PixelsJoinHandle
         if (o == null || getClass() != o.getClass()) return false;
         PixelsJoinHandle that = (PixelsJoinHandle) o;
         return Objects.equal(leftTable, that.leftTable) &&
-                Objects.equal(leftKeyColumn, that.leftKeyColumn) &&
+                Objects.equal(leftKeyColumns, that.leftKeyColumns) &&
                 Objects.equal(rightTable, that.rightTable) &&
-                Objects.equal(rightKeyColumn, that.rightKeyColumn) &&
+                Objects.equal(rightKeyColumns, that.rightKeyColumns) &&
                 joinType == that.joinType;
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hashCode(leftTable, leftKeyColumn, rightTable, rightKeyColumn, joinType);
+        return Objects.hashCode(leftTable, leftKeyColumns, rightTable, rightKeyColumns, joinType);
     }
 }
