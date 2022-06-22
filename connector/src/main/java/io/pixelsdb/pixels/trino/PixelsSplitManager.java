@@ -43,6 +43,7 @@ import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
 import io.pixelsdb.pixels.executor.lambda.input.JoinInput;
 import io.pixelsdb.pixels.executor.plan.BaseTable;
 import io.pixelsdb.pixels.executor.plan.Join;
+import io.pixelsdb.pixels.executor.plan.JoinEndian;
 import io.pixelsdb.pixels.executor.plan.JoinedTable;
 import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
@@ -251,7 +252,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // The left table is a joined table, the leftColumns are the synthetic column names.
                     if (leftColumns[i].equals(columnHandles.get(j).getSynthColumnName()))
                     {
-                        leftColumnHandlesBuilder.add(columnHandles.get(i));
+                        leftColumnHandlesBuilder.add(columnHandles.get(j));
                     }
                 }
             }
@@ -292,7 +293,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // The right table is a joined table, the rightColumns are the synthetic column names.
                     if (rightColumns[i].equals(columnHandles.get(j).getSynthColumnName()))
                     {
-                        rightColumnHandlesBuilder.add(columnHandles.get(i));
+                        rightColumnHandlesBuilder.add(columnHandles.get(j));
                     }
                 }
             }
@@ -357,10 +358,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 .collect(Collectors.toUnmodifiableList()).toArray(new String[0]);
 
         Join join;
+        JoinEndian joinEndian;
         JoinAlgorithm joinAlgo;
         try
         {
-            joinAlgo = JoinAdvisor.Instance().getJoinAlgorithm(leftTable, rightTable, joinHandle.getJoinEndian());
+            joinEndian = JoinAdvisor.Instance().getJoinEndian(leftTable, rightTable);
+            joinAlgo = JoinAdvisor.Instance().getJoinAlgorithm(leftTable, rightTable, joinEndian);
         } catch (MetadataException e)
         {
             logger.error("failed to get join algorithm", e);
@@ -370,13 +373,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             join = new Join(rightTable, leftTable, rightJoinedColumns, leftJoinedColumns,
                     rightKeyColumnIds, leftKeyColumnIds, rightProjection, leftProjection,
-                    joinHandle.getJoinEndian().flip(), joinHandle.getJoinType().flip(), joinAlgo);
+                    joinEndian.flip(), joinHandle.getJoinType().flip(), joinAlgo);
         }
         else
         {
             join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
                     leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
-                    joinHandle.getJoinEndian(), joinHandle.getJoinType(), joinAlgo);
+                    joinEndian, joinHandle.getJoinType(), joinAlgo);
         }
 
         return new JoinedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),

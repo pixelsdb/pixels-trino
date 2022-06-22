@@ -26,7 +26,6 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.physical.Storage;
-import io.pixelsdb.pixels.executor.plan.JoinEndian;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -591,10 +590,8 @@ public class PixelsMetadata implements ConnectorMetadata
         String schemaName = "join_" + UUID.randomUUID().toString().replace("-", "");
         String tableName = leftTable.getTableName() + "_join_" + rightTable.getTableName();
 
-        // TODO: choose join endian according to statistics.
         PixelsJoinHandle joinHandle = new PixelsJoinHandle(
-                leftTable, leftKeyColumn.get(), rightTable, rightKeyColumn.get(),
-                JoinEndian.LARGE_LEFT, pixelsJoinType);
+                leftTable, leftKeyColumn.get(), rightTable, rightKeyColumn.get(), pixelsJoinType);
 
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),
