@@ -527,13 +527,33 @@ public class PixelsMetadata implements ConnectorMetadata
         PixelsTableHandle rightTable = (PixelsTableHandle) right;
         logger.info("join push down: left=" + leftTable.getTableName() +
                 ", right=" + rightTable.getTableName());
-        if (joinConditions.size() > 1 ||
-                joinConditions.get(0).getOperator() != JoinCondition.Operator.EQUAL)
+
+        // get the join keys.
+        ImmutableList.Builder<PixelsColumnHandle> leftKeyColumns =
+                ImmutableList.builderWithExpectedSize(joinConditions.size());
+        ImmutableList.Builder<PixelsColumnHandle> rightKeyColumns =
+                ImmutableList.builderWithExpectedSize(joinConditions.size());
+        for (JoinCondition joinCondition : joinConditions)
         {
-            // We only support single equal-join.
-            logger.info("[join push down is rejected for multi-join-condition].");
-            return Optional.empty();
+            if (joinCondition.getOperator() != JoinCondition.Operator.EQUAL)
+            {
+                logger.info("[join push down is rejected for not supporting non-equal join].");
+                return Optional.empty();
+            }
+            Optional<PixelsColumnHandle> leftKeyColumn = getVariableColumnHandle(
+                    leftAssignments, joinCondition.getLeftExpression());
+            Optional<PixelsColumnHandle> rightKeyColumn = getVariableColumnHandle(
+                    rightAssignments, joinCondition.getRightExpression());
+            if (leftKeyColumn.isEmpty() || rightKeyColumn.isEmpty())
+            {
+                logger.info("[join push down is rejected for failed to parse join conditions].");
+                return Optional.empty();
+            }
+            leftKeyColumns.add(leftKeyColumn.get());
+            rightKeyColumns.add(rightKeyColumn.get());
         }
+
+        // get the join type.
         io.pixelsdb.pixels.executor.join.JoinType pixelsJoinType;
         switch (joinType)
         {
@@ -553,17 +573,6 @@ public class PixelsMetadata implements ConnectorMetadata
                 // We only support the above types of joins.
                 logger.info("[join push down is rejected for unsupported join type (" + joinType + ")]");
                 return Optional.empty();
-        }
-        // create the join handle.
-        JoinCondition joinCondition = joinConditions.get(0);
-        Optional<PixelsColumnHandle> leftKeyColumn = getVariableColumnHandle(
-                leftAssignments, joinCondition.getLeftExpression());
-        Optional<PixelsColumnHandle> rightKeyColumn = getVariableColumnHandle(
-                rightAssignments, joinCondition.getRightExpression());
-        if (leftKeyColumn.isEmpty() || rightKeyColumn.isEmpty())
-        {
-            logger.info("[join push down is rejected for missing join keys].");
-            return Optional.empty();
         }
 
         // generate the joinedColumns and new left/right column handles.
@@ -590,8 +599,9 @@ public class PixelsMetadata implements ConnectorMetadata
         String schemaName = "join_" + UUID.randomUUID().toString().replace("-", "");
         String tableName = leftTable.getTableName() + "_join_" + rightTable.getTableName();
 
+        // create the join handle.
         PixelsJoinHandle joinHandle = new PixelsJoinHandle(
-                leftTable, leftKeyColumn.get(), rightTable, rightKeyColumn.get(), pixelsJoinType);
+                leftTable, leftKeyColumns.build(), rightTable, rightKeyColumns.build(), pixelsJoinType);
 
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),

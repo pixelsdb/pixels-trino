@@ -65,7 +65,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
-        this.tableName = requireNonNull(schemaName, "tableName is null");
+        this.tableName = requireNonNull(tableName, "tableName is null");
         this.columnName = requireNonNull(columnName, "columnName is null");
         this.columnAlias = requireNonNull(columnAlias, "columnAlias is null");
         this.columnType = requireNonNull(columnType, "columnType is null");
