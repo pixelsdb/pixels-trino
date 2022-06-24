@@ -355,24 +355,29 @@ class PixelsPageSource implements ConnectorPageSource
         {
             try
             {
-                rowBatch = recordReader.readBatch(BatchSize, false);
-                if (this.filter.isPresent() && rowBatch.size > 0)
+                do
                 {
-                    this.filter.get().doFilter(rowBatch, this.filtered, this.tmp);
-                    rowBatch.applyFilter(this.filtered);
-                }
-                rowBatchSize = rowBatch.size;
-                if (rowBatchSize <= 0)
-                {
-                    if (readNextPath())
+                    rowBatch = recordReader.readBatch(BatchSize, false);
+                    if (rowBatch.size <= 0)
                     {
-                        return getNextPage();
-                    } else
-                    {
-                        close();
-                        return null;
+                        if (readNextPath())
+                        {
+                            return getNextPage();
+                        } else
+                        {
+                            close();
+                            return null;
+                        }
                     }
-                }
+
+                    if (this.filter.isPresent())
+                    {
+                        this.filter.get().doFilter(rowBatch, this.filtered, this.tmp);
+                        rowBatch.applyFilter(this.filtered);
+                    }
+                    rowBatchSize = rowBatch.size;
+                } while (rowBatchSize <= 0);
+
                 for (int fieldId = 0; fieldId < blocks.length; ++fieldId)
                 {
                     Type type = columns.get(fieldId).getColumnType();

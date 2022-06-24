@@ -156,6 +156,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
                 // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = executor.getJoinOperator();
+                logger.info("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.executePrev();
 
                 // Build the splits of the join result.
