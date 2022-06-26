@@ -146,30 +146,35 @@ public class PixelsSplitManager implements ConnectorSplitManager
             // The table type is joined, means lambda has been enabled.
             JoinedTable root = parseJoinPlan(tableHandle);
             logger.info("join plan: " + JSON.toJSONString(root));
-            boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
-            boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
-            /*
-             * Do not directly use the column names from the root joined table like this:
-             * String[] includeCols = root.getColumnNames();
-             * Because Trino assumes the join result remains the same column order as
-             * tableHandle.getColumns(), but root.getColumnNames() might not follow this order.
-             */
-            String[] includeCols = new String[tableHandle.getColumns().size()];
-            for (int i = 0; i < tableHandle.getColumns().size(); ++i)
-            {
-                // use the synthetic column name to access the join result.
-                includeCols[i] = tableHandle.getColumns().get(i).getSynthColumnName();
-            }
-            List<String> columnOrder = Arrays.asList(includeCols);
-            List<String> cacheOrder = ImmutableList.of();
+
             try
             {
+                boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
+                boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
                 // Call executor to execute this join plan.
                 LambdaJoinExecutor executor = new LambdaJoinExecutor(
-                        transHandle.getTransId(), root, orderedPathEnabled,compactPathEnabled);
+                        transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
+                // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = executor.getJoinOperator();
+                logger.info("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.executePrev();
+
+                // Build the splits of the join result.
                 ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                /*
+                 * Do not directly use the column names from the root joined table like this:
+                 * String[] includeCols = root.getColumnNames();
+                 * Because Trino assumes the join result remains the same column order as
+                 * tableHandle.getColumns(), but root.getColumnNames() might not follow this order.
+                 */
+                String[] includeCols = new String[tableHandle.getColumns().size()];
+                for (int i = 0; i < tableHandle.getColumns().size(); ++i)
+                {
+                    // Use the synthetic column name to access the join result.
+                    includeCols[i] = tableHandle.getColumns().get(i).getSynthColumnName();
+                }
+                List<String> columnOrder = Arrays.asList(includeCols);
+                List<String> cacheOrder = ImmutableList.of();
                 // The address is not used to dispatch Pixels splits, so we use set it the localhost.
                 HostAddress address = HostAddress.fromString("localhost:8080");
                 TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
@@ -219,10 +224,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         String[] leftColumns, rightColumns;
         io.pixelsdb.pixels.executor.plan.Table leftTable;
         io.pixelsdb.pixels.executor.plan.Table rightTable;
-        checkArgument(leftHandle.getTableType() == PixelsTableHandle.TableType.BASE ||
-                rightHandle.getTableType() == PixelsTableHandle.TableType.BASE,
-                "multi-pipeline join is currently not supported");
-        boolean rotateLeftRight = false;
+
         if (leftHandle.getTableType() == PixelsTableHandle.TableType.BASE)
         {
             leftColumnHandles = getIncludeColumns(leftHandle);
@@ -276,11 +278,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             checkArgument(joinHandle.getRightTable().getTableType() == PixelsTableHandle.TableType.JOINED,
                     "right table is not a base or joined table, can not parse");
-            /*
-             * The right table is a joined table, we need to rotate the two tables to ensure the
-             * generated join plan is deep-left (currently, join executor only supports deep-left plan).
-             */
-            rotateLeftRight = true;
             // recursive deep right.
             rightTable = parseJoinPlan(joinHandle.getRightTable());
             rightColumns = rightTable.getColumnNames();
@@ -300,10 +297,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             rightColumnHandles = rightColumnHandlesBuilder.build();
         }
 
-        /*
-         * We must ensure that left/right joined column handles remain the same
-         * column order of left/right column handles.
-         */
+        // Parse the left and right key columns, projections, and joined columns.
         List<PixelsColumnHandle> leftJoinedColumnHandles = new LinkedList<>();
         List<PixelsColumnHandle> rightJoinedColumnHandles = new ArrayList<>();
         Map<PixelsColumnHandle, PixelsColumnHandle> leftKeyColumnMap =
@@ -328,6 +322,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             joinedColumnHandleMap.put(joinedColumn, joinedColumn);
         }
+        /*
+         * We must ensure that left/right joined column handles remain the same
+         * column order of left/right column handles.
+         */
         boolean[] leftProjection = new boolean[leftColumnHandles.size()];
         for (int i = 0; i < leftProjection.length; ++i)
         {
@@ -382,6 +380,30 @@ public class PixelsSplitManager implements ConnectorSplitManager
             logger.error("failed to get join algorithm", e);
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
         }
+
+        boolean rotateLeftRight = false;
+        if (leftHandle.getTableType() == PixelsTableHandle.TableType.BASE &&
+                rightHandle.getTableType() == PixelsTableHandle.TableType.JOINED)
+        {
+            /*
+             * If the right table is a joined table and the left table is a base table, we have to rotate
+             * the two tables to ensure the generated join plan is deep-left. This is for the convenience
+             * of join execution.
+             */
+            rotateLeftRight = true;
+        }
+        else if (leftHandle.getTableType() == PixelsTableHandle.TableType.JOINED &&
+                rightHandle.getTableType() == PixelsTableHandle.TableType.JOINED &&
+                joinEndian == JoinEndian.LARGE_LEFT)
+        {
+            /*
+             * If the both left and right tables are joined tables, and the left table is larger than the
+             * right table, we have to rotate the two tables to ensure the small table is on the left.
+             * This is for the convenience of join execution.
+             */
+            rotateLeftRight = true;
+        }
+
         if (rotateLeftRight)
         {
             join = new Join(rightTable, leftTable, rightJoinedColumns, leftJoinedColumns,
