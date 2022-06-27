@@ -29,10 +29,7 @@ import io.pixelsdb.pixels.common.physical.storage.MinIO;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
-import io.pixelsdb.pixels.executor.lambda.BroadcastChainJoinInvoker;
-import io.pixelsdb.pixels.executor.lambda.BroadcastJoinInvoker;
-import io.pixelsdb.pixels.executor.lambda.PartitionedJoinInvoker;
-import io.pixelsdb.pixels.executor.lambda.ScanInvoker;
+import io.pixelsdb.pixels.executor.lambda.*;
 import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
 import io.pixelsdb.pixels.executor.lambda.domain.MultiOutputInfo;
 import io.pixelsdb.pixels.executor.lambda.domain.OutputInfo;
@@ -154,6 +151,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         {
             joinInput = JSON.parseObject(joinInputJson, BroadcastJoinInput.class);
         }
+        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED_CHAIN)
+        {
+            joinInput = JSON.parseObject(joinInputJson, PartitionedChainJoinInput.class);
+        }
         else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED)
         {
             joinInput = JSON.parseObject(joinInputJson, PartitionedJoinInput.class);
@@ -179,6 +180,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         else if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST)
         {
             joinOutputFuture = BroadcastJoinInvoker.invoke((BroadcastJoinInput) joinInput);
+        }
+        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED_CHAIN)
+        {
+            joinOutputFuture = PartitionedChainJoinInvoker.invoke((PartitionedChainJoinInput) joinInput);
         }
         else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED)
         {
