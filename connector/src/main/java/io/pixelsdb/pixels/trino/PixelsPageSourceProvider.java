@@ -36,6 +36,8 @@ import io.pixelsdb.pixels.executor.lambda.domain.OutputInfo;
 import io.pixelsdb.pixels.executor.lambda.domain.ScanTableInfo;
 import io.pixelsdb.pixels.executor.lambda.input.*;
 import io.pixelsdb.pixels.executor.lambda.output.JoinOutput;
+import io.pixelsdb.pixels.executor.lambda.output.Output;
+import io.pixelsdb.pixels.executor.lambda.output.ScanOutput;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -172,22 +174,22 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         output.setSecretKey(config.getMinioSecretKey());
         output.setEndpoint(config.getMinioEndpoint());
         // logger.info("join input: " + JSON.toJSONString(joinInput));
-        CompletableFuture<JoinOutput> joinOutputFuture;
+        CompletableFuture<Output> joinOutputFuture;
         if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
         {
-            joinOutputFuture = BroadcastChainJoinInvoker.invoke((BroadcastChainJoinInput) joinInput);
+            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.BROADCAST_CHAIN_JOIN).invoke(joinInput);
         }
         else if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST)
         {
-            joinOutputFuture = BroadcastJoinInvoker.invoke((BroadcastJoinInput) joinInput);
+            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.BROADCAST_JOIN).invoke(joinInput);
         }
         else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED_CHAIN)
         {
-            joinOutputFuture = PartitionedChainJoinInvoker.invoke((PartitionedChainJoinInput) joinInput);
+            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.PARTITIONED_CHAIN_JOIN).invoke(joinInput);
         }
         else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED)
         {
-            joinOutputFuture = PartitionedJoinInvoker.invoke((PartitionedJoinInput) joinInput);
+            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.PARTITIONED_JOIN).invoke(joinInput);
         }
         else
         {
@@ -202,7 +204,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), joinOutput);
+                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), (JoinOutput) joinOutput);
             }
             catch (Exception e)
             {
@@ -233,14 +235,15 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 Storage.Scheme.minio, endpoint, accessKey, secretKey, true);
         scanInput.setOutput(outputInfo);
 
-        return ScanInvoker.invoke(scanInput).whenComplete(((scanOutput, err) -> {
+        return InvokerFactory.Instance().getInvoker(WorkerType.SCAN)
+                .invoke(scanInput).whenComplete(((scanOutput, err) -> {
             if (err != null)
             {
                 throw new RuntimeException("error in lambda invoke.", err);
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), scanOutput);
+                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), (ScanOutput) scanOutput);
             }
             catch (Exception e)
             {
