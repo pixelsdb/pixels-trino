@@ -20,6 +20,7 @@
 package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.google.common.collect.ImmutableList;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
@@ -158,6 +159,22 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 JoinOperator joinOperator = executor.getJoinOperator();
                 logger.info("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.executePrev();
+
+                Thread outputCollector = new Thread(() -> {
+                    try
+                    {
+                        JoinOperator.OutputCollection outputCollection = joinOperator.collectOutputs();
+                        SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
+                        String json = JSON.toJSONString(outputCollection, features);
+                        logger.info("join outputs: " + json);
+                    } catch (Exception e)
+                    {
+                        logger.error(e, "failed to execute the join plan using pixels-lambda");
+                        throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                                "failed to execute the join plan using pixels-lambda");
+                    }
+                });
+                outputCollector.start();
 
                 // Build the splits of the join result.
                 ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
