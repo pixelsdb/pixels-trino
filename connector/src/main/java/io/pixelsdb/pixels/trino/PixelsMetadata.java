@@ -344,7 +344,8 @@ public class PixelsMetadata implements ConnectorMetadata
     }
 
     @Override
-    public void createSchema(ConnectorSession session, String schemaName, Map<String, Object> properties, TrinoPrincipal _owner)
+    public void createSchema(ConnectorSession session, String schemaName,
+                             Map<String, Object> properties, TrinoPrincipal _owner)
     {
         try
         {
@@ -455,7 +456,8 @@ public class PixelsMetadata implements ConnectorMetadata
     }
 
     @Override
-    public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle tableHandle, Constraint constraint)
+    public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle tableHandle,
+                                              Constraint constraint)
     {
         TableStatistics.Builder tableStatBuilder = TableStatistics.builder();
         PixelsTableHandle table = (PixelsTableHandle) tableHandle;
@@ -471,7 +473,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             long rowCount = metadataProxy.getTable(table.getSchemaName(), table.getTableName()).getRowCount();
             tableStatBuilder.setRowCount(Estimate.of(rowCount));
-            logger.info("table '" + table.getTableName() + "' row count: " + rowCount);
+            // logger.info("table '" + table.getTableName() + "' row count: " + rowCount);
         } catch (MetadataException e)
         {
             logger.error("failed to get table from metadata service", e);
@@ -485,9 +487,9 @@ public class PixelsMetadata implements ConnectorMetadata
             columnStatBuilder.setDataSize(Estimate.of(column.getSize()));
             columnStatBuilder.setNullsFraction(Estimate.of(column.getNullFraction()));
             columnStatBuilder.setDistinctValuesCount(Estimate.of(column.getCardinality()));
-            logger.info("column '" + columnHandle.getColumnName() + "'(" + column.getName() +
-                    ") data size: " + column.getSize() + ", null frac: " + column.getNullFraction() +
-                    ", cardinality: " +column.getCardinality());
+            // logger.info("column '" + columnHandle.getColumnName() + "'(" + column.getName() +
+            //         ") data size: " + column.getSize() + ", null frac: " + column.getNullFraction() +
+            //         ", cardinality: " +column.getCardinality());
             // TODO: set range.
             tableStatBuilder.setColumnStatistics(columnHandle, columnStatBuilder.build());
         }
@@ -504,7 +506,19 @@ public class PixelsMetadata implements ConnectorMetadata
         logger.info("aggregation push down on: " + tableHandle.getSchemaName() + "." + tableHandle.getTableName());
         for (ColumnHandle columnHandle : assignments.values())
         {
-            logger.info("aggregation assignment: " + columnHandle.toString());
+            logger.info("--aggregation assignment: " + columnHandle.toString());
+        }
+        for (AggregateFunction aggregate : aggregates)
+        {
+            logger.info("--aggregation: " + aggregate.toString());
+        }
+        for (List<ColumnHandle> groupingSet: groupingSets)
+        {
+            logger.info("--grouping set: ");
+            for (ColumnHandle column : groupingSet)
+            {
+                logger.info("----synthetic column: " + ((PixelsColumnHandle)column).getSynthColumnName());
+            }
         }
         return ConnectorMetadata.super.applyAggregation(session, handle, aggregates, assignments, groupingSets);
     }

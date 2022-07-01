@@ -117,8 +117,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 if (!columnSet.contains(column))
                 {
-                    logger.info("get column from filter, table name: " + tableHandle.getTableName() +
-                            ", column name: " + column.getColumnName());
                     builder.add(column);
                 }
             }
@@ -146,7 +144,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // The table type is joined, means lambda has been enabled.
             JoinedTable root = parseJoinPlan(tableHandle);
-            logger.info("join plan: " + JSON.toJSONString(root));
+            // logger.info("join plan: " + JSON.toJSONString(root));
 
             try
             {
@@ -157,7 +155,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
                 // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = executor.getJoinOperator();
-                logger.info("join operator: " + JSON.toJSONString(joinOperator));
+                // logger.info("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.executePrev();
 
                 Thread outputCollector = new Thread(() -> {
@@ -166,7 +164,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         JoinOperator.OutputCollection outputCollection = joinOperator.collectOutputs();
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
-                        logger.info("join outputs: " + json);
+                        // logger.info("join outputs: " + json);
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the join plan using pixels-lambda");
@@ -212,6 +210,11 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
             }
+        }
+        else if (tableHandle.getTableType() == PixelsTableHandle.TableType.AGGREGATED)
+        {
+            // TODO: handle aggregation push down.
+            return null;
         }
         else
         {
