@@ -536,8 +536,16 @@ class PixelsPageSource implements ConnectorPageSource
                      * Presto reads the unscaled values for decimal type here.
                      * The precision and scale of decimal are automatically processed by Presto.
                      */
-                    DecimalColumnVector dccv = (DecimalColumnVector) vector;
-                    block = new LongArrayBlock(batchSize, Optional.ofNullable(dccv.isNull), dccv.vector);
+                    if (vector instanceof DecimalColumnVector)
+                    {
+                        DecimalColumnVector dccv = (DecimalColumnVector) vector;
+                        block = new LongArrayBlock(batchSize, Optional.ofNullable(dccv.isNull), dccv.vector);
+                    }
+                    else
+                    {
+                        LongDecimalColumnVector ldccv = (LongDecimalColumnVector) vector;
+                        block = new Int128ArrayBlock(batchSize, Optional.ofNullable(ldccv.isNull), ldccv.vector);
+                    }
                     break;
                 case CHAR:
                 case VARCHAR:

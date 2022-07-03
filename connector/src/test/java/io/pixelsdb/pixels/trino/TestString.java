@@ -21,6 +21,9 @@ package io.pixelsdb.pixels.trino;
 
 import org.junit.Test;
 
+import java.math.BigInteger;
+import java.sql.Timestamp;
+
 public class TestString
 {
     @Test
@@ -33,5 +36,30 @@ public class TestString
         }
         sb.replace(sb.length() - 1, sb.length(), ">");
         System.out.println(sb.toString());
+    }
+
+    @Test
+    public void test1()
+    {
+        BigInteger min = BigInteger.valueOf(Long.MIN_VALUE).shiftLeft(64);
+        BigInteger max = BigInteger.valueOf(Long.MAX_VALUE).shiftLeft(64).add(BigInteger.valueOf(Long.MAX_VALUE).shiftLeft(1).add(BigInteger.ONE));
+        System.out.println(min);
+        System.out.println(max);
+        System.out.println(min.shiftRight(64).longValueExact());
+        System.out.println(min.longValue());
+        System.out.println(max.shiftRight(64).longValueExact());
+        System.out.println(max.longValue());
+
+        System.out.println(1234%1000*1000);
+
+        Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+        System.out.println(timestamp);
+        System.out.println(timestamp.getTime());
+        System.out.println(timestamp.getNanos());
+        System.out.println(timestamp.getTime()*1000 + timestamp.getNanos()%1000000/1000);
+        long time = timestamp.getTime()*1000 + timestamp.getNanos()%1000000/1000;
+        timestamp.setTime(time/1000);
+        timestamp.setNanos((int) (time%1000000*1000));
+        System.out.println(timestamp);
     }
 }

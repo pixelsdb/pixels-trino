@@ -303,11 +303,22 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
              */
             return createDomain(type, hasNullValue, (TimeColumnStats) columnStats);
         }
+        else if (type.getJavaType() == Int128.class)
+        {
+            /**
+             * PIXELS-203:
+             * In Trino, long decimal with 38 digit precision is backed by Int128.
+             * In Pixels, we use Integer128ColumnStats for long decimal columns.
+             */
+            Integer128ColumnStats int128ColumnStats = (Integer128ColumnStats) columnStats;
+            return createDomain(type, hasNullValue, int128ColumnStats,
+                    int128 -> Int128.valueOf(int128.getHigh(), int128.getLow()));
+        }
         else if (type.getJavaType() == long.class)
         {
             /**
              * PIXELS-208:
-             * Besides integer types, decimal type also goes here as decimal in Presto
+             * Besides integer types, decimal type also goes here as decimal in Presto and Trino
              * is backed by long. In Pixels, we also use IntegerColumnStats for decimal
              * columns. If needed in other places, integer statistics can be manually converted
              * to double using the precision and scale from the schema in the file footer.
@@ -331,7 +342,7 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
     private <T extends Comparable<T>> Domain createDomain(Type type, boolean hasNullValue,
                                                           RangeStats<T> rangeStats)
     {
-        // PIXELS-103: what's the purpose of this if branch?
+        // PIXELS-103: what's the purpose of this if-branch?
         //if (type instanceof VarcharType || type instanceof CharType)
         //{
         //    return createDomain(type, hasNullValue, rangeStats, value -> value);

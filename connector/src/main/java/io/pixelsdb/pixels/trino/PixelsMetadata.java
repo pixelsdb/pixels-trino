@@ -408,7 +408,8 @@ public class PixelsMetadata implements ConnectorMetadata
 
         if (oldDomain.equals(newDomain))
         {
-            // returns empty means reject filter pushdown.
+            // returns empty means reject filter push down.
+            logger.info("[filter push down is rejected on " + newDomain.toString(session) + "]");
             return Optional.empty();
         }
 
@@ -418,6 +419,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 tableHandle.getTableType(), tableHandle.getJoinHandle());
 
         // pushing down without statistics pre-calculation.
+        logger.info("filter push down on " + newDomain.toString(session));
         return Optional.of(new ConstraintApplicationResult<>(tableHandle, remainingFilter, false));
     }
 
@@ -435,6 +437,7 @@ public class PixelsMetadata implements ConnectorMetadata
         Set<PixelsColumnHandle> tableColumnSet = ImmutableSet.copyOf(tableHandle.getColumns());
         if (newColumnSet.equals(tableColumnSet))
         {
+            logger.info("[projection push down is rejected]");
             return Optional.empty();
         }
 
@@ -442,6 +445,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 "applyProjection called with columns %s and some are not available in existing query: %s",
                 newColumnSet, tableColumnSet);
 
+        logger.info("projection push down on table " + tableHandle.getTableName());
         return Optional.of(new ProjectionApplicationResult<>(
                 new PixelsTableHandle(connectorId, tableHandle.getSchemaName(),
                         tableHandle.getTableName(),tableHandle.getTableAlias(),
