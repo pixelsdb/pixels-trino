@@ -374,6 +374,7 @@ public class PixelsRecordCursor implements RecordCursor
                  * Presto call getLong here to get the unscaled value for decimal type.
                  * The precision and scale of decimal are automatically processed by Presto.
                  */
+                // long decimal will not reach here.
                 return ((DecimalColumnVector) this.rowBatch.cols[field]).vector[this.rowIndex];
             case DATE:
                 return ((DateColumnVector) this.rowBatch.cols[field]).dates[this.rowIndex];
@@ -398,9 +399,16 @@ public class PixelsRecordCursor implements RecordCursor
     {
         TypeDescription.Category typeCategory = this.columns.get(field).getTypeCategory();
         checkArgument (typeCategory == VARCHAR || typeCategory == CHAR ||
-                        typeCategory == STRING || typeCategory == VARBINARY || typeCategory == BINARY,
+                        typeCategory == STRING || typeCategory == VARBINARY ||
+                        typeCategory == BINARY || typeCategory == DECIMAL,
                 "Column type '" + typeCategory.getPrimaryName() + "' is not Slice based.");
-        BinaryColumnVector columnVector = (BinaryColumnVector)this.rowBatch.cols[field];
+        if (typeCategory == DECIMAL)
+        {
+            // process long decimal.
+            LongDecimalColumnVector columnVector = (LongDecimalColumnVector) this.rowBatch.cols[field];
+            return Slices.wrappedLongArray(columnVector.vector, this.rowIndex*2, 2);
+        }
+        BinaryColumnVector columnVector = (BinaryColumnVector) this.rowBatch.cols[field];
         return Slices.wrappedBuffer(columnVector.vector[this.rowIndex],
                 columnVector.start[this.rowIndex], columnVector.lens[this.rowIndex]);
     }
