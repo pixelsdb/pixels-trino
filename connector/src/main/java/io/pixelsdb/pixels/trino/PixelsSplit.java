@@ -62,6 +62,7 @@ public class PixelsSplit implements ConnectorSplit
     private final PixelsTableHandle.TableType tableType;
     private final JoinAlgorithm joinAlgo;
     private final String joinInput;
+    private final String aggrInput;
 
     @JsonCreator
     public PixelsSplit(
@@ -82,7 +83,8 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("tableType")PixelsTableHandle.TableType tableType,
             @JsonProperty("joinAlgo") JoinAlgorithm joinAlgo,
-            @JsonProperty("joinInput") String joinInput) {
+            @JsonProperty("joinInput") String joinInput,
+            @JsonProperty("aggrInput") String aggrInput) {
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
@@ -115,6 +117,7 @@ public class PixelsSplit implements ConnectorSplit
             this.joinAlgo = null;
             this.joinInput = null;
         }
+        this.aggrInput = aggrInput;
     }
 
     /**
@@ -283,6 +286,12 @@ public class PixelsSplit implements ConnectorSplit
     public String getJoinInput()
     {
         return joinInput;
+    }
+
+    @JsonProperty
+    public String getAggrInput()
+    {
+        return aggrInput;
     }
 
     @Override

@@ -26,6 +26,8 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.executor.aggregation.FunctionType;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -58,6 +60,7 @@ import static java.util.stream.Collectors.toList;
 public class PixelsMetadata implements ConnectorMetadata
 {
     private static final Logger logger = Logger.get(PixelsMetadata.class);
+
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
     private final PixelsTrinoConfig config;
@@ -124,7 +127,7 @@ public class PixelsMetadata implements ConnectorMetadata
                         tableName.getTableName() + "_" + UUID.randomUUID()
                                 .toString().replace("-", ""),
                         columns, TupleDomain.all(), // match all tuples at the beginning.
-                        PixelsTableHandle.TableType.BASE, null);
+                        PixelsTableHandle.TableType.BASE, null, null);
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -416,7 +419,8 @@ public class PixelsMetadata implements ConnectorMetadata
         tableHandle = new PixelsTableHandle(tableHandle.getConnectorId(),
                 tableHandle.getSchemaName(), tableHandle.getTableName(),
                 tableHandle.getTableAlias(), tableHandle.getColumns(), newDomain,
-                tableHandle.getTableType(), tableHandle.getJoinHandle());
+                tableHandle.getTableType(), tableHandle.getJoinHandle(),
+                tableHandle.getAggrHandle());
 
         // pushing down without statistics pre-calculation.
         logger.info("filter push down on " + newDomain.toString(session));
@@ -450,7 +454,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 new PixelsTableHandle(connectorId, tableHandle.getSchemaName(),
                         tableHandle.getTableName(),tableHandle.getTableAlias(),
                         newColumns, tableHandle.getConstraint(), tableHandle.getTableType(),
-                        tableHandle.getJoinHandle()),
+                        tableHandle.getJoinHandle(), tableHandle.getAggrHandle()),
                 projections,
                 assignments.entrySet().stream().map(assignment -> new Assignment(
                         assignment.getKey(), assignment.getValue(),
@@ -506,7 +510,21 @@ public class PixelsMetadata implements ConnectorMetadata
             ConnectorSession session, ConnectorTableHandle handle, List<AggregateFunction> aggregates,
             Map<String, ColumnHandle> assignments, List<List<ColumnHandle>> groupingSets)
     {
+        if (!config.isLambdaEnabled())
+        {
+            return Optional.empty();
+        }
+
+        checkArgument(!groupingSets.isEmpty(), "group sets is empty");
+
+        if (groupingSets.size() > 1)
+        {
+            logger.info("[aggregation push down is rejected for multi-grouping-sets]");
+            return Optional.empty();
+        }
+
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+
         logger.info("aggregation push down on: " + tableHandle.getSchemaName() + "." + tableHandle.getTableName());
         for (ColumnHandle columnHandle : assignments.values())
         {
@@ -524,7 +542,86 @@ public class PixelsMetadata implements ConnectorMetadata
                 logger.info("----synthetic column: " + ((PixelsColumnHandle)column).getSynthColumnName());
             }
         }
-        return ConnectorMetadata.super.applyAggregation(session, handle, aggregates, assignments, groupingSets);
+
+        ImmutableList.Builder<PixelsColumnHandle> newColumns = ImmutableList.builder();
+        ImmutableList.Builder<ConnectorExpression> projections = ImmutableList.builder();
+        ImmutableList.Builder<Assignment> resultAssignments = ImmutableList.builder();
+        ImmutableList.Builder<PixelsColumnHandle> aggrColumns = ImmutableList.builder();
+        ImmutableList.Builder<PixelsColumnHandle> aggrResultColumns = ImmutableList.builder();
+        ImmutableList.Builder<FunctionType> aggrFunctionTypes = ImmutableList.builder();
+
+        List<PixelsColumnHandle> groupKeyColumns = groupingSets.get(0).stream()
+                .map(PixelsColumnHandle.class::cast).collect(toImmutableList());
+
+        List<PixelsColumnHandle> tableColumns = tableHandle.getColumns();
+
+        Set<PixelsColumnHandle> columnSet = ImmutableSet.copyOf(tableColumns);
+
+        String newSchemaName = "aggregate_" + UUID.randomUUID().toString().replace("-", "");
+        String newTableName = "aggregate_" + tableHandle.getTableName();
+        int logicalOrdinal = 0;
+
+        for (PixelsColumnHandle groupKey : groupKeyColumns)
+        {
+            checkArgument(columnSet.contains(groupKey),
+                    "grouping key %s is not included in the table columns: %s",
+                    groupKey, tableColumns);
+            newColumns.add(groupKey.toBuilder().setSchemaName(newSchemaName).setTableName(newTableName)
+                    .setLogicalOrdinal(logicalOrdinal++).build());
+        }
+
+        for (AggregateFunction aggregate : aggregates)
+        {
+            if (aggregate.getFilter().isPresent())
+            {
+                logger.info("[aggregation push down is rejected: filter on aggregate is not supported]");
+                return Optional.empty();
+            }
+            if (aggregate.isDistinct())
+            {
+                logger.info("[aggregation push down is rejected: distinct on aggregate is not supported]");
+                return Optional.empty();
+            }
+            if (!aggregate.getSortItems().isEmpty())
+            {
+                logger.info("[aggregation push down is rejected: sort on aggregate is not supported]");
+                return Optional.empty();
+            }
+            if (aggregate.getArguments().size() != 1)
+            {
+                logger.info("[aggregation push down is rejected: aggregate arguments size " +
+                        aggregate.getArguments().size() + " is not supported]");
+                return Optional.empty();
+            }
+            ConnectorExpression aggrArgument = aggregate.getArguments().get(0);
+            Optional<PixelsColumnHandle> aggrColumn = getVariableColumnHandle(assignments, aggrArgument);
+            if (aggrColumn.isEmpty())
+            {
+                logger.info("[aggregation push down is rejected: aggregate argument is not a single column]");
+                return Optional.empty();
+            }
+            aggrColumns.add(aggrColumn.get());
+            String newColumnName = aggregate.getFunctionName() + "_" + aggrColumn.get().getColumnName();
+            TypeDescription pixelsType = metadataProxy.parsePixelsType(aggregate.getOutputType());
+            PixelsColumnHandle newColumn = new PixelsColumnHandle(connectorId, newSchemaName, newTableName,
+                    newColumnName, newColumnName, aggregate.getOutputType(), pixelsType.getCategory(),
+                    "synthetic", logicalOrdinal++);
+            newColumns.add(newColumn);
+            aggrResultColumns.add(newColumn);
+            aggrFunctionTypes.add(FunctionType.fromName(aggregate.getFunctionName()));
+            projections.add(new Variable(newColumn.getColumnName(), newColumn.getColumnType()));
+            resultAssignments.add(new Assignment(newColumn.getColumnName(), newColumn, newColumn.getColumnType()));
+        }
+
+        PixelsAggrHandle aggrHandle = new PixelsAggrHandle(aggrColumns.build(), aggrResultColumns.build(),
+                groupKeyColumns, aggrFunctionTypes.build(), tableHandle);
+
+        PixelsTableHandle newHandle = new PixelsTableHandle(
+                connectorId, newSchemaName, newTableName, newTableName, newColumns.build(),
+                TupleDomain.all(), PixelsTableHandle.TableType.AGGREGATED, null, aggrHandle);
+
+        return Optional.of(new AggregationApplicationResult<>(newHandle, projections.build(),
+                resultAssignments.build(), ImmutableMap.of(), false));
     }
 
     @Override
@@ -599,16 +696,14 @@ public class PixelsMetadata implements ConnectorMetadata
         ImmutableList.Builder<PixelsColumnHandle> joinedColumns = ImmutableList.builder();
         for (PixelsColumnHandle column : leftTable.getColumns())
         {
-            PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
-                    .setLogicalOrdinal(logicalOrdinal++).build();
+            PixelsColumnHandle newColumn = column.toBuilder().setLogicalOrdinal(logicalOrdinal++).build();
             newLeftColumnsBuilder.put(column, newColumn);
             joinedColumns.add(newColumn);
         }
         ImmutableMap.Builder<ColumnHandle, ColumnHandle> newRightColumnsBuilder = ImmutableMap.builder();
         for (PixelsColumnHandle column : rightTable.getColumns())
         {
-            PixelsColumnHandle newColumn = PixelsColumnHandle.builderFrom(column)
-                    .setLogicalOrdinal(logicalOrdinal++).build();
+            PixelsColumnHandle newColumn = column.toBuilder().setLogicalOrdinal(logicalOrdinal++).build();
             newRightColumnsBuilder.put(column, newColumn);
             joinedColumns.add(newColumn);
         }
@@ -623,7 +718,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),
-                PixelsTableHandle.TableType.JOINED, joinHandle);
+                PixelsTableHandle.TableType.JOINED, joinHandle, null);
 
         return Optional.of(new JoinApplicationResult<>(
                 joinedTableHandle,

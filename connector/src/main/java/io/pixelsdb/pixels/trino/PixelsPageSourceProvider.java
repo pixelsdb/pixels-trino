@@ -108,7 +108,12 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
         try
         {
-            if (pixelsSplit.getTableType() == PixelsTableHandle.TableType.JOINED)
+            if (pixelsSplit.getTableType() == PixelsTableHandle.TableType.AGGREGATED)
+            {
+                // TODO: process aggregation push down.
+                return null;
+            }
+            else if (pixelsSplit.getTableType() == PixelsTableHandle.TableType.JOINED)
             {
                 // perform join push down.
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());

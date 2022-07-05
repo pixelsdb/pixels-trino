@@ -55,6 +55,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
 
     private final TableType tableType;
     private final PixelsJoinHandle joinHandle;
+    private final PixelsAggrHandle aggrHandle;
 
     /**
      * The constructor for bast table handle.
@@ -64,7 +65,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
      * @param columns the assignment columns (columns in the select statement) of the table
      * @param constraint the constraint (filter) on the table
      * @param tableType the type of the table (base for physical table)
-     * @param joinHandle the information of the join
+     * @param joinHandle the handle of the join, must be non-null if tableType is JOINED
+     * @param aggrHandle the handle of the aggregation, must be non-null if tableType is AGGREGATED
      */
     @JsonCreator
     public PixelsTableHandle(
@@ -75,7 +77,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             @JsonProperty("columns") List<PixelsColumnHandle> columns,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("tableType") TableType tableType,
-            @JsonProperty("joinHandle") PixelsJoinHandle joinHandle) {
+            @JsonProperty("joinHandle") PixelsJoinHandle joinHandle,
+            @JsonProperty("aggrHandle") PixelsAggrHandle aggrHandle) {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -90,6 +93,14 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         else
         {
             this.joinHandle = null;
+        }
+        if (this.tableType == TableType.AGGREGATED)
+        {
+            this.aggrHandle = requireNonNull(aggrHandle, "aggrHandle is null");
+        }
+        else
+        {
+            this.aggrHandle = null;
         }
     }
 
@@ -141,6 +152,12 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         return joinHandle;
     }
 
+    @JsonProperty
+    public PixelsAggrHandle getAggrHandle()
+    {
+        return aggrHandle;
+    }
+
     public SchemaTableName toSchemaTableName()
     {
         return new SchemaTableName(schemaName, tableName);
@@ -150,7 +167,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     public int hashCode()
     {
         return Objects.hash(connectorId, schemaName, tableName, tableAlias,
-                columns, tableType, joinHandle);
+                columns, tableType, joinHandle, aggrHandle);
     }
 
     @Override
@@ -172,13 +189,113 @@ public final class PixelsTableHandle implements ConnectorTableHandle
                 Objects.equals(this.tableAlias, other.tableAlias) &&
                 Objects.equals(this.columns, other.columns) &&
                 Objects.equals(this.tableType, other.tableType) &&
-                Objects.equals(this.joinHandle, other.joinHandle);
+                Objects.equals(this.joinHandle, other.joinHandle) &&
+                Objects.equals(this.aggrHandle, other.aggrHandle);
     }
 
     @Override
     public String toString()
     {
         return Joiner.on(":").join(connectorId, schemaName == null ? "" : schemaName,
-                tableName, tableAlias, tableType, Joiner.on(",").join(columns));
+                tableName, tableAlias, tableType, aggrHandle == null ? "aggr=false" : "aggr=true",
+                Joiner.on(",").join(columns));
+    }
+
+    public static Builder builder()
+    {
+        return new Builder();
+    }
+
+    public Builder toBuilder()
+    {
+        return new Builder(this);
+    }
+
+    public static class Builder
+    {
+        private String builderConnectorId;
+        private String builderSchemaName;
+        private String builderTableName;
+        private String builderTableAlias;
+        private List<PixelsColumnHandle> builderColumns;
+        private TupleDomain<PixelsColumnHandle> builderConstraint;
+        private TableType builderTableType;
+        private PixelsJoinHandle builderJoinHandle;
+        private PixelsAggrHandle builderAggrHandle;
+
+        private Builder() { }
+
+        private Builder(PixelsTableHandle tableHandle)
+        {
+            this.builderConnectorId = tableHandle.connectorId;
+            this.builderSchemaName = tableHandle.schemaName;
+            this.builderTableName = tableHandle.tableName;
+            this.builderTableAlias = tableHandle.tableAlias;
+            this.builderColumns = tableHandle.columns;
+            this.builderConstraint = tableHandle.constraint;
+            this.builderTableType = tableHandle.tableType;
+            this.builderJoinHandle = tableHandle.joinHandle;
+            this.builderAggrHandle = tableHandle.aggrHandle;
+        }
+
+        public void setConnectorId(String builderConnectorId)
+        {
+            this.builderConnectorId = builderConnectorId;
+        }
+
+        public void setSchemaName(String builderSchemaName)
+        {
+            this.builderSchemaName = builderSchemaName;
+        }
+
+        public void setTableName(String builderTableName)
+        {
+            this.builderTableName = builderTableName;
+        }
+
+        public void setTableAlias(String builderTableAlias)
+        {
+            this.builderTableAlias = builderTableAlias;
+        }
+
+        public void setColumns(List<PixelsColumnHandle> builderColumns)
+        {
+            this.builderColumns = builderColumns;
+        }
+
+        public void setConstraint(TupleDomain<PixelsColumnHandle> builderConstraint)
+        {
+            this.builderConstraint = builderConstraint;
+        }
+
+        public void setTableType(TableType builderTableType)
+        {
+            this.builderTableType = builderTableType;
+        }
+
+        public void setJoinHandle(PixelsJoinHandle builderJoinHandle)
+        {
+            this.builderJoinHandle = builderJoinHandle;
+        }
+
+        public void setAggrHandle(PixelsAggrHandle builderAggrHandle)
+        {
+            this.builderAggrHandle = builderAggrHandle;
+        }
+
+        public PixelsTableHandle build()
+        {
+            return new PixelsTableHandle(
+                    builderConnectorId,
+                    builderSchemaName,
+                    builderTableName,
+                    builderTableAlias,
+                    builderColumns,
+                    builderConstraint,
+                    builderTableType,
+                    builderJoinHandle,
+                    builderAggrHandle
+            );
+        }
     }
 }

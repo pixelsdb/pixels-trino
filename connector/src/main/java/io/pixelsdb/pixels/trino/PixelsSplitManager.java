@@ -35,7 +35,7 @@ import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
-import io.pixelsdb.pixels.executor.LambdaJoinExecutor;
+import io.pixelsdb.pixels.executor.PixelsExecutor;
 import io.pixelsdb.pixels.executor.join.JoinAdvisor;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.JoinOperator;
@@ -82,6 +82,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private static final Logger logger = Logger.get(PixelsSplitManager.class);
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
+    private final PixelsTrinoConfig config;
     private final boolean cacheEnabled;
     private final boolean multiSplitForOrdered;
     private final boolean projectionReadEnabled;
@@ -94,6 +95,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                               PixelsTrinoConfig config) {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
+        this.config = requireNonNull(config, "config is null");
         String cacheEnabled = config.getConfigFactory().getProperty("cache.enabled");
         String projectionReadEnabled = config.getConfigFactory().getProperty("projection.read.enabled");
         String multiSplit = config.getConfigFactory().getProperty("multi.split.for.ordered");
@@ -144,27 +146,27 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // The table type is joined, means lambda has been enabled.
             JoinedTable root = parseJoinPlan(tableHandle);
-            // logger.info("join plan: " + JSON.toJSONString(root));
+            logger.info("join plan: " + JSON.toJSONString(root));
 
             try
             {
                 boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
                 boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
                 // Call executor to execute this join plan.
-                LambdaJoinExecutor executor = new LambdaJoinExecutor(
+                PixelsExecutor executor = new PixelsExecutor(
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
                 // Ensure multi-pipeline join is supported.
-                JoinOperator joinOperator = executor.getJoinOperator();
-                // logger.info("join operator: " + JSON.toJSONString(joinOperator));
+                JoinOperator joinOperator = (JoinOperator) executor.getRootOperator();
+                logger.info("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.executePrev();
 
                 Thread outputCollector = new Thread(() -> {
                     try
                     {
-                        JoinOperator.OutputCollection outputCollection = joinOperator.collectOutputs();
+                        JoinOperator.JoinOutputCollection outputCollection = joinOperator.collectOutputs();
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
-                        // logger.info("join outputs: " + json);
+                        logger.info("join outputs: " + json);
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the join plan using pixels-lambda");
@@ -202,7 +204,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
                             false, false, Arrays.asList(address), columnOrder,
                             cacheOrder, includeCols, emptyConstraint, PixelsTableHandle.TableType.JOINED,
-                            joinOperator.getJoinAlgo(), JSON.toJSONString(joinInput));
+                            joinOperator.getJoinAlgo(), JSON.toJSONString(joinInput), null);
                     splitsBuilder.add(split);
                 }
                 return new PixelsSplitSource(splitsBuilder.build());
@@ -213,7 +215,15 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
         else if (tableHandle.getTableType() == PixelsTableHandle.TableType.AGGREGATED)
         {
-            // TODO: handle aggregation push down.
+            String aggrInput = null;
+            logger.info("aggregation plan: " + tableHandle.getAggrHandle().toString());
+            // TODO: build aggrInput.
+            PixelsAggrHandle aggrHandle = tableHandle.getAggrHandle();
+            PixelsTableHandle originTableHandle = aggrHandle.getOriginTable();
+            // TODO: support aggregation on join result.
+            checkArgument(originTableHandle.getTableType() != PixelsTableHandle.TableType.JOINED,
+                    "aggregation on join result is currently not supported");
+            //List<PixelsSplit> pixelsSplits = getPixelsSplits(trans, session, originTableHandle);
             return null;
         }
         else
@@ -457,8 +467,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return new Pair<>(splitSize, new InputSplit(inputInfos));
     }
 
-    private List<PixelsSplit> getScanSplits(PixelsTransactionHandle transHandle,
-                                          ConnectorSession session, PixelsTableHandle tableHandle)
+    private List<PixelsSplit> getScanSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
+                                            PixelsTableHandle tableHandle)
     {
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
         TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
@@ -660,7 +670,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             false, storage.hasLocality(), orderedAddresses,
                                             order.getColumnOrder(), new ArrayList<>(0),
                                             includeCols, constraint, PixelsTableHandle.TableType.BASE,
-                                            null, null);
+                                            null, null, null);
                                     // log.debug("Split in orderPath: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -698,7 +708,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, order.getColumnOrder(),
                                                 cacheColumnletOrders, includeCols, constraint, PixelsTableHandle.TableType.BASE,
-                                                null, null);
+                                                null, null, null);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPath" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -759,7 +769,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     false, storage.hasLocality(), orderedAddresses,
                                     order.getColumnOrder(), new ArrayList<>(0),
                                     includeCols, constraint, PixelsTableHandle.TableType.BASE,
-                                    null, null);
+                                    null, null, null);
                             // logger.debug("Split in orderPath: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -784,7 +794,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         false, storage.hasLocality(), compactAddresses,
                                         order.getColumnOrder(), new ArrayList<>(0),
                                         includeCols, constraint, PixelsTableHandle.TableType.BASE,
-                                        null, null);
+                                        null, null, null);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }
