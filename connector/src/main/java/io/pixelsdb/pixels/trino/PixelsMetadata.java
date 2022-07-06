@@ -528,6 +528,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
         if (tableHandle.getTableType() != Table.TableType.BASE)
         {
+            // TODO: support aggregation on joined table.
             logger.info("[aggregation push down is rejected: not support aggregation on joined table]");
             return Optional.empty();
         }
@@ -564,8 +565,6 @@ public class PixelsMetadata implements ConnectorMetadata
 
         Set<PixelsColumnHandle> columnSet = ImmutableSet.copyOf(tableColumns);
 
-        String newSchemaName = "aggregate_" + UUID.randomUUID().toString().replace("-", "");
-        String newTableName = "aggregate_" + tableHandle.getTableName();
         int logicalOrdinal = 0;
 
         for (PixelsColumnHandle groupKey : groupKeyColumns)
@@ -573,8 +572,7 @@ public class PixelsMetadata implements ConnectorMetadata
             checkArgument(columnSet.contains(groupKey),
                     "grouping key %s is not included in the table columns: %s",
                     groupKey, tableColumns);
-            newColumns.add(groupKey.toBuilder().setSchemaName(newSchemaName).setTableName(newTableName)
-                    .setLogicalOrdinal(logicalOrdinal++).build());
+            newColumns.add(groupKey.toBuilder().setLogicalOrdinal(logicalOrdinal++).build());
         }
 
         for (AggregateFunction aggregate : aggregates)
@@ -608,11 +606,13 @@ public class PixelsMetadata implements ConnectorMetadata
                 return Optional.empty();
             }
             aggrColumns.add(aggrColumn.get());
-            String newColumnName = aggregate.getFunctionName() + "_" + aggrColumn.get().getColumnName();
+            String newColumnName = aggregate.getFunctionName() + "_" + aggrColumn.get().getColumnName() + "_"
+                    + UUID.randomUUID().toString().replace("-", "");
             TypeDescription pixelsType = metadataProxy.parsePixelsType(aggregate.getOutputType());
-            PixelsColumnHandle newColumn = new PixelsColumnHandle(connectorId, newSchemaName, newTableName,
-                    newColumnName, newColumnName, aggregate.getOutputType(), pixelsType.getCategory(),
-                    "synthetic", logicalOrdinal++);
+            PixelsColumnHandle newColumn = aggrColumn.get().toBuilder()
+                    .setColumnName(newColumnName).setColumnAlias(newColumnName)
+                    .setColumnType(aggregate.getOutputType()).setTypeCategory(pixelsType.getCategory())
+                    .setColumnComment("synthetic").setLogicalOrdinal(logicalOrdinal++).build();
             newColumns.add(newColumn);
             aggrResultColumns.add(newColumn);
             aggrFunctionTypes.add(FunctionType.fromName(aggregate.getFunctionName()));
@@ -623,6 +623,8 @@ public class PixelsMetadata implements ConnectorMetadata
         PixelsAggrHandle aggrHandle = new PixelsAggrHandle(aggrColumns.build(), aggrResultColumns.build(),
                 groupKeyColumns, aggrFunctionTypes.build(), tableHandle);
 
+        String newSchemaName = "aggregate_" + UUID.randomUUID().toString().replace("-", "");
+        String newTableName = "aggregate_" + tableHandle.getTableName();
         PixelsTableHandle newHandle = new PixelsTableHandle(
                 connectorId, newSchemaName, newTableName, newTableName, newColumns.build(),
                 TupleDomain.all(), Table.TableType.AGGREGATED, null, aggrHandle);
@@ -649,6 +651,13 @@ public class PixelsMetadata implements ConnectorMetadata
         PixelsTableHandle rightTable = (PixelsTableHandle) right;
         logger.info("join push down: left=" + leftTable.getTableName() +
                 ", right=" + rightTable.getTableName());
+
+        if ((leftTable.getTableType() != Table.TableType.BASE && leftTable.getTableType() != Table.TableType.JOINED) ||
+                (rightTable.getTableType() != Table.TableType.BASE && rightTable.getTableType() != Table.TableType.JOINED))
+        {
+            logger.info("[join push down is rejected: only base or joined tables are currently supported in join].");
+            return Optional.empty();
+        }
 
         // get the join keys.
         ImmutableList.Builder<PixelsColumnHandle> leftKeyColumns =

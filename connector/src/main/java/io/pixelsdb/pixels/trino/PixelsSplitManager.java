@@ -37,6 +37,7 @@ import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.PixelsExecutor;
+import io.pixelsdb.pixels.executor.aggregation.FunctionType;
 import io.pixelsdb.pixels.executor.join.JoinAdvisor;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.AggregationOperator;
@@ -220,7 +221,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
         else if (tableHandle.getTableType() == TableType.AGGREGATED)
         {
-            AggregatedTable root = parseAggregatePlan(tableHandle);
+            AggregatedTable root = parseAggregatePlan(tableHandle, transHandle);
             logger.info("aggregation plan: " + JSON.toJSONString(root));
             try
             {
@@ -255,7 +256,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         Storage.Scheme.minio.name(), ImmutableList.of(aggrInput.getOutput().getPath()),
                         transHandle.getTransId(), ImmutableList.of(0), ImmutableList.of(-1),
                         false, false, Arrays.asList(address), columnOrder,
-                        cacheOrder, includeCols, emptyConstraint, TableType.JOINED,
+                        cacheOrder, includeCols, emptyConstraint, TableType.AGGREGATED,
                         null, null, JSON.toJSONString(aggrInput));
                 return new PixelsSplitSource(ImmutableList.of(split));
             } catch (IOException | MetadataException e)
@@ -488,16 +489,109 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 tableHandle.getTableAlias(), join);
     }
 
-    private AggregatedTable parseAggregatePlan(PixelsTableHandle tableHandle)
+    private AggregatedTable parseAggregatePlan(PixelsTableHandle tableHandle, PixelsTransactionHandle transHandle)
     {
-        // TODO: implement.
         PixelsAggrHandle aggrHandle = tableHandle.getAggrHandle();
         PixelsTableHandle originTableHandle = aggrHandle.getOriginTable();
-        // TODO: support aggregation on join result.
-        checkArgument(originTableHandle.getTableType() != TableType.JOINED,
-                "aggregation on join result is currently not supported");
-        //List<PixelsSplit> pixelsSplits = getPixelsSplits(trans, session, originTableHandle);
-        return null;
+        List<PixelsColumnHandle> originColumns = originTableHandle.getColumns();
+        List<PixelsColumnHandle> newColumns = tableHandle.getColumns();
+        // Build the column ids.
+        // groupKeyColumns and aggrColumns are from the origin table.
+        int numGroupKeyColumns = aggrHandle.getGroupKeyColumns().size();
+        int numAggrColuumns = aggrHandle.getAggrColumns().size();
+        Map<PixelsColumnHandle, PixelsColumnHandle> groupKeyColumnMap = new HashMap<>(numGroupKeyColumns);
+        Map<PixelsColumnHandle, PixelsColumnHandle> aggrColumnMap = new HashMap<>(numAggrColuumns);
+        for (PixelsColumnHandle groupKeyColumn : aggrHandle.getGroupKeyColumns())
+        {
+            groupKeyColumnMap.put(groupKeyColumn, groupKeyColumn);
+        }
+        for (PixelsColumnHandle aggrColumn : aggrHandle.getAggrColumns())
+        {
+            aggrColumnMap.put(aggrColumn, aggrColumn);
+        }
+        int[] groupKeyColumnIds = new int[numGroupKeyColumns];
+        int[] aggregateColumnIds = new int[numAggrColuumns];
+        for (int i = 0, j = 0, k = 0; i < originColumns.size(); ++i)
+        {
+            PixelsColumnHandle origin = originColumns.get(i);
+            PixelsColumnHandle groupKey = groupKeyColumnMap.get(origin);
+            if (groupKey != null && groupKey.getLogicalOrdinal() == origin.getLogicalOrdinal())
+            {
+                groupKeyColumnIds[j++] = i;
+            }
+            PixelsColumnHandle aggrCol = aggrColumnMap.get(origin);
+            if (aggrCol != null && aggrCol.getLogicalOrdinal() == origin.getLogicalOrdinal())
+            {
+                aggregateColumnIds[k++] = i;
+            }
+        }
+
+        // Build the column alias.
+        String[] groupKeyColumnAlias = new String[numGroupKeyColumns];
+        for (int i = 0, j = 0; i < newColumns.size(); ++i)
+        {
+            PixelsColumnHandle newColumn = newColumns.get(i);
+            if (groupKeyColumnMap.containsKey(newColumn))
+            {
+                // Use synthetic column name in the aggregation result.
+                groupKeyColumnAlias[j++] = newColumn.getSynthColumnName();
+            }
+        }
+        List<PixelsColumnHandle> resultColumns = aggrHandle.getAggrResultColumns();
+        String[] resultColumnAlias = new String[resultColumns.size()];
+        for (int i = 0; i < resultColumns.size(); ++i)
+        {
+            // The column name of result column is already synthetic.
+            resultColumnAlias[i] = resultColumns.get(i).getColumnName();
+        }
+
+        // Build the function types.
+        List<FunctionType> functionTypeList = aggrHandle.getFunctionTypes();
+        FunctionType[] functionTypes = new FunctionType[functionTypeList.size()];
+        for (int i = 0; i < functionTypeList.size(); ++i)
+        {
+            functionTypes[i] = functionTypeList.get(i);
+        }
+
+        // Build the output endpoint.
+        OutputEndPoint outputEndPoint = new OutputEndPoint(Storage.Scheme.minio,
+                config.getMinioOutputFolderForQuery(transHandle.getTransId(),
+                        tableHandle.getSchemaName() + "_" + tableHandle.getTableName()),
+                config.getMinioAccessKey(), config.getMinioSecretKey(), config.getMinioEndpoint());
+
+        // Build the origin table.
+        io.pixelsdb.pixels.executor.plan.Table originTable;
+        if (originTableHandle.getTableType() == TableType.JOINED)
+        {
+            originTable = parseJoinPlan(originTableHandle);
+        }
+        else
+        {
+            originTable = parseBaseTable(originTableHandle);
+        }
+
+        Aggregation aggregation = new Aggregation(groupKeyColumnAlias, resultColumnAlias,
+                groupKeyColumnIds, aggregateColumnIds, functionTypes, outputEndPoint, originTable);
+
+        return new AggregatedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),
+                tableHandle.getTableAlias(), aggregation);
+    }
+
+    private BaseTable parseBaseTable(PixelsTableHandle tableHandle)
+    {
+        requireNonNull(tableHandle, "baseTableHandle is null");
+        checkArgument(tableHandle.getTableType() == TableType.BASE,
+                "baseTableHandle is not a handle of base table");
+        List<PixelsColumnHandle> columnHandles = getIncludeColumns(tableHandle);
+        String[] columns = new String[columnHandles.size()];
+        for (int i = 0; i < columns.length; ++i)
+        {
+            // Do not use synthetic column name for base table.
+            columns[i] = columnHandles.get(i).getColumnName();
+        }
+        return new BaseTable(tableHandle.getSchemaName(), tableHandle.getTableName(),
+                tableHandle.getTableAlias(), columns, createTableScanFilter(tableHandle.getSchemaName(),
+                tableHandle.getTableName(), columns, tableHandle.getConstraint()));
     }
 
     public static Pair<Integer, InputSplit> getInputSplit(PixelsSplit split)
