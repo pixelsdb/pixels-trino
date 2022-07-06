@@ -28,6 +28,7 @@ import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.executor.aggregation.FunctionType;
+import io.pixelsdb.pixels.executor.plan.Table;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -127,7 +128,7 @@ public class PixelsMetadata implements ConnectorMetadata
                         tableName.getTableName() + "_" + UUID.randomUUID()
                                 .toString().replace("-", ""),
                         columns, TupleDomain.all(), // match all tuples at the beginning.
-                        PixelsTableHandle.TableType.BASE, null, null);
+                        Table.TableType.BASE, null, null);
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -519,11 +520,17 @@ public class PixelsMetadata implements ConnectorMetadata
 
         if (groupingSets.size() > 1)
         {
-            logger.info("[aggregation push down is rejected for multi-grouping-sets]");
+            logger.info("[aggregation push down is rejected: not support multi-grouping-sets]");
             return Optional.empty();
         }
 
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+
+        if (tableHandle.getTableType() != Table.TableType.BASE)
+        {
+            logger.info("[aggregation push down is rejected: not support aggregation on joined table]");
+            return Optional.empty();
+        }
 
         logger.info("aggregation push down on: " + tableHandle.getSchemaName() + "." + tableHandle.getTableName());
         for (ColumnHandle columnHandle : assignments.values())
@@ -618,7 +625,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
         PixelsTableHandle newHandle = new PixelsTableHandle(
                 connectorId, newSchemaName, newTableName, newTableName, newColumns.build(),
-                TupleDomain.all(), PixelsTableHandle.TableType.AGGREGATED, null, aggrHandle);
+                TupleDomain.all(), Table.TableType.AGGREGATED, null, aggrHandle);
 
         return Optional.of(new AggregationApplicationResult<>(newHandle, projections.build(),
                 resultAssignments.build(), ImmutableMap.of(), false));
@@ -718,7 +725,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),
-                PixelsTableHandle.TableType.JOINED, joinHandle, null);
+                Table.TableType.JOINED, joinHandle, null);
 
         return Optional.of(new JoinApplicationResult<>(
                 joinedTableHandle,

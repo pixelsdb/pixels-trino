@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Joiner;
+import io.pixelsdb.pixels.executor.plan.Table;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.predicate.TupleDomain;
@@ -48,12 +49,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     private final List<PixelsColumnHandle> columns;
     private final TupleDomain<PixelsColumnHandle> constraint;
 
-    public enum TableType
-    {
-        BASE, JOINED, AGGREGATED
-    }
-
-    private final TableType tableType;
+    private final Table.TableType tableType;
     private final PixelsJoinHandle joinHandle;
     private final PixelsAggrHandle aggrHandle;
 
@@ -76,7 +72,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             @JsonProperty("tableAlias") String tableAlias,
             @JsonProperty("columns") List<PixelsColumnHandle> columns,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("tableType") TableType tableType,
+            @JsonProperty("tableType") Table.TableType tableType,
             @JsonProperty("joinHandle") PixelsJoinHandle joinHandle,
             @JsonProperty("aggrHandle") PixelsAggrHandle aggrHandle) {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
@@ -86,7 +82,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         this.columns = requireNonNull(columns, "columns is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
         this.tableType = requireNonNull(tableType, "tableType is null");
-        if (this.tableType == TableType.JOINED)
+        if (this.tableType == Table.TableType.JOINED)
         {
             this.joinHandle = requireNonNull(joinHandle, "joinHandle is null");
         }
@@ -94,7 +90,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         {
             this.joinHandle = null;
         }
-        if (this.tableType == TableType.AGGREGATED)
+        if (this.tableType == Table.TableType.AGGREGATED)
         {
             this.aggrHandle = requireNonNull(aggrHandle, "aggrHandle is null");
         }
@@ -141,7 +137,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     }
 
     @JsonProperty
-    public TableType getTableType()
+    public Table.TableType getTableType()
     {
         return tableType;
     }
@@ -219,7 +215,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         private String builderTableAlias;
         private List<PixelsColumnHandle> builderColumns;
         private TupleDomain<PixelsColumnHandle> builderConstraint;
-        private TableType builderTableType;
+        private Table.TableType builderTableType;
         private PixelsJoinHandle builderJoinHandle;
         private PixelsAggrHandle builderAggrHandle;
 
@@ -268,7 +264,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             this.builderConstraint = builderConstraint;
         }
 
-        public void setTableType(TableType builderTableType)
+        public void setTableType(Table.TableType builderTableType)
         {
             this.builderTableType = builderTableType;
         }
