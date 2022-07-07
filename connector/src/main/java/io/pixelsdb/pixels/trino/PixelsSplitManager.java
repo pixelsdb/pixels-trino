@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import io.etcd.jetcd.KeyValue;
@@ -494,13 +495,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
         PixelsAggrHandle aggrHandle = tableHandle.getAggrHandle();
         PixelsTableHandle originTableHandle = aggrHandle.getOriginTable();
         List<PixelsColumnHandle> originColumns = originTableHandle.getColumns();
-        List<PixelsColumnHandle> newColumns = tableHandle.getColumns();
+
         // Build the column ids.
         // groupKeyColumns and aggrColumns are from the origin table.
         int numGroupKeyColumns = aggrHandle.getGroupKeyColumns().size();
-        int numAggrColuumns = aggrHandle.getAggrColumns().size();
+        int numAggrColumns = aggrHandle.getAggrColumns().size();
         Map<PixelsColumnHandle, PixelsColumnHandle> groupKeyColumnMap = new HashMap<>(numGroupKeyColumns);
-        Map<PixelsColumnHandle, PixelsColumnHandle> aggrColumnMap = new HashMap<>(numAggrColuumns);
+        Map<PixelsColumnHandle, PixelsColumnHandle> aggrColumnMap = new HashMap<>(numAggrColumns);
         for (PixelsColumnHandle groupKeyColumn : aggrHandle.getGroupKeyColumns())
         {
             groupKeyColumnMap.put(groupKeyColumn, groupKeyColumn);
@@ -510,7 +511,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             aggrColumnMap.put(aggrColumn, aggrColumn);
         }
         int[] groupKeyColumnIds = new int[numGroupKeyColumns];
-        int[] aggregateColumnIds = new int[numAggrColuumns];
+        int[] aggregateColumnIds = new int[numAggrColumns];
         for (int i = 0, j = 0, k = 0; i < originColumns.size(); ++i)
         {
             PixelsColumnHandle origin = originColumns.get(i);
@@ -526,23 +527,38 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
         }
 
-        // Build the column alias.
+        // Build the column alias, projection, and types.
+        List<PixelsColumnHandle> outputColumns = aggrHandle.getOutputColumns();
+        Set<PixelsColumnHandle> newColumns = ImmutableSet.copyOf(tableHandle.getColumns());
         String[] groupKeyColumnAlias = new String[numGroupKeyColumns];
-        for (int i = 0, j = 0; i < newColumns.size(); ++i)
+        boolean[] groupKeyColumnProj = new boolean[numGroupKeyColumns];
+        for (int i = 0, j = 0; i < outputColumns.size(); ++i)
         {
-            PixelsColumnHandle newColumn = newColumns.get(i);
-            if (groupKeyColumnMap.containsKey(newColumn))
+            PixelsColumnHandle outputColumn = outputColumns.get(i);
+            if (groupKeyColumnMap.containsKey(outputColumn))
             {
+                if (newColumns.contains(outputColumn))
+                {
+                    groupKeyColumnProj[j] = true;
+                }
+                else
+                {
+                    groupKeyColumnProj[j] = false;
+                }
                 // Use synthetic column name in the aggregation result.
-                groupKeyColumnAlias[j++] = newColumn.getSynthColumnName();
+                groupKeyColumnAlias[j++] = outputColumn.getSynthColumnName();
             }
         }
         List<PixelsColumnHandle> resultColumns = aggrHandle.getAggrResultColumns();
         String[] resultColumnAlias = new String[resultColumns.size()];
+        String[] resultColumnTypes = new String[resultColumns.size()];
         for (int i = 0; i < resultColumns.size(); ++i)
         {
+            PixelsColumnHandle resultColumn = resultColumns.get(i);
             // The column name of result column is already synthetic.
-            resultColumnAlias[i] = resultColumns.get(i).getColumnName();
+            resultColumnAlias[i] = resultColumn.getColumnName();
+            // Display name can be parsed into Pixels types.
+            resultColumnTypes[i] = resultColumn.getColumnType().getDisplayName();
         }
 
         // Build the function types.
@@ -570,7 +586,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
             originTable = parseBaseTable(originTableHandle);
         }
 
-        Aggregation aggregation = new Aggregation(groupKeyColumnAlias, resultColumnAlias,
+        Aggregation aggregation = new Aggregation(
+                groupKeyColumnAlias, resultColumnAlias, resultColumnTypes, groupKeyColumnProj,
                 groupKeyColumnIds, aggregateColumnIds, functionTypes, outputEndPoint, originTable);
 
         return new AggregatedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),

@@ -110,7 +110,7 @@ public class PixelsMetadataProxy
 
     public TypeDescription parsePixelsType(Type type)
     {
-        return typeParser.parsePixelsType(type.getBaseName());
+        return typeParser.parsePixelsType(type.getDisplayName());
     }
 
     public List<PixelsColumnHandle> getTableColumn(String connectorId, String schemaName, String tableName) throws MetadataException

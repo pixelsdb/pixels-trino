@@ -551,7 +551,7 @@ public class PixelsMetadata implements ConnectorMetadata
             }
         }
 
-        ImmutableList.Builder<PixelsColumnHandle> newColumns = ImmutableList.builder();
+        ImmutableList.Builder<PixelsColumnHandle> newColumnsBuilder = ImmutableList.builder();
         ImmutableList.Builder<ConnectorExpression> projections = ImmutableList.builder();
         ImmutableList.Builder<Assignment> resultAssignments = ImmutableList.builder();
         ImmutableList.Builder<PixelsColumnHandle> aggrColumns = ImmutableList.builder();
@@ -572,7 +572,7 @@ public class PixelsMetadata implements ConnectorMetadata
             checkArgument(columnSet.contains(groupKey),
                     "grouping key %s is not included in the table columns: %s",
                     groupKey, tableColumns);
-            newColumns.add(groupKey.toBuilder().setLogicalOrdinal(logicalOrdinal++).build());
+            newColumnsBuilder.add(groupKey.toBuilder().setLogicalOrdinal(logicalOrdinal++).build());
         }
 
         for (AggregateFunction aggregate : aggregates)
@@ -594,8 +594,14 @@ public class PixelsMetadata implements ConnectorMetadata
             }
             if (aggregate.getArguments().size() != 1)
             {
-                logger.info("[aggregation push down is rejected: aggregate arguments size " +
-                        aggregate.getArguments().size() + " is not supported]");
+                logger.info("[aggregation push down is rejected: multi-column aggregation with '" +
+                        aggregate.getArguments().size() + "' arguments is not supported]");
+                return Optional.empty();
+            }
+            if (!FunctionType.isSupported(aggregate.getFunctionName()))
+            {
+                logger.info("[aggregation push down is rejected: function type '" +
+                        aggregate.getFunctionName() + ". is not supported]");
                 return Optional.empty();
             }
             ConnectorExpression aggrArgument = aggregate.getArguments().get(0);
@@ -613,20 +619,22 @@ public class PixelsMetadata implements ConnectorMetadata
                     .setColumnName(newColumnName).setColumnAlias(newColumnName)
                     .setColumnType(aggregate.getOutputType()).setTypeCategory(pixelsType.getCategory())
                     .setColumnComment("synthetic").setLogicalOrdinal(logicalOrdinal++).build();
-            newColumns.add(newColumn);
+            newColumnsBuilder.add(newColumn);
             aggrResultColumns.add(newColumn);
             aggrFunctionTypes.add(FunctionType.fromName(aggregate.getFunctionName()));
             projections.add(new Variable(newColumn.getColumnName(), newColumn.getColumnType()));
             resultAssignments.add(new Assignment(newColumn.getColumnName(), newColumn, newColumn.getColumnType()));
         }
 
+        List<PixelsColumnHandle> newColumns = newColumnsBuilder.build();
+
         PixelsAggrHandle aggrHandle = new PixelsAggrHandle(aggrColumns.build(), aggrResultColumns.build(),
-                groupKeyColumns, aggrFunctionTypes.build(), tableHandle);
+                groupKeyColumns, newColumns, aggrFunctionTypes.build(), tableHandle);
 
         String newSchemaName = "aggregate_" + UUID.randomUUID().toString().replace("-", "");
         String newTableName = "aggregate_" + tableHandle.getTableName();
         PixelsTableHandle newHandle = new PixelsTableHandle(
-                connectorId, newSchemaName, newTableName, newTableName, newColumns.build(),
+                connectorId, newSchemaName, newTableName, newTableName, newColumns,
                 TupleDomain.all(), Table.TableType.AGGREGATED, null, aggrHandle);
 
         return Optional.of(new AggregationApplicationResult<>(newHandle, projections.build(),

@@ -36,6 +36,7 @@ public class PixelsAggrHandle
     private final List<PixelsColumnHandle> aggrColumns;
     private final List<PixelsColumnHandle> aggrResultColumns;
     private final List<PixelsColumnHandle> groupKeyColumns;
+    private final List<PixelsColumnHandle> outputColumns;
     private final List<FunctionType> functionTypes;
     private final PixelsTableHandle originTable;
 
@@ -44,12 +45,14 @@ public class PixelsAggrHandle
             @JsonProperty("aggrColumns") List<PixelsColumnHandle> aggrColumns,
             @JsonProperty("aggrResultColumns") List<PixelsColumnHandle> aggrResultColumns,
             @JsonProperty("groupKeyColumns") List<PixelsColumnHandle> groupKeyColumns,
+            @JsonProperty("outputColumns") List<PixelsColumnHandle> outputColumns,
             @JsonProperty("functionTypes") List<FunctionType> functionTypes,
             @JsonProperty("originTable") PixelsTableHandle originTable)
     {
         this.aggrColumns = aggrColumns;
         this.aggrResultColumns = aggrResultColumns;
         this.groupKeyColumns = groupKeyColumns;
+        this.outputColumns = outputColumns;
         this.functionTypes = functionTypes;
         this.originTable = originTable;
     }
@@ -73,6 +76,12 @@ public class PixelsAggrHandle
     }
 
     @JsonProperty
+    public List<PixelsColumnHandle> getOutputColumns()
+    {
+        return outputColumns;
+    }
+
+    @JsonProperty
     public List<FunctionType> getFunctionTypes()
     {
         return functionTypes;
@@ -93,6 +102,7 @@ public class PixelsAggrHandle
         return Objects.equal(aggrColumns, that.aggrColumns) &&
                 Objects.equal(aggrResultColumns, that.aggrResultColumns) &&
                 Objects.equal(groupKeyColumns, that.groupKeyColumns) &&
+                Objects.equal(outputColumns, that.outputColumns) &&
                 Objects.equal(functionTypes, that.functionTypes) &&
                 Objects.equal(originTable, that.originTable);
     }
@@ -101,7 +111,7 @@ public class PixelsAggrHandle
     public int hashCode()
     {
         return Objects.hashCode(aggrColumns, aggrResultColumns, groupKeyColumns,
-                functionTypes, originTable);
+                outputColumns, functionTypes, originTable);
     }
 
     @Override
@@ -111,6 +121,7 @@ public class PixelsAggrHandle
                 "aggrColumns=" + Joiner.on(",").join(aggrColumns) +
                 ", aggrResultColumns=" + Joiner.on(",").join(aggrResultColumns) +
                 ", groupKeyColumns=" + Joiner.on(",").join(groupKeyColumns) +
+                ", outputColumns=" + Joiner.on(",").join(outputColumns) +
                 ", functionTypes=" + Joiner.on(",").join(functionTypes) +
                 ", originTable=" + originTable.toString() + '}';
     }
