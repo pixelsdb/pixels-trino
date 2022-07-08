@@ -107,15 +107,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         checkArgument(pixelsSplit.getConnectorId().equals(connectorId),
                 "connectorId is not for this connector");
         String[] includeCols = pixelsSplit.getIncludeCols();
-        for (ColumnHandle columnHandle : columns)
-        {
-            logger.info("-------" + ((PixelsColumnHandle)columnHandle).getSynthColumnName());
-        }
         List<PixelsColumnHandle> pixelsColumns = tableHandle.getColumns();
-        for (PixelsColumnHandle columnHandle : pixelsColumns)
-        {
-            logger.info("++++++++" + columnHandle.getSynthColumnName());
-        }
 
         try
         {
@@ -124,7 +116,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 // perform aggregation push down.
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                 Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
-                // IntermediateFileCleaner.Instance().registerStorage(storage);
+                IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
             }
@@ -140,6 +132,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             if (pixelsSplit.getTableType() == Table.TableType.BASE)
             {
                 // perform scan push down.
+                pixelsColumns = getIncludeColumns(tableHandle);
                 if (config.isLambdaEnabled() && this.localSplitCounter.get() >= config.getLocalScanConcurrency())
                 {
                     MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
@@ -149,7 +142,6 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                             pixelsFooterCache, getLambdaScanOutput(pixelsSplit), null);
                 } else
                 {
-                    pixelsColumns = getIncludeColumns(tableHandle);
                     this.localSplitCounter.incrementAndGet();
                     Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
                     return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage,

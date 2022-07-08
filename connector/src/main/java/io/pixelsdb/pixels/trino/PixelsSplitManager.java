@@ -160,7 +160,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // Use the synthetic column name to access the join result.
             includeCols[i] = tableHandle.getColumns().get(i).getSynthColumnName();
-            logger.info("===========" + includeCols[i]);
         }
         List<String> columnOrder = Arrays.asList(includeCols);
         List<String> cacheOrder = ImmutableList.of();
