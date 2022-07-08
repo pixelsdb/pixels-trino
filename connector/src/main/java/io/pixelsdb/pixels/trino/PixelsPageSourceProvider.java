@@ -29,15 +29,15 @@ import io.pixelsdb.pixels.common.physical.storage.MinIO;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
-import io.pixelsdb.pixels.executor.lambda.*;
-import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
-import io.pixelsdb.pixels.executor.lambda.domain.MultiOutputInfo;
-import io.pixelsdb.pixels.executor.lambda.domain.OutputInfo;
-import io.pixelsdb.pixels.executor.lambda.domain.ScanTableInfo;
+import io.pixelsdb.pixels.executor.lambda.InvokerFactory;
+import io.pixelsdb.pixels.executor.lambda.WorkerType;
+import io.pixelsdb.pixels.executor.lambda.domain.*;
 import io.pixelsdb.pixels.executor.lambda.input.*;
+import io.pixelsdb.pixels.executor.lambda.output.AggregationOutput;
 import io.pixelsdb.pixels.executor.lambda.output.JoinOutput;
 import io.pixelsdb.pixels.executor.lambda.output.Output;
 import io.pixelsdb.pixels.executor.lambda.output.ScanOutput;
+import io.pixelsdb.pixels.executor.plan.Table;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -67,6 +67,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     private final PixelsFooterCache pixelsFooterCache;
     private final PixelsTrinoConfig config;
     private final AtomicInteger localSplitCounter;
+    private final boolean computeFinalAggrInServer;
 
     @Inject
     public PixelsPageSourceProvider(PixelsConnectorId connectorId, PixelsTrinoConfig config)
@@ -88,6 +89,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             this.cacheFile = null;
             this.indexFile = null;
         }
+        this.computeFinalAggrInServer = Boolean.parseBoolean(
+                config.getConfigFactory().getProperty("aggregation.compute.final.in.server"));
         this.pixelsFooterCache = new PixelsFooterCache();
         this.localSplitCounter = new AtomicInteger(0);
     }
@@ -99,16 +102,25 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                                                 DynamicFilter dynamicFilter) {
         requireNonNull(table, "table is null");
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;
-        List<PixelsColumnHandle> pixelsColumns = getIncludeColumns(tableHandle);
         requireNonNull(split, "split is null");
         PixelsSplit pixelsSplit = (PixelsSplit) split;
         checkArgument(pixelsSplit.getConnectorId().equals(connectorId),
                 "connectorId is not for this connector");
         String[] includeCols = pixelsSplit.getIncludeCols();
+        List<PixelsColumnHandle> pixelsColumns = tableHandle.getColumns();
 
         try
         {
-            if (pixelsSplit.getTableType() == PixelsTableHandle.TableType.JOINED)
+            if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
+            {
+                // perform aggregation push down.
+                MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
+                Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
+                IntermediateFileCleaner.Instance().registerStorage(storage);
+                return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
+                        pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
+            }
+            if (pixelsSplit.getTableType() == Table.TableType.JOINED)
             {
                 // perform join push down.
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
@@ -117,9 +129,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaJoinOutput(pixelsSplit), null);
             }
-            else
+            if (pixelsSplit.getTableType() == Table.TableType.BASE)
             {
                 // perform scan push down.
+                pixelsColumns = getIncludeColumns(tableHandle);
                 if (config.isLambdaEnabled() && this.localSplitCounter.get() >= config.getLocalScanConcurrency())
                 {
                     MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
@@ -135,10 +148,45 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                             cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter);
                 }
             }
+            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, new UnsupportedOperationException(
+                    "table type '" + pixelsSplit.getTableType() + "' is not supported for building page source"));
         } catch (IOException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
         }
+    }
+
+    private CompletableFuture<?> getLambdaAggrOutput(PixelsSplit inputSplit)
+    {
+        String aggrInputJson = inputSplit.getAggrInput();
+        AggregationInput aggrInput = JSON.parseObject(aggrInputJson, AggregationInput.class);
+        CompletableFuture<Output> aggrOutputFuture;
+
+        if (computeFinalAggrInServer)
+        {
+            // TODO: execute the final aggregation locally.
+            aggrOutputFuture = null;
+        }
+        else
+        {
+            aggrOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.AGGREGATION).invoke(aggrInput);
+        }
+
+        return aggrOutputFuture.whenComplete(((aggrOutput, err) ->
+        {
+            if (err != null)
+            {
+                throw new RuntimeException("error in lambda invoke.", err);
+            }
+            try
+            {
+                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), (AggregationOutput) aggrOutput);
+            }
+            catch (Exception e)
+            {
+                throw new RuntimeException("error in minio read.", e);
+            }
+        }));
     }
 
     private CompletableFuture<?> getLambdaJoinOutput(PixelsSplit inputSplit)
@@ -167,12 +215,11 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                     inputSplit.getJoinAlgo() + "' is not supported");
         }
         MultiOutputInfo output = joinInput.getOutput();
-        output.setScheme(Storage.Scheme.minio);
+        StorageInfo storageInfo = new StorageInfo(Storage.Scheme.minio, config.getMinioEndpoint(),
+                config.getMinioAccessKey(), config.getMinioSecretKey());
+        output.setStorageInfo(storageInfo);
         output.setPath(config.getMinioOutputFolderForQuery(inputSplit.getQueryId(),
                 inputSplit.getSchemaName() + "_" + inputSplit.getTableName()));
-        output.setAccessKey(config.getMinioAccessKey());
-        output.setSecretKey(config.getMinioSecretKey());
-        output.setEndpoint(config.getMinioEndpoint());
         // logger.info("join input: " + JSON.toJSONString(joinInput));
         CompletableFuture<Output> joinOutputFuture;
         if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
@@ -231,8 +278,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         String endpoint = config.getMinioEndpoint();
         String accessKey = config.getMinioAccessKey();
         String secretKey = config.getMinioSecretKey();
-        OutputInfo outputInfo = new OutputInfo(folder, true,
-                Storage.Scheme.minio, endpoint, accessKey, secretKey, true);
+        StorageInfo storageInfo = new StorageInfo(Storage.Scheme.minio, endpoint, accessKey, secretKey);
+        OutputInfo outputInfo = new OutputInfo(folder, true, storageInfo, true);
         scanInput.setOutput(outputInfo);
 
         return InvokerFactory.Instance().getInvoker(WorkerType.SCAN)

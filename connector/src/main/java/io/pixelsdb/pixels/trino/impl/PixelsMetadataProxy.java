@@ -108,6 +108,11 @@ public class PixelsMetadataProxy
         return metadataService.getTable(schemaName, tableName);
     }
 
+    public TypeDescription parsePixelsType(Type type)
+    {
+        return typeParser.parsePixelsType(type.getDisplayName());
+    }
+
     public List<PixelsColumnHandle> getTableColumn(String connectorId, String schemaName, String tableName) throws MetadataException
     {
         ImmutableList.Builder<PixelsColumnHandle> columnsBuilder = ImmutableList.builder();

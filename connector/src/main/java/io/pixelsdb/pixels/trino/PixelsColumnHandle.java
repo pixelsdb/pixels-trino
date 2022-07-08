@@ -144,7 +144,7 @@ public final class PixelsColumnHandle implements ColumnHandle
     @Override
     public int hashCode()
     {
-        return Objects.hash(connectorId, schemaName, tableName, columnName, columnAlias, columnType);
+        return Objects.hash(connectorId, schemaName, tableName, columnName, columnAlias);
     }
 
     @Override
@@ -162,8 +162,7 @@ public final class PixelsColumnHandle implements ColumnHandle
                 Objects.equals(this.schemaName, other.schemaName) &&
                 Objects.equals(this.tableName, other.tableName) &&
                 Objects.equals(this.columnName, other.columnName) &&
-                Objects.equals(this.columnAlias, other.columnAlias) &&
-                Objects.equals(this.columnType, other.columnType);
+                Objects.equals(this.columnAlias, other.columnAlias);
     }
 
     @Override
@@ -186,9 +185,9 @@ public final class PixelsColumnHandle implements ColumnHandle
         return new Builder();
     }
 
-    public static Builder builderFrom(PixelsColumnHandle handle)
+    public Builder toBuilder()
     {
-        return new Builder(handle);
+        return new Builder(this);
     }
 
     public static class Builder
@@ -224,13 +223,13 @@ public final class PixelsColumnHandle implements ColumnHandle
             return this;
         }
 
-        public Builder setBuilderSchemaName(String builderSchemaName)
+        public Builder setSchemaName(String builderSchemaName)
         {
             this.builderSchemaName = builderSchemaName;
             return this;
         }
 
-        public Builder setBuilderTableName(String builderTableName)
+        public Builder setTableName(String builderTableName)
         {
             this.builderTableName = builderTableName;
             return this;

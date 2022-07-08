@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.output.NonPartitionOutput;
+import io.pixelsdb.pixels.executor.plan.Table;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
@@ -59,9 +60,10 @@ public class PixelsSplit implements ConnectorSplit
     private final List<String> cacheOrder;
     private final String[] includeCols;
     private final TupleDomain<PixelsColumnHandle> constraint;
-    private final PixelsTableHandle.TableType tableType;
+    private final Table.TableType tableType;
     private final JoinAlgorithm joinAlgo;
     private final String joinInput;
+    private final String aggrInput;
 
     @JsonCreator
     public PixelsSplit(
@@ -80,9 +82,10 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("includeCols") String[] includeCols,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("tableType")PixelsTableHandle.TableType tableType,
+            @JsonProperty("tableType") Table.TableType tableType,
             @JsonProperty("joinAlgo") JoinAlgorithm joinAlgo,
-            @JsonProperty("joinInput") String joinInput) {
+            @JsonProperty("joinInput") String joinInput,
+            @JsonProperty("aggrInput") String aggrInput) {
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
@@ -105,7 +108,7 @@ public class PixelsSplit implements ConnectorSplit
         this.includeCols = requireNonNull(includeCols, "includeCols is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
         this.tableType = requireNonNull(tableType, "tableType is null");
-        if (tableType == PixelsTableHandle.TableType.JOINED)
+        if (tableType == Table.TableType.JOINED)
         {
             this.joinAlgo = requireNonNull(joinAlgo, "joinAlgorithm is null");
             this.joinInput = requireNonNull(joinInput, "joinInput is null");
@@ -115,6 +118,7 @@ public class PixelsSplit implements ConnectorSplit
             this.joinAlgo = null;
             this.joinInput = null;
         }
+        this.aggrInput = aggrInput;
     }
 
     /**
@@ -268,7 +272,7 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
-    public PixelsTableHandle.TableType getTableType()
+    public Table.TableType getTableType()
     {
         return tableType;
     }
@@ -283,6 +287,12 @@ public class PixelsSplit implements ConnectorSplit
     public String getJoinInput()
     {
         return joinInput;
+    }
+
+    @JsonProperty
+    public String getAggrInput()
+    {
+        return aggrInput;
     }
 
     @Override
