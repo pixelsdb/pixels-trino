@@ -437,14 +437,39 @@ public class PixelsMetadata implements ConnectorMetadata
 
         List<PixelsColumnHandle> newColumns = assignments.values().stream()
                 .map(PixelsColumnHandle.class::cast).collect(toImmutableList());
+        List<PixelsColumnHandle> tableColumns = tableHandle.getColumns();
 
-        Set<PixelsColumnHandle> newColumnSet = ImmutableSet.copyOf(newColumns);
-        Set<PixelsColumnHandle> tableColumnSet = ImmutableSet.copyOf(tableHandle.getColumns());
-        if (newColumnSet.equals(tableColumnSet))
+        boolean equals = newColumns.size() == tableColumns.size();
+        if (equals)
+        {
+            Iterator<PixelsColumnHandle> itNew = newColumns.iterator();
+            Iterator<PixelsColumnHandle> itTable = tableColumns.iterator();
+            PixelsColumnHandle newColumn, tableColumn;
+            while (itNew.hasNext())
+            {
+                newColumn = itNew.next();
+                tableColumn = itTable.next();
+                if (!newColumn.equals(tableColumn))
+                {
+                    equals = false;
+                    break;
+                }
+            }
+        }
+
+        if (equals)
         {
             logger.info("[projection push down is rejected]");
             return Optional.empty();
         }
+
+        Set<PixelsColumnHandle> newColumnSet = ImmutableSet.copyOf(newColumns);
+        Set<PixelsColumnHandle> tableColumnSet = ImmutableSet.copyOf(tableColumns);
+//        if (newColumnSet.equals(tableColumnSet))
+//        {
+//            logger.info("[projection push down is rejected]");
+//            return Optional.empty();
+//        }
 
         verify(tableColumnSet.containsAll(newColumnSet),
                 "applyProjection called with columns %s and some are not available in existing query: %s",
@@ -572,7 +597,7 @@ public class PixelsMetadata implements ConnectorMetadata
             checkArgument(columnSet.contains(groupKey),
                     "grouping key %s is not included in the table columns: %s",
                     groupKey, tableColumns);
-            newColumnsBuilder.add(groupKey.toBuilder().setLogicalOrdinal(logicalOrdinal++).build());
+            newColumnsBuilder.add(groupKey);
         }
 
         for (AggregateFunction aggregate : aggregates)

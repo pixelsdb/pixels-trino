@@ -75,6 +75,13 @@ public class PixelsAggrHandle
         return groupKeyColumns;
     }
 
+    /**
+     * Get the columns in the aggregation output, before further projections are applied
+     * on the aggregation output. This is useful to recognize the group-key columns
+     * of the aggregation.
+     *
+     * @return the columns in the aggregation output
+     */
     @JsonProperty
     public List<PixelsColumnHandle> getOutputColumns()
     {

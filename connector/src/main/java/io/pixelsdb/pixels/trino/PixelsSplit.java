@@ -58,7 +58,7 @@ public class PixelsSplit implements ConnectorSplit
     private final List<HostAddress> addresses;
     private List<String> order;
     private final List<String> cacheOrder;
-    private final String[] includeCols;
+    private String[] includeCols;
     private final TupleDomain<PixelsColumnHandle> constraint;
     private final Table.TableType tableType;
     private final JoinAlgorithm joinAlgo;

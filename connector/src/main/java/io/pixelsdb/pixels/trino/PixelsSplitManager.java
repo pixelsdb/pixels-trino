@@ -160,6 +160,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // Use the synthetic column name to access the join result.
             includeCols[i] = tableHandle.getColumns().get(i).getSynthColumnName();
+            logger.info("===========" + includeCols[i]);
         }
         List<String> columnOrder = Arrays.asList(includeCols);
         List<String> cacheOrder = ImmutableList.of();
@@ -496,12 +497,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
         PixelsTableHandle originTableHandle = aggrHandle.getOriginTable();
         List<PixelsColumnHandle> originColumns = originTableHandle.getColumns();
 
-        // Build the column ids.
         // groupKeyColumns and aggrColumns are from the origin table.
         int numGroupKeyColumns = aggrHandle.getGroupKeyColumns().size();
         int numAggrColumns = aggrHandle.getAggrColumns().size();
+        int numOutputColumns = aggrHandle.getOutputColumns().size();
         Map<PixelsColumnHandle, PixelsColumnHandle> groupKeyColumnMap = new HashMap<>(numGroupKeyColumns);
         Map<PixelsColumnHandle, PixelsColumnHandle> aggrColumnMap = new HashMap<>(numAggrColumns);
+        Map<PixelsColumnHandle, PixelsColumnHandle> outputColumnMap = new HashMap<>(numOutputColumns);
         for (PixelsColumnHandle groupKeyColumn : aggrHandle.getGroupKeyColumns())
         {
             groupKeyColumnMap.put(groupKeyColumn, groupKeyColumn);
@@ -510,31 +512,15 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             aggrColumnMap.put(aggrColumn, aggrColumn);
         }
-        int[] groupKeyColumnIds = new int[numGroupKeyColumns];
-        int[] aggregateColumnIds = new int[numAggrColumns];
-        for (int i = 0, j = 0, k = 0; i < originColumns.size(); ++i)
-        {
-            PixelsColumnHandle origin = originColumns.get(i);
-            PixelsColumnHandle groupKey = groupKeyColumnMap.get(origin);
-            if (groupKey != null && groupKey.getLogicalOrdinal() == origin.getLogicalOrdinal())
-            {
-                groupKeyColumnIds[j++] = i;
-            }
-            PixelsColumnHandle aggrCol = aggrColumnMap.get(origin);
-            if (aggrCol != null && aggrCol.getLogicalOrdinal() == origin.getLogicalOrdinal())
-            {
-                aggregateColumnIds[k++] = i;
-            }
-        }
 
-        // Build the column alias, projection, and types.
+        // Build the group-key column projection.
         List<PixelsColumnHandle> outputColumns = aggrHandle.getOutputColumns();
         Set<PixelsColumnHandle> newColumns = ImmutableSet.copyOf(tableHandle.getColumns());
-        String[] groupKeyColumnAlias = new String[numGroupKeyColumns];
         boolean[] groupKeyColumnProj = new boolean[numGroupKeyColumns];
         for (int i = 0, j = 0; i < outputColumns.size(); ++i)
         {
             PixelsColumnHandle outputColumn = outputColumns.get(i);
+            outputColumnMap.put(outputColumn, outputColumn);
             if (groupKeyColumnMap.containsKey(outputColumn))
             {
                 if (newColumns.contains(outputColumn))
@@ -545,20 +531,48 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 {
                     groupKeyColumnProj[j] = false;
                 }
-                // Use synthetic column name in the aggregation result.
-                groupKeyColumnAlias[j++] = outputColumn.getSynthColumnName();
+                ++j;
             }
         }
+
+        // Build the result column alias and types.
         List<PixelsColumnHandle> resultColumns = aggrHandle.getAggrResultColumns();
         String[] resultColumnAlias = new String[resultColumns.size()];
         String[] resultColumnTypes = new String[resultColumns.size()];
         for (int i = 0; i < resultColumns.size(); ++i)
         {
             PixelsColumnHandle resultColumn = resultColumns.get(i);
-            // The column name of result column is already synthetic.
-            resultColumnAlias[i] = resultColumn.getColumnName();
+            /*
+             * The column name of result column is already synthetic. But the includeCols
+             * used in the PixelsSplit uses synthetic column name, thus we must also use
+             * synthetic column name here to match the includeCols.
+             */
+            resultColumnAlias[i] = resultColumn.getSynthColumnName();
             // Display name can be parsed into Pixels types.
             resultColumnTypes[i] = resultColumn.getColumnType().getDisplayName();
+        }
+
+        // Build the column ids and the group-key column alias.
+        int[] groupKeyColumnIds = new int[numGroupKeyColumns];
+        String[] groupKeyColumnAlias = new String[numGroupKeyColumns];
+        int[] aggregateColumnIds = new int[numAggrColumns];
+        for (int i = 0, j = 0, k = 0; i < originColumns.size(); ++i)
+        {
+            PixelsColumnHandle origin = originColumns.get(i);
+            PixelsColumnHandle groupKey = groupKeyColumnMap.get(origin);
+            if (groupKey != null && groupKey.getLogicalOrdinal() == origin.getLogicalOrdinal())
+            {
+                // Use synthetic column name in the aggregation result.
+                PixelsColumnHandle outputColumn = requireNonNull(outputColumnMap.get(groupKey),
+                        "group-key column is not found in the output columns");
+                groupKeyColumnAlias[j] = outputColumn.getSynthColumnName();
+                groupKeyColumnIds[j++] = i;
+            }
+            PixelsColumnHandle aggrCol = aggrColumnMap.get(origin);
+            if (aggrCol != null && aggrCol.getLogicalOrdinal() == origin.getLogicalOrdinal())
+            {
+                aggregateColumnIds[k++] = i;
+            }
         }
 
         // Build the function types.
