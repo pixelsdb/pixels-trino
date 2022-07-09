@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.pixelsdb.pixels.trino.PixelsSplitManager.getIncludeColumns;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -79,9 +80,8 @@ public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
             throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR,
                     "PixelsRecordSet does not support lambda coprocessor.");
         }
-        List<PixelsColumnHandle> pixelsColumns = columns.stream()
-                .map(PixelsColumnHandle.class::cast)
-                .collect(toList());
+        List<PixelsColumnHandle> pixelsColumns = getIncludeColumns(columns.stream()
+                .map(PixelsColumnHandle.class::cast).collect(toList()), (PixelsTableHandle) table);
         requireNonNull(split, "split is null");
         PixelsSplit pixelsSplit = (PixelsSplit) split;
         checkArgument(pixelsSplit.getConnectorId().equals(connectorId), "connectorId is not for this connector");

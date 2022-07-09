@@ -30,7 +30,6 @@ import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -44,21 +43,20 @@ import static java.util.Objects.requireNonNull;
  */
 public class PixelsSplit implements ConnectorSplit
 {
+    private final long queryId;
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
     private String storageScheme;
     private List<String> paths;
-    private final long queryId;
     private List<Integer> rgStarts;
     private List<Integer> rgLengths;
     private int pathIndex;
     private boolean cached;
     private final boolean ensureLocality;
     private final List<HostAddress> addresses;
-    private List<String> order;
-    private final List<String> cacheOrder;
-    private final String[] includeCols;
+    private List<String> columnOrder;
+    private List<String> cacheOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
     private final Table.TableType tableType;
     private final JoinAlgorithm joinAlgo;
@@ -67,20 +65,19 @@ public class PixelsSplit implements ConnectorSplit
 
     @JsonCreator
     public PixelsSplit(
+            @JsonProperty("queryId") long queryId,
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
             @JsonProperty("storageScheme") String storageScheme,
             @JsonProperty("paths") List<String> paths,
-            @JsonProperty("queryId") long queryId,
             @JsonProperty("rgStarts") List<Integer> rgStarts,
             @JsonProperty("rgLengths") List<Integer> rgLengths,
             @JsonProperty("cached") boolean cached,
             @JsonProperty("ensureLocality") boolean ensureLocality,
             @JsonProperty("addresses") List<HostAddress> addresses,
-            @JsonProperty("order") List<String> order,
+            @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
-            @JsonProperty("includeCols") String[] includeCols,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("tableType") Table.TableType tableType,
             @JsonProperty("joinAlgo") JoinAlgorithm joinAlgo,
@@ -103,9 +100,8 @@ public class PixelsSplit implements ConnectorSplit
         this.cached = cached;
         this.ensureLocality = ensureLocality;
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
-        this.order = requireNonNull(order, "order is null");
+        this.columnOrder = requireNonNull(columnOrder, "order is null");
         this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
-        this.includeCols = requireNonNull(includeCols, "includeCols is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
         this.tableType = requireNonNull(tableType, "tableType is null");
         if (tableType == Table.TableType.JOINED)
@@ -125,10 +121,9 @@ public class PixelsSplit implements ConnectorSplit
      * Permute the original file information with the information of the
      * intermediate files produced by serverless.
      * @param scheme the storage scheme of intermediate files
-     * @param includeCols the columns that will be included in the intermediate files
      * @param lambdaOutput the output of serverless
      */
-    public void permute(Storage.Scheme scheme, String[] includeCols, NonPartitionOutput lambdaOutput)
+    public void permute(Storage.Scheme scheme, NonPartitionOutput lambdaOutput)
     {
         requireNonNull(scheme, "scheme is null");
         requireNonNull(lambdaOutput, "scanOutput is null");
@@ -138,9 +133,11 @@ public class PixelsSplit implements ConnectorSplit
         this.paths = lambdaOutput.getOutputs();
         this.rgStarts = Collections.nCopies(lambdaOutput.getOutputs().size(), 0);
         this.rgLengths = lambdaOutput.getRowGroupNums();
-        this.order = Arrays.asList(includeCols);
         this.cached = false;
-        this.cacheOrder.clear();
+        if (!this.columnOrder.isEmpty())
+            this.columnOrder = ImmutableList.of();
+        if (!this.cacheOrder.isEmpty())
+            this.cacheOrder = ImmutableList.of();
     }
 
     @JsonProperty
@@ -152,12 +149,6 @@ public class PixelsSplit implements ConnectorSplit
     @JsonProperty
     public String getSchemaName(){
         return schemaName;
-    }
-
-    @JsonProperty
-    public String[] getIncludeCols()
-    {
-        return includeCols;
     }
 
     @JsonProperty
@@ -259,10 +250,14 @@ public class PixelsSplit implements ConnectorSplit
         return addresses;
     }
 
+    /**
+     * Get the physical column order of the file to read.
+     * @return the physical column order, or empty is the column order is not present
+     */
     @JsonProperty
-    public List<String> getOrder()
+    public List<String> getColumnOrder()
     {
-        return order;
+        return columnOrder;
     }
 
     @JsonProperty

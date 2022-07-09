@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.pixelsdb.pixels.trino.PixelsSplitManager.*;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Provider Class for Pixels Page Source class.
@@ -106,8 +107,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         PixelsSplit pixelsSplit = (PixelsSplit) split;
         checkArgument(pixelsSplit.getConnectorId().equals(connectorId),
                 "connectorId is not for this connector");
-        String[] includeCols = pixelsSplit.getIncludeCols();
-        List<PixelsColumnHandle> pixelsColumns = tableHandle.getColumns();
+        List<PixelsColumnHandle> pixelsColumns = columns.stream()
+                .map(PixelsColumnHandle.class::cast).collect(toList());
 
         try
         {
@@ -117,7 +118,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                 Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
                 IntermediateFileCleaner.Instance().registerStorage(storage);
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
+                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
             }
             if (pixelsSplit.getTableType() == Table.TableType.JOINED)
@@ -126,25 +127,31 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                 Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
                 IntermediateFileCleaner.Instance().registerStorage(storage);
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
+                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaJoinOutput(pixelsSplit), null);
             }
             if (pixelsSplit.getTableType() == Table.TableType.BASE)
             {
                 // perform scan push down.
-                pixelsColumns = getIncludeColumns(tableHandle);
+                List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
+                // TODO: if lambda scan is used, no need to read the filter columns.
+                String[] includeCols = new String[withFilterColumns.size()];
+                for (int i = 0; i < includeCols.length; ++i)
+                {
+                    includeCols[i] = withFilterColumns.get(i).getColumnName();
+                }
                 if (config.isLambdaEnabled() && this.localSplitCounter.get() >= config.getLocalScanConcurrency())
                 {
                     MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                     Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
                     IntermediateFileCleaner.Instance().registerStorage(storage);
-                    return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage, cacheFile, indexFile,
-                            pixelsFooterCache, getLambdaScanOutput(pixelsSplit), null);
+                    return new PixelsPageSource(pixelsSplit, withFilterColumns, storage, cacheFile, indexFile,
+                            pixelsFooterCache, getLambdaScanOutput(pixelsSplit, includeCols), null);
                 } else
                 {
                     this.localSplitCounter.incrementAndGet();
                     Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
-                    return new PixelsPageSource(pixelsSplit, pixelsColumns, includeCols, storage,
+                    return new PixelsPageSource(pixelsSplit, withFilterColumns, storage,
                             cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter);
                 }
             }
@@ -180,7 +187,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), (AggregationOutput) aggrOutput);
+                inputSplit.permute(Storage.Scheme.minio, (AggregationOutput) aggrOutput);
             }
             catch (Exception e)
             {
@@ -251,7 +258,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), (JoinOutput) joinOutput);
+                inputSplit.permute(Storage.Scheme.minio, (JoinOutput) joinOutput);
             }
             catch (Exception e)
             {
@@ -260,17 +267,17 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         }));
     }
 
-    private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit)
+    private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit, String[] includeCols)
     {
         ScanInput scanInput = new ScanInput();
         scanInput.setQueryId(inputSplit.getQueryId());
         ScanTableInfo tableInfo = new ScanTableInfo();
         tableInfo.setTableName(inputSplit.getTableName());
-        tableInfo.setColumnsToRead(inputSplit.getIncludeCols());
+        tableInfo.setColumnsToRead(includeCols);
         Pair<Integer, InputSplit> inputSplitPair = getInputSplit(inputSplit);
         tableInfo.setInputSplits(Arrays.asList(inputSplitPair.getRight()));
         TableScanFilter filter = createTableScanFilter(inputSplit.getSchemaName(),
-                inputSplit.getTableName(), inputSplit.getIncludeCols(), inputSplit.getConstraint());
+                inputSplit.getTableName(), includeCols, inputSplit.getConstraint());
         tableInfo.setFilter(JSON.toJSONString(filter));
         scanInput.setTableInfo(tableInfo);
         // logger.info("table scan filter: " + tableInfo.getFilter());
@@ -290,7 +297,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, inputSplit.getIncludeCols(), (ScanOutput) scanOutput);
+                inputSplit.permute(Storage.Scheme.minio, (ScanOutput) scanOutput);
             }
             catch (Exception e)
             {

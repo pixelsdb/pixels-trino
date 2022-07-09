@@ -50,7 +50,7 @@ public class PixelsRecordSet implements RecordSet
                            String connectorId)
     {
         this.split = requireNonNull(split, "split is null");
-        this. columnHandles = requireNonNull(columnHandles, "columnHandles is null");
+        this.columnHandles = requireNonNull(columnHandles, "columnHandles is null");
         this.storage = requireNonNull(storage, "storage is null");
         this.cacheFile = cacheFile;
         this.indexFile = indexFile;
