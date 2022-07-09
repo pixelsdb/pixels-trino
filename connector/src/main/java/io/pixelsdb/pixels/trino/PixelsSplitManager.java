@@ -113,12 +113,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
     public static List<PixelsColumnHandle> getIncludeColumns(PixelsTableHandle tableHandle)
     {
+        return getIncludeColumns(tableHandle.getColumns(), tableHandle);
+    }
+
+    public static List<PixelsColumnHandle> getIncludeColumns(List<PixelsColumnHandle> columns, PixelsTableHandle tableHandle)
+    {
         ImmutableList.Builder<PixelsColumnHandle> builder = ImmutableList.builder();
-        builder.addAll(tableHandle.getColumns());
-        if (tableHandle.getTableType() == TableType.BASE &&
-                tableHandle.getConstraint().getDomains().isPresent())
+        builder.addAll(columns);
+        if (tableHandle.getConstraint().getDomains().isPresent())
         {
-            Set<PixelsColumnHandle> columnSet = new HashSet<>(tableHandle.getColumns());
+            Set<PixelsColumnHandle> columnSet = new HashSet<>(columns);
             for (PixelsColumnHandle column : tableHandle.getConstraint().getDomains().get().keySet())
             {
                 if (!columnSet.contains(column))
@@ -161,7 +165,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             // Use the synthetic column name to access the join result.
             includeCols[i] = tableHandle.getColumns().get(i).getSynthColumnName();
         }
-        List<String> columnOrder = Arrays.asList(includeCols);
+        List<String> columnOrder = ImmutableList.of();
         List<String> cacheOrder = ImmutableList.of();
         // The address is not used to dispatch Pixels splits, so we use set it the localhost.
         HostAddress address = HostAddress.fromString("localhost:8080");
@@ -205,13 +209,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
                 for (JoinInput joinInput : joinOperator.getJoinInputs())
                 {
-                    PixelsSplit split = new PixelsSplit(connectorId, root.getSchemaName(), root.getTableName(),
-                            Storage.Scheme.minio.name(), joinInput.getOutput().getFileNames(), transHandle.getTransId(),
+                    PixelsSplit split = new PixelsSplit(
+                            transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
+                            Storage.Scheme.minio.name(), joinInput.getOutput().getFileNames(),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
                             false, false, Arrays.asList(address), columnOrder,
-                            cacheOrder, includeCols, emptyConstraint, TableType.JOINED,
-                            joinOperator.getJoinAlgo(), JSON.toJSONString(joinInput), null);
+                            cacheOrder, emptyConstraint, TableType.JOINED, joinOperator.getJoinAlgo(),
+                            JSON.toJSONString(joinInput), null);
                     splitsBuilder.add(split);
                 }
                 return new PixelsSplitSource(splitsBuilder.build());
@@ -253,11 +258,11 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
                 // Build the split of the aggregation result.
                 AggregationInput aggrInput = aggrOperator.getFinalAggrInput();
-                PixelsSplit split = new PixelsSplit(connectorId, root.getSchemaName(), root.getTableName(),
+                PixelsSplit split = new PixelsSplit(
+                        transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
                         Storage.Scheme.minio.name(), ImmutableList.of(aggrInput.getOutput().getPath()),
-                        transHandle.getTransId(), ImmutableList.of(0), ImmutableList.of(-1),
-                        false, false, Arrays.asList(address), columnOrder,
-                        cacheOrder, includeCols, emptyConstraint, TableType.AGGREGATED,
+                        ImmutableList.of(0), ImmutableList.of(-1), false, false,
+                        Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, TableType.AGGREGATED,
                         null, null, JSON.toJSONString(aggrInput));
                 return new PixelsSplitSource(ImmutableList.of(split));
             } catch (IOException | MetadataException e)
@@ -648,12 +653,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         // logger.info("constraint from table handle: " + constraint.toString(session));
         List<PixelsColumnHandle> desiredColumns = getIncludeColumns(tableHandle);
 
-        String[] includeCols = new String[desiredColumns.size()];
-        for (int i = 0; i < desiredColumns.size(); ++i)
-        {
-            includeCols[i] = desiredColumns.get(i).getColumnName();
-        }
-
         String schemaName = tableHandle.getSchemaName();
         String tableName = tableHandle.getTableName();
         Table table;
@@ -835,15 +834,15 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     List<HostAddress> orderedAddresses = toHostAddresses(
                                             storage.getLocations(orderedPaths.get(firstPath)));
 
-                                    PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
+                                    PixelsSplit pixelsSplit = new PixelsSplit(
+                                            transHandle.getTransId(), connectorId,
                                             tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                            table.getStorageScheme(), paths, transHandle.getTransId(),
+                                            table.getStorageScheme(), paths,
                                             Collections.nCopies(paths.size(), 0),
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
                                             order.getColumnOrder(), new ArrayList<>(0),
-                                            includeCols, constraint, TableType.BASE,
-                                            null, null, null);
+                                            constraint, TableType.BASE, null, null, null);
                                     // log.debug("Split in orderPath: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -875,12 +874,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             ensureLocality = true;
                                         }
 
-                                        PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
+                                        PixelsSplit pixelsSplit = new PixelsSplit(
+                                                transHandle.getTransId(), connectorId,
                                                 tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                                table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
+                                                table.getStorageScheme(), Arrays.asList(path),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, order.getColumnOrder(),
-                                                cacheColumnletOrders, includeCols, constraint, TableType.BASE,
+                                                cacheColumnletOrders, constraint, TableType.BASE,
                                                 null, null, null);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPath" + pixelsSplit.toString());
@@ -934,15 +934,15 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             List<HostAddress> orderedAddresses = toHostAddresses(
                                     storage.getLocations(orderedPaths.get(firstPath)));
 
-                            PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
+                            PixelsSplit pixelsSplit = new PixelsSplit(
+                                    transHandle.getTransId(), connectorId,
                                     tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                    table.getStorageScheme(), paths, transHandle.getTransId(),
+                                    table.getStorageScheme(), paths,
                                     Collections.nCopies(paths.size(), 0),
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
                                     order.getColumnOrder(), new ArrayList<>(0),
-                                    includeCols, constraint, TableType.BASE,
-                                    null, null, null);
+                                    constraint, TableType.BASE, null, null, null);
                             // logger.debug("Split in orderPath: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -960,14 +960,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             {
                                 List<HostAddress> compactAddresses = toHostAddresses(storage.getLocations(path));
 
-                                PixelsSplit pixelsSplit = new PixelsSplit(connectorId,
+                                PixelsSplit pixelsSplit = new PixelsSplit(
+                                        transHandle.getTransId(), connectorId,
                                         tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                        table.getStorageScheme(), Arrays.asList(path), transHandle.getTransId(),
+                                        table.getStorageScheme(), Arrays.asList(path),
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         order.getColumnOrder(), new ArrayList<>(0),
-                                        includeCols, constraint, TableType.BASE,
-                                        null, null, null);
+                                        constraint, TableType.BASE, null, null, null);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }

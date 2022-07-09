@@ -32,6 +32,7 @@ import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
 import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
+import io.pixelsdb.pixels.executor.plan.Table;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
@@ -46,7 +47,10 @@ import io.trino.spi.predicate.Domain;
 import io.trino.spi.type.Type;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -84,7 +88,7 @@ class PixelsPageSource implements ConnectorPageSource
 
     private int batchId;
 
-    public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, String[] includeCols,
+    public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles,
                             Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
                             PixelsFooterCache pixelsFooterCache, CompletableFuture<?> lambdaOutput,
                             AtomicInteger localSplitCounter)
@@ -92,7 +96,19 @@ class PixelsPageSource implements ConnectorPageSource
         this.split = split;
         this.storage = storage;
         this.columns = columnHandles;
-        this.includeCols = includeCols;
+        this.includeCols =  new String[columns.size()];
+        for (int i = 0; i < includeCols.length; ++i)
+        {
+            if (split.getTableType() == Table.TableType.BASE)
+            {
+                includeCols[i] = columns.get(i).getColumnName();
+            }
+            else
+            {
+                // Use the synthetic column name to access the join or aggregation result.
+                includeCols[i] = columns.get(i).getSynthColumnName();
+            }
+        }
         this.numColumnToRead = columnHandles.size();
         this.footerCache = pixelsFooterCache;
         this.localSplitCounter = localSplitCounter;
@@ -112,7 +128,7 @@ class PixelsPageSource implements ConnectorPageSource
         {
             TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
                     split.getSchemaName(), split.getTableName(),
-                    split.getIncludeCols(), split.getConstraint());
+                    includeCols, split.getConstraint());
             if (scanFilter.getColumnFilters().isEmpty())
             {
                 this.filter = Optional.empty();
@@ -126,6 +142,9 @@ class PixelsPageSource implements ConnectorPageSource
         }
         else
         {
+            /* If lambda (cloud function) is used, all filters have been pushed down,
+             * no need to do filtering here.
+             */
             this.filter = Optional.empty();
             this.blocked = lambdaOutput.whenComplete(((ret, err) -> {
                 if (err != null)
@@ -161,33 +180,32 @@ class PixelsPageSource implements ConnectorPageSource
             return;
         }
 
-        Map<PixelsColumnHandle, Domain> domains = new HashMap<>();
-        if (split.getConstraint().getDomains().isPresent())
-        {
-            domains = split.getConstraint().getDomains().get();
-        }
-        List<PixelsTupleDomainPredicate.ColumnReference<PixelsColumnHandle>> columnReferences =
-                new ArrayList<>(domains.size());
-        for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
-        {
-            PixelsColumnHandle column = entry.getKey();
-            String columnName = column.getColumnName();
-            int columnOrdinal = split.getOrder().indexOf(columnName);
-            columnReferences.add(
-                    new PixelsTupleDomainPredicate.ColumnReference<>(
-                            column,
-                            columnOrdinal,
-                            column.getColumnType()));
-        }
-        PixelsPredicate predicate = new PixelsTupleDomainPredicate<>(split.getConstraint(), columnReferences);
-
         this.option = new PixelsReaderOption();
         this.option.skipCorruptRecords(true);
         this.option.tolerantSchemaEvolution(true);
         this.option.includeCols(includeCols);
-        this.option.predicate(predicate);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.queryId(split.getQueryId());
+
+        if (split.getConstraint().getDomains().isPresent() && !split.getColumnOrder().isEmpty())
+        {
+            Map<PixelsColumnHandle, Domain> domains = split.getConstraint().getDomains().get();
+            List<PixelsTupleDomainPredicate.ColumnReference<PixelsColumnHandle>> columnReferences =
+                    new ArrayList<>(domains.size());
+            for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
+            {
+                PixelsColumnHandle column = entry.getKey();
+                String columnName = column.getColumnName();
+                int columnOrdinal = split.getColumnOrder().indexOf(columnName);
+                columnReferences.add(
+                        new PixelsTupleDomainPredicate.ColumnReference<>(
+                                column,
+                                columnOrdinal,
+                                column.getColumnType()));
+            }
+            PixelsPredicate predicate = new PixelsTupleDomainPredicate<>(split.getConstraint(), columnReferences);
+            this.option.predicate(predicate);
+        }
 
         try
         {

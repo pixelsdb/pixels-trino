@@ -439,37 +439,13 @@ public class PixelsMetadata implements ConnectorMetadata
                 .map(PixelsColumnHandle.class::cast).collect(toImmutableList());
         List<PixelsColumnHandle> tableColumns = tableHandle.getColumns();
 
-        boolean equals = newColumns.size() == tableColumns.size();
-        if (equals)
-        {
-            Iterator<PixelsColumnHandle> itNew = newColumns.iterator();
-            Iterator<PixelsColumnHandle> itTable = tableColumns.iterator();
-            PixelsColumnHandle newColumn, tableColumn;
-            while (itNew.hasNext())
-            {
-                newColumn = itNew.next();
-                tableColumn = itTable.next();
-                if (!newColumn.equals(tableColumn))
-                {
-                    equals = false;
-                    break;
-                }
-            }
-        }
-
-        if (equals)
+        Set<PixelsColumnHandle> newColumnSet = ImmutableSet.copyOf(newColumns);
+        Set<PixelsColumnHandle> tableColumnSet = ImmutableSet.copyOf(tableColumns);
+        if (newColumnSet.equals(tableColumnSet))
         {
             logger.info("[projection push down is rejected]");
             return Optional.empty();
         }
-
-        Set<PixelsColumnHandle> newColumnSet = ImmutableSet.copyOf(newColumns);
-        Set<PixelsColumnHandle> tableColumnSet = ImmutableSet.copyOf(tableColumns);
-//        if (newColumnSet.equals(tableColumnSet))
-//        {
-//            logger.info("[projection push down is rejected]");
-//            return Optional.empty();
-//        }
 
         verify(tableColumnSet.containsAll(newColumnSet),
                 "applyProjection called with columns %s and some are not available in existing query: %s",

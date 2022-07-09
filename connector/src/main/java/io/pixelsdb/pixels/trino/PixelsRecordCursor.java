@@ -45,7 +45,6 @@ import io.trino.spi.type.Type;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -62,6 +61,7 @@ public class PixelsRecordCursor implements RecordCursor
     private final int BatchSize;
     private final PixelsSplit split;
     private final List<PixelsColumnHandle> columns;
+    private final String[] includeCols;
     private final Storage storage;
     private boolean closed;
     private PixelsReader pixelsReader;
@@ -95,6 +95,11 @@ public class PixelsRecordCursor implements RecordCursor
         this.split = split;
         this.storage = storage;
         this.columns = columnHandles;
+        this.includeCols = new String[columns.size()];
+        for (int i = 0; i < columns.size(); i++)
+        {
+            this.includeCols[i] = columns.get(i).getColumnName();
+        }
         this.numColumnToRead = columnHandles.size();
         this.footerCache = footerCache;
         this.closed = false;
@@ -104,7 +109,7 @@ public class PixelsRecordCursor implements RecordCursor
         this.rowBatchSize = 0;
         this.filter = PixelsSplitManager.createTableScanFilter(
                 split.getSchemaName(), split.getTableName(),
-                split.getIncludeCols(), split.getConstraint());
+                this.includeCols, split.getConstraint());
         this.filtered = new Bitmap(this.BatchSize, true);
         this.tmp = new Bitmap(this.BatchSize, false);
 
@@ -119,39 +124,32 @@ public class PixelsRecordCursor implements RecordCursor
     private void readFirstPath(PixelsSplit split, PixelsCacheReader pixelsCacheReader,
                                PixelsFooterCache pixelsFooterCache)
     {
-        String[] cols = new String[columns.size()];
-        for (int i = 0; i < columns.size(); i++)
-        {
-            cols[i] = columns.get(i).getColumnName();
-        }
-
-        Map<PixelsColumnHandle, Domain> domains = new HashMap<>();
-        if (split.getConstraint().getDomains().isPresent())
-        {
-            domains = split.getConstraint().getDomains().get();
-        }
-        List<PixelsTupleDomainPredicate.ColumnReference<PixelsColumnHandle>> columnReferences =
-                new ArrayList<>(domains.size());
-        for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
-        {
-            PixelsColumnHandle column = entry.getKey();
-            String columnName = column.getColumnName();
-            int columnOrdinal = split.getOrder().indexOf(columnName);
-            columnReferences.add(
-                    new PixelsTupleDomainPredicate.ColumnReference<>(
-                            column,
-                            columnOrdinal,
-                            column.getColumnType()));
-        }
-        PixelsPredicate predicate = new PixelsTupleDomainPredicate<>(split.getConstraint(), columnReferences);
-
         this.option = new PixelsReaderOption();
         this.option.skipCorruptRecords(true);
         this.option.tolerantSchemaEvolution(true);
-        this.option.includeCols(cols);
-        this.option.predicate(predicate);
+        this.option.includeCols(this.includeCols);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.queryId(split.getQueryId());
+
+        if (split.getConstraint().getDomains().isPresent() && !split.getColumnOrder().isEmpty())
+        {
+            Map<PixelsColumnHandle, Domain> domains = split.getConstraint().getDomains().get();
+            List<PixelsTupleDomainPredicate.ColumnReference<PixelsColumnHandle>> columnReferences =
+                    new ArrayList<>(domains.size());
+            for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
+            {
+                PixelsColumnHandle column = entry.getKey();
+                String columnName = column.getColumnName();
+                int columnOrdinal = split.getColumnOrder().indexOf(columnName);
+                columnReferences.add(
+                        new PixelsTupleDomainPredicate.ColumnReference<>(
+                                column,
+                                columnOrdinal,
+                                column.getColumnType()));
+            }
+            PixelsPredicate predicate = new PixelsTupleDomainPredicate<>(split.getConstraint(), columnReferences);
+            this.option.predicate(predicate);
+        }
 
         try
         {
