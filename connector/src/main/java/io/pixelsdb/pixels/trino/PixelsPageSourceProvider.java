@@ -134,19 +134,21 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             {
                 // perform scan push down.
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
-                // TODO: if lambda scan is used, no need to read the filter columns.
-                String[] includeCols = new String[withFilterColumns.size()];
-                for (int i = 0; i < includeCols.length; ++i)
-                {
-                    includeCols[i] = withFilterColumns.get(i).getColumnName();
-                }
                 if (config.isLambdaEnabled() && this.localSplitCounter.get() >= config.getLocalScanConcurrency())
                 {
+                    String[] columnsToRead = new String[withFilterColumns.size()];
+                    boolean[] projection = new boolean[withFilterColumns.size()];
+                    int projectionSize = pixelsColumns.size();
+                    for (int i = 0; i < columnsToRead.length; ++i)
+                    {
+                        columnsToRead[i] = withFilterColumns.get(i).getColumnName();
+                        projection[i] = i < projectionSize;
+                    }
                     MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                     Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
                     IntermediateFileCleaner.Instance().registerStorage(storage);
-                    return new PixelsPageSource(pixelsSplit, withFilterColumns, storage, cacheFile, indexFile,
-                            pixelsFooterCache, getLambdaScanOutput(pixelsSplit, includeCols), null);
+                    return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
+                            pixelsFooterCache, getLambdaScanOutput(pixelsSplit, columnsToRead, projection), null);
                 } else
                 {
                     this.localSplitCounter.incrementAndGet();
@@ -267,19 +269,20 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         }));
     }
 
-    private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit, String[] includeCols)
+    private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit, String[] columnsToRead, boolean[] projection)
     {
         ScanInput scanInput = new ScanInput();
         scanInput.setQueryId(inputSplit.getQueryId());
         ScanTableInfo tableInfo = new ScanTableInfo();
         tableInfo.setTableName(inputSplit.getTableName());
-        tableInfo.setColumnsToRead(includeCols);
+        tableInfo.setColumnsToRead(columnsToRead);
         Pair<Integer, InputSplit> inputSplitPair = getInputSplit(inputSplit);
         tableInfo.setInputSplits(Arrays.asList(inputSplitPair.getRight()));
         TableScanFilter filter = createTableScanFilter(inputSplit.getSchemaName(),
-                inputSplit.getTableName(), includeCols, inputSplit.getConstraint());
+                inputSplit.getTableName(), columnsToRead, inputSplit.getConstraint());
         tableInfo.setFilter(JSON.toJSONString(filter));
         scanInput.setTableInfo(tableInfo);
+        scanInput.setScanProjection(projection);
         // logger.info("table scan filter: " + tableInfo.getFilter());
         String folder = config.getMinioOutputFolderForQuery(inputSplit.getQueryId());
         String endpoint = config.getMinioEndpoint();

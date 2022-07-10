@@ -815,7 +815,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 List<String> orderedPaths = storage.listPaths(layout.getOrderPath());
 
                                 int numPath = orderedPaths.size();
-                                for (int i = 0; i < numPath; ++i)
+                                for (int i = 0; i < numPath; )
                                 {
                                     int firstPath = i; // the path of the first ordered file in the split.
                                     List<String> paths = new ArrayList<>(this.multiSplitForOrdered ? splitSize : 1);
@@ -827,7 +827,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         }
                                     } else
                                     {
-                                        paths.add(orderedPaths.get(i));
+                                        paths.add(orderedPaths.get(i++));
                                     }
 
                                     // We do not cache files in the ordered path, thus get locations from the storage.
@@ -916,7 +916,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         List<String> orderedPaths = storage.listPaths(layout.getOrderPath());
 
                         int numPath = orderedPaths.size();
-                        for (int i = 0; i < numPath; ++i)
+                        for (int i = 0; i < numPath; )
                         {
                             int firstPath = i;
                             List<String> paths = new ArrayList<>(this.multiSplitForOrdered ? splitSize : 1);
@@ -928,7 +928,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 }
                             } else
                             {
-                                paths.add(orderedPaths.get(i));
+                                paths.add(orderedPaths.get(i++));
                             }
 
                             List<HostAddress> orderedAddresses = toHostAddresses(
