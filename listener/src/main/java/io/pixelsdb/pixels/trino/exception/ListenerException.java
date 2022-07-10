@@ -22,9 +22,9 @@ package io.pixelsdb.pixels.trino.exception;
 /**
  * @author hank
  */
-public class ListenerExecption extends Exception
+public class ListenerException extends Exception
 {
-    public ListenerExecption(String msg)
+    public ListenerException(String msg)
     {
         super(msg);
     }
