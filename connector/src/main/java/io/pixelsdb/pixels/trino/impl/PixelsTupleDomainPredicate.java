@@ -19,15 +19,15 @@
  */
 package io.pixelsdb.pixels.trino.impl;
 
+import com.google.common.collect.ImmutableList;
+import io.pixelsdb.pixels.core.exception.PixelsReaderException;
+import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
+import io.pixelsdb.pixels.core.stats.*;
 import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.Range;
 import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.predicate.ValueSet;
 import io.trino.spi.type.*;
-import com.google.common.collect.ImmutableList;
-import io.pixelsdb.pixels.core.exception.PixelsReaderException;
-import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
-import io.pixelsdb.pixels.core.stats.*;
 
 import java.util.Collection;
 import java.util.List;
@@ -35,8 +35,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
-import static io.trino.spi.type.BooleanType.BOOLEAN;
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.trino.spi.type.BooleanType.BOOLEAN;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -112,23 +112,23 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
             Domain predicateDomain = domains.get(columnReference.getColumn());
             if (predicateDomain == null)
             {
-                // no predicate on this column, so continue
+                // no predicate on this column, continue
                 continue;
             }
             ColumnStats columnStats = statisticsByColumnIndex.get(columnReference.getPhysicalOrdinal());
             if (columnStats == null)
             {
-                // no column statistics, so continue
+                // no column statistics, continue
                 continue;
             }
 
-            if (domainMatches(columnReference, predicateDomain, numberOfRows, columnStats))
+            if (!domainMatches(columnReference, predicateDomain, numberOfRows, columnStats))
             {
-                return true;
+                return false;
             }
         }
 
-        return false;
+        return true;
     }
 
     /**
@@ -166,7 +166,7 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
      * @param predicateDomain the predicate domain on the column.
      * @param numberOfRows the total number of rows in this horizontal unit (file, row group, or pixel).
      * @param columnStats the statistics on the column.
-     * @return
+     * @return true if the columnStats matches the predicateDomain
      */
     private boolean domainMatches(ColumnReference<C> columnReference, Domain predicateDomain,
                                    long numberOfRows, ColumnStats columnStats)
@@ -240,7 +240,7 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
      * @param rowCount the number of rows in the corresponding horizontal data unit
      *                 (pixel, row group, file, etc.).
      * @param columnStats the statistics of this column in the horizontal data unit.
-     * @return
+     * @return the domain object of the columnStats
      */
     private Domain getDomain(Type type, long rowCount, ColumnStats columnStats)
     {
@@ -342,37 +342,30 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
     private <T extends Comparable<T>> Domain createDomain(Type type, boolean hasNullValue,
                                                           RangeStats<T> rangeStats)
     {
-        // PIXELS-103: what's the purpose of this if-branch?
-        //if (type instanceof VarcharType || type instanceof CharType)
-        //{
-        //    return createDomain(type, hasNullValue, rangeStats, value -> value);
-        //}
-        // return createDomain(type, hasNullValue, rangeStats, value -> value);
-        // PIXELS-103: avoid additional function call.
         T min = rangeStats.getMinimum();
         T max = rangeStats.getMaximum();
 
-        if (min != null && max != null)
+        if (rangeStats.hasMinimum() && rangeStats.hasMaximum())
         {
             return Domain.create(
                     ValueSet.ofRanges(
                             Range.range(type, min, true, max, true)),
                     hasNullValue);
         }
-        if (max != null)
+        if (rangeStats.hasMaximum())
         {
             return Domain.create(ValueSet.ofRanges(Range.lessThanOrEqual(type, max)), hasNullValue);
         }
-        if (min != null)
+        if (rangeStats.hasMinimum())
         {
             return Domain.create(ValueSet.ofRanges(Range.greaterThanOrEqual(type, min)), hasNullValue);
         }
 
         /**
-         * Comments added in PIXELS-103:
-         * If no min nor max is defined, we create a column domain to accepted any predicate.
+         * PIXELS-170:
+         * If min and max are not defined, we create a column domain to reject all predicates.
          */
-        return Domain.create(ValueSet.all(type), hasNullValue);
+        return Domain.create(ValueSet.none(type), hasNullValue);
     }
 
     private <F, T extends Comparable<T>> Domain createDomain(Type type, boolean hasNullValue,
@@ -382,23 +375,27 @@ public class PixelsTupleDomainPredicate<C> implements PixelsPredicate
         F min = rangeStats.getMinimum();
         F max = rangeStats.getMaximum();
 
-        if (min != null && max != null)
+        if (rangeStats.hasMinimum() && rangeStats.hasMaximum())
         {
             return Domain.create(
                     ValueSet.ofRanges(
                             Range.range(type, function.apply(min), true, function.apply(max), true)),
                     hasNullValue);
         }
-        if (max != null)
+        if (rangeStats.hasMaximum())
         {
             return Domain.create(ValueSet.ofRanges(Range.lessThanOrEqual(type, function.apply(max))), hasNullValue);
         }
-        if (min != null)
+        if (rangeStats.hasMinimum())
         {
             return Domain.create(ValueSet.ofRanges(Range.greaterThanOrEqual(type, function.apply(min))), hasNullValue);
         }
 
-        return Domain.create(ValueSet.all(type), hasNullValue);
+        /**
+         * PIXELS-170:
+         * If min and max are not defined, we create a column domain to reject all predicates.
+         */
+        return Domain.create(ValueSet.none(type), hasNullValue);
     }
 
     public static class ColumnReference<C>
