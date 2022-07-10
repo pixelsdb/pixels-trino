@@ -181,7 +181,7 @@ public class PixelsEventListener implements EventListener
 
                         LogWriter.write(queryId + "," + user + "," + wall + "," + rsWaiting + "," +
                                 queued + "," + planning + "," + execution + "," + throughput + "," +
-                                (gcms>=0 ? gcms : "na") + "," + gcTasks + "," + (totalGcSec/tasks));
+                                (gcms>=0 ? gcms : "na") + "," + gcTasks + "," + (tasks > 0 ? totalGcSec/tasks : "na"));
                         LogWriter.newLine();
                         LogWriter.flush();
                     }
