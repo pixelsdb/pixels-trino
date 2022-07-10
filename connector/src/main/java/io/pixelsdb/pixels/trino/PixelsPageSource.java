@@ -126,16 +126,16 @@ class PixelsPageSource implements ConnectorPageSource
 
         if (lambdaOutput == null)
         {
-            TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
+            if (split.getConstraint().getDomains().isPresent())
+            {
+                TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
                     split.getSchemaName(), split.getTableName(),
                     includeCols, split.getConstraint());
-            if (scanFilter.getColumnFilters().isEmpty())
-            {
-                this.filter = Optional.empty();
+                this.filter = Optional.of(scanFilter);
             }
             else
             {
-                this.filter = Optional.of(scanFilter);
+                this.filter = Optional.empty();
             }
             readFirstPath();
             this.blocked = NOT_BLOCKED;
