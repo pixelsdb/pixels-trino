@@ -22,11 +22,15 @@ package io.pixelsdb.pixels.trino;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.core.PixelsProto;
 import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.stats.RangeStats;
+import io.pixelsdb.pixels.core.stats.StatsRecorder;
 import io.pixelsdb.pixels.executor.aggregation.FunctionType;
 import io.pixelsdb.pixels.executor.plan.Table;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
@@ -39,10 +43,12 @@ import io.trino.spi.expression.Variable;
 import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.security.TrinoPrincipal;
 import io.trino.spi.statistics.ColumnStatistics;
+import io.trino.spi.statistics.DoubleRange;
 import io.trino.spi.statistics.Estimate;
 import io.trino.spi.statistics.TableStatistics;
 
 import javax.inject.Inject;
+import java.nio.ByteBuffer;
 import java.util.*;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -466,12 +472,12 @@ public class PixelsMetadata implements ConnectorMetadata
     }
 
     @Override
-    public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle tableHandle,
+    public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle table,
                                               Constraint constraint)
     {
         TableStatistics.Builder tableStatBuilder = TableStatistics.builder();
-        PixelsTableHandle table = (PixelsTableHandle) tableHandle;
-        List<Column> columns = metadataProxy.getColumnStatistics(table.getSchemaName(), table.getTableName());
+        PixelsTableHandle tableHandle = (PixelsTableHandle) table;
+        List<Column> columns = metadataProxy.getColumnStatistics(tableHandle.getSchemaName(), tableHandle.getTableName());
         requireNonNull(columns, "columns is null");
         Map<String, Column> columnMap = new HashMap<>(columns.size());
         for (Column column : columns)
@@ -481,27 +487,50 @@ public class PixelsMetadata implements ConnectorMetadata
 
         try
         {
-            long rowCount = metadataProxy.getTable(table.getSchemaName(), table.getTableName()).getRowCount();
+            long rowCount = metadataProxy.getTable(tableHandle.getSchemaName(), tableHandle.getTableName()).getRowCount();
             tableStatBuilder.setRowCount(Estimate.of(rowCount));
             // logger.info("table '" + table.getTableName() + "' row count: " + rowCount);
         } catch (MetadataException e)
         {
-            logger.error("failed to get table from metadata service", e);
+            logger.error(e, "failed to get table from metadata service");
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
         }
 
-        for (PixelsColumnHandle columnHandle : table.getColumns())
+        for (PixelsColumnHandle columnHandle : tableHandle.getColumns())
         {
-            ColumnStatistics.Builder columnStatBuilder = ColumnStatistics.builder();
+            ColumnStatistics.Builder columnStatsBuilder = ColumnStatistics.builder();
             Column column = columnMap.get(columnHandle.getColumnName());
-            columnStatBuilder.setDataSize(Estimate.of(column.getSize()));
-            columnStatBuilder.setNullsFraction(Estimate.of(column.getNullFraction()));
-            columnStatBuilder.setDistinctValuesCount(Estimate.of(column.getCardinality()));
-            // logger.info("column '" + columnHandle.getColumnName() + "'(" + column.getName() +
-            //         ") data size: " + column.getSize() + ", null frac: " + column.getNullFraction() +
-            //         ", cardinality: " +column.getCardinality());
-            // TODO: set range.
-            tableStatBuilder.setColumnStatistics(columnHandle, columnStatBuilder.build());
+            columnStatsBuilder.setDataSize(Estimate.of(column.getSize()));
+            columnStatsBuilder.setNullsFraction(Estimate.of(column.getNullFraction()));
+            columnStatsBuilder.setDistinctValuesCount(Estimate.of(column.getCardinality()));
+            try
+            {
+                TypeDescription pixelsType = metadataProxy.parsePixelsType(columnHandle.getColumnType());
+                ByteBuffer statsBytes = column.getRecordStats();
+                if (statsBytes != null && statsBytes.remaining() > 0)
+                {
+                    PixelsProto.ColumnStatistic columnStatsPb = PixelsProto.ColumnStatistic.parseFrom(statsBytes);
+                    StatsRecorder statsRecorder = StatsRecorder.create(pixelsType, columnStatsPb);
+                    if (statsRecorder instanceof RangeStats)
+                    {
+                        /**
+                         * When needed, we can also get a general range stats like this:
+                         * GeneralRangeStats rangeStats = StatsRecorder.toGeneral(pixelsType, (RangeStats<?>) statsRecorder);
+                         * The double min/max in general range stats is the readable representation of the min/max value.
+                         */
+                        RangeStats<?> rangeStats = (RangeStats<?>) statsRecorder;
+                        logger.info(column.getName() + " column range: {mix:" + rangeStats.getMinimum() + ", max:" +
+                                rangeStats.getMaximum() + ", hasMin:" + rangeStats.hasMinimum() +
+                                ", hasMax:" + rangeStats.hasMaximum() + "}");
+                        columnStatsBuilder.setRange(DoubleRange.from(columnHandle.getColumnType(),
+                                rangeStats.getMinimum(), rangeStats.getMaximum()));
+                    }
+                }
+            } catch (InvalidProtocolBufferException e)
+            {
+                logger.error(e, "failed to parse record statistics from protobuf object");
+            }
+            tableStatBuilder.setColumnStatistics(columnHandle, columnStatsBuilder.build());
         }
 
         return tableStatBuilder.build();
@@ -535,22 +564,6 @@ public class PixelsMetadata implements ConnectorMetadata
         }
 
         logger.info("aggregation push down on: " + tableHandle.getSchemaName() + "." + tableHandle.getTableName());
-        for (ColumnHandle columnHandle : assignments.values())
-        {
-            logger.info("--aggregation assignment: " + columnHandle.toString());
-        }
-        for (AggregateFunction aggregate : aggregates)
-        {
-            logger.info("--aggregation: " + aggregate.toString());
-        }
-        for (List<ColumnHandle> groupingSet: groupingSets)
-        {
-            logger.info("--grouping set: ");
-            for (ColumnHandle column : groupingSet)
-            {
-                logger.info("----synthetic column: " + ((PixelsColumnHandle)column).getSynthColumnName());
-            }
-        }
 
         ImmutableList.Builder<PixelsColumnHandle> newColumnsBuilder = ImmutableList.builder();
         ImmutableList.Builder<ConnectorExpression> projections = ImmutableList.builder();
