@@ -190,6 +190,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             try
             {
                 inputSplit.permute(Storage.Scheme.minio, (AggregationOutput) aggrOutput);
+                logger.info("final aggr output: " + JSON.toJSONString(aggrOutput));
             }
             catch (Exception e)
             {
@@ -261,6 +262,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             try
             {
                 inputSplit.permute(Storage.Scheme.minio, (JoinOutput) joinOutput);
+                logger.info("final join output: " + JSON.toJSONString(joinOutput));
             }
             catch (Exception e)
             {
