@@ -23,7 +23,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.inject.Inject;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
+import io.pixelsdb.pixels.common.metadata.MetadataCache;
 import io.pixelsdb.pixels.common.metadata.MetadataService;
+import io.pixelsdb.pixels.common.metadata.SchemaTableName;
 import io.pixelsdb.pixels.common.metadata.domain.*;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -31,13 +33,10 @@ import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.pixelsdb.pixels.trino.PixelsTypeParser;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
-import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.type.Type;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -49,7 +48,7 @@ public class PixelsMetadataProxy
     private static final Logger logger = Logger.get(PixelsMetadataProxy.class);
     private final MetadataService metadataService;
     private final PixelsTypeParser typeParser;
-    private final Map<SchemaTableName, List<Column>> tableColumnsMap = new HashMap<>();
+    private final MetadataCache metadataCache = MetadataCache.Instance();
 
     @Inject
     public PixelsMetadataProxy(PixelsTrinoConfig config, PixelsTypeParser typeParser)
@@ -71,6 +70,11 @@ public class PixelsMetadataProxy
                         "Failed to shutdown metadata service (client).");
             }
         }));
+    }
+
+    public MetadataService getMetadataService()
+    {
+        return metadataService;
     }
 
     public List<String> getSchemaNames() throws MetadataException
@@ -118,7 +122,7 @@ public class PixelsMetadataProxy
         ImmutableList.Builder<PixelsColumnHandle> columnsBuilder = ImmutableList.builder();
         List<Column> columnsList = metadataService.getColumns(schemaName, tableName, true);
         SchemaTableName schemaTableName = new SchemaTableName(schemaName, tableName);
-        this.tableColumnsMap.put(schemaTableName, columnsList);
+        this.metadataCache.cacheTableColumns(schemaTableName, columnsList);
         for (int i = 0; i < columnsList.size(); i++) {
             Column c = columnsList.get(i);
             Type trinoType = typeParser.parseTrinoType(c.getType());
@@ -139,7 +143,7 @@ public class PixelsMetadataProxy
 
     public List<Column> getColumnStatistics(String schemaName, String tableName)
     {
-        return this.tableColumnsMap.get(new SchemaTableName(schemaName, tableName));
+        return this.metadataCache.getTableColumns(new SchemaTableName(schemaName, tableName));
     }
 
     public List<Layout> getDataLayouts (String schemaName, String tableName) throws MetadataException

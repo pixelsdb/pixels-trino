@@ -61,5 +61,9 @@ public class TestString
         timestamp.setTime(time/1000);
         timestamp.setNanos((int) (time%1000000*1000));
         System.out.println(timestamp);
+
+        String a = "a|b|c";
+        String[] split = a.split("\\|");
+        System.out.println(split.length);
     }
 }
