@@ -72,9 +72,11 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.pixelsdb.pixels.executor.lambda.Operator.waitForCompletion;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -197,7 +199,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = (JoinOperator) executor.getRootOperator();
                 logger.info("join operator: " + JSON.toJSONString(joinOperator));
-                joinOperator.executePrev();
+                CompletableFuture<?>[] prevOutputs = joinOperator.executePrev();
+                waitForCompletion(prevOutputs);
 
                 Thread outputCollector = new Thread(() -> {
                     try
@@ -248,7 +251,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
                 AggregationOperator aggrOperator = (AggregationOperator) executor.getRootOperator();
                 logger.info("aggregation operator: " + JSON.toJSONString(aggrOperator));
-                aggrOperator.executePrev();
+                CompletableFuture<?>[] prevOutputs = aggrOperator.executePrev();
+                waitForCompletion(prevOutputs);
 
                 Thread outputCollector = new Thread(() -> {
                     try
