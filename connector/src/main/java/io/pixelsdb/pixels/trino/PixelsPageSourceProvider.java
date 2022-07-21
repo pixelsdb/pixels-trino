@@ -117,7 +117,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 // perform aggregation push down.
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                 Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
-                IntermediateFileCleaner.Instance().registerStorage(storage);
+                if (config.isCleanLocalResult())
+                {
+                    IntermediateFileCleaner.Instance().registerStorage(storage);
+                }
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
             }
@@ -126,7 +129,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 // perform join push down.
                 MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                 Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
-                IntermediateFileCleaner.Instance().registerStorage(storage);
+                if (config.isCleanLocalResult())
+                {
+                    IntermediateFileCleaner.Instance().registerStorage(storage);
+                }
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaJoinOutput(pixelsSplit), null);
             }
@@ -146,7 +152,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                     }
                     MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
                     Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
-                    IntermediateFileCleaner.Instance().registerStorage(storage);
+                    if (config.isCleanLocalResult())
+                    {
+                        IntermediateFileCleaner.Instance().registerStorage(storage);
+                    }
                     return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                             pixelsFooterCache, getLambdaScanOutput(pixelsSplit, columnsToRead, projection), null);
                 } else

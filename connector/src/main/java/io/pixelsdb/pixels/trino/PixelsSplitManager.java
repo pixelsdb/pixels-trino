@@ -23,6 +23,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import io.etcd.jetcd.KeyValue;
@@ -209,6 +210,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.info("join outputs: " + json);
+                        logger.info("cumulated duration " + outputCollection.getCumulativeDurationMs());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the join plan using pixels-lambda");
@@ -261,6 +263,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.info("aggregation outputs: " + json);
+                        logger.info("cumulated duration " + outputCollection.getCumulativeDurationMs());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the aggregation plan using pixels-lambda");
@@ -463,7 +466,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             joinEndian = JoinAdvisor.Instance().getJoinEndian(leftTable, rightTable);
             joinAlgo = JoinAdvisor.Instance().getJoinAlgorithm(leftTable, rightTable, joinEndian);
-        } catch (MetadataException e)
+        } catch (MetadataException | InvalidProtocolBufferException e)
         {
             logger.error("failed to get join algorithm", e);
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);

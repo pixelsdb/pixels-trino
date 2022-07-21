@@ -51,6 +51,7 @@ public class PixelsTrinoConfig
 
     private String pixelsConfig = null;
     private boolean lambdaEnabled = false;
+    private boolean cleanLocalResult = true;
     private int localScanConcurrency = -1;
     private String minioOutputFolder = null;
     private String minioEndpointIP = null;
@@ -149,6 +150,13 @@ public class PixelsTrinoConfig
         return this;
     }
 
+    @Config("clean.local.result")
+    public PixelsTrinoConfig setCleanLocalResult(boolean cleanLocalResult)
+    {
+        this.cleanLocalResult = cleanLocalResult;
+        return this;
+    }
+
     @Config("local.scan.concurrency")
     public PixelsTrinoConfig setLocalScanConcurrency(int concurrency)
     {
@@ -202,6 +210,11 @@ public class PixelsTrinoConfig
     public int getLocalScanConcurrency()
     {
         return localScanConcurrency;
+    }
+
+    public boolean isCleanLocalResult()
+    {
+        return cleanLocalResult;
     }
 
     @NotNull
