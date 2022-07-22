@@ -77,7 +77,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.pixelsdb.pixels.executor.lambda.Operator.waitForCompletion;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -200,8 +199,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = (JoinOperator) executor.getRootOperator();
                 logger.info("join operator: " + JSON.toJSONString(joinOperator));
-                CompletableFuture<?>[] prevOutputs = joinOperator.executePrev();
-                waitForCompletion(prevOutputs);
+                CompletableFuture<Void> prevStages = joinOperator.executePrev();
+                prevStages.join();
+                logger.info("invoke " + joinOperator.getName());
 
                 Thread outputCollector = new Thread(() -> {
                     try
@@ -253,8 +253,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
                 AggregationOperator aggrOperator = (AggregationOperator) executor.getRootOperator();
                 logger.info("aggregation operator: " + JSON.toJSONString(aggrOperator));
-                CompletableFuture<?>[] prevOutputs = aggrOperator.executePrev();
-                waitForCompletion(prevOutputs);
+                CompletableFuture<Void> prevStages = aggrOperator.executePrev();
+                prevStages.join();
+                logger.info("invoke " + aggrOperator.getName());
 
                 Thread outputCollector = new Thread(() -> {
                     try
