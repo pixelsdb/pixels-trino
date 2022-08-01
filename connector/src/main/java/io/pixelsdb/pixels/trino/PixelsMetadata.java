@@ -489,7 +489,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             long rowCount = metadataProxy.getTable(tableHandle.getSchemaName(), tableHandle.getTableName()).getRowCount();
             tableStatBuilder.setRowCount(Estimate.of(rowCount));
-            // logger.info("table '" + table.getTableName() + "' row count: " + rowCount);
+            logger.info("table '" + tableHandle.getTableName() + "' row count: " + rowCount);
         } catch (MetadataException e)
         {
             logger.error(e, "failed to get table from metadata service");
@@ -519,7 +519,7 @@ public class PixelsMetadata implements ConnectorMetadata
                          * The double min/max in general range stats is the readable representation of the min/max value.
                          */
                         RangeStats<?> rangeStats = (RangeStats<?>) statsRecorder;
-                        logger.info(column.getName() + " column range: {mix:" + rangeStats.getMinimum() + ", max:" +
+                        logger.info(column.getName() + " column range: {min:" + rangeStats.getMinimum() + ", max:" +
                                 rangeStats.getMaximum() + ", hasMin:" + rangeStats.hasMinimum() +
                                 ", hasMax:" + rangeStats.hasMaximum() + "}");
                         columnStatsBuilder.setRange(DoubleRange.from(columnHandle.getColumnType(),
