@@ -419,7 +419,7 @@ public class PixelsMetadata implements ConnectorMetadata
         if (oldDomain.equals(newDomain))
         {
             // returns empty means reject filter push down.
-            logger.info("[filter push down is rejected on " + newDomain.toString(session) + "]");
+            logger.debug("[filter push down is rejected on " + newDomain.toString(session) + "]");
             return Optional.empty();
         }
 
@@ -430,7 +430,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 tableHandle.getAggrHandle());
 
         // pushing down without statistics pre-calculation.
-        logger.info("filter push down on " + newDomain.toString(session));
+        logger.debug("filter push down on " + newDomain.toString(session));
         return Optional.of(new ConstraintApplicationResult<>(tableHandle, remainingFilter, false));
     }
 
@@ -449,7 +449,7 @@ public class PixelsMetadata implements ConnectorMetadata
         Set<PixelsColumnHandle> tableColumnSet = ImmutableSet.copyOf(tableColumns);
         if (newColumnSet.equals(tableColumnSet))
         {
-            logger.info("[projection push down is rejected]");
+            logger.debug("[projection push down is rejected]");
             return Optional.empty();
         }
 
@@ -457,7 +457,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 "applyProjection called with columns %s and some are not available in existing query: %s",
                 newColumnSet, tableColumnSet);
 
-        logger.info("projection push down on table " + tableHandle.getTableName());
+        logger.debug("projection push down on table " + tableHandle.getTableName());
         return Optional.of(new ProjectionApplicationResult<>(
                 new PixelsTableHandle(connectorId, tableHandle.getSchemaName(),
                         tableHandle.getTableName(),tableHandle.getTableAlias(),
@@ -489,7 +489,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             long rowCount = metadataProxy.getTable(tableHandle.getSchemaName(), tableHandle.getTableName()).getRowCount();
             tableStatBuilder.setRowCount(Estimate.of(rowCount));
-            logger.info("table '" + tableHandle.getTableName() + "' row count: " + rowCount);
+            logger.debug("table '" + tableHandle.getTableName() + "' row count: " + rowCount);
         } catch (MetadataException e)
         {
             logger.error(e, "failed to get table from metadata service");
@@ -519,7 +519,7 @@ public class PixelsMetadata implements ConnectorMetadata
                          * The double min/max in general range stats is the readable representation of the min/max value.
                          */
                         RangeStats<?> rangeStats = (RangeStats<?>) statsRecorder;
-                        logger.info(column.getName() + " column range: {min:" + rangeStats.getMinimum() + ", max:" +
+                        logger.debug(column.getName() + " column range: {min:" + rangeStats.getMinimum() + ", max:" +
                                 rangeStats.getMaximum() + ", hasMin:" + rangeStats.hasMinimum() +
                                 ", hasMax:" + rangeStats.hasMaximum() + "}");
                         columnStatsBuilder.setRange(DoubleRange.from(columnHandle.getColumnType(),
@@ -550,7 +550,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
         if (groupingSets.size() > 1)
         {
-            logger.info("[aggregation push down is rejected: not support multi-grouping-sets]");
+            logger.debug("[aggregation push down is rejected: not support multi-grouping-sets]");
             return Optional.empty();
         }
 
@@ -559,11 +559,11 @@ public class PixelsMetadata implements ConnectorMetadata
         if (tableHandle.getTableType() != Table.TableType.BASE)
         {
             // TODO: support aggregation on joined table.
-            logger.info("[aggregation push down is rejected: not support aggregation on joined table]");
+            logger.debug("[aggregation push down is rejected: not support aggregation on joined table]");
             return Optional.empty();
         }
 
-        logger.info("aggregation push down on: " + tableHandle.getSchemaName() + "." + tableHandle.getTableName());
+        logger.debug("aggregation push down on: " + tableHandle.getSchemaName() + "." + tableHandle.getTableName());
 
         ImmutableList.Builder<PixelsColumnHandle> newColumnsBuilder = ImmutableList.builder();
         ImmutableList.Builder<ConnectorExpression> projections = ImmutableList.builder();
@@ -593,28 +593,28 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             if (aggregate.getFilter().isPresent())
             {
-                logger.info("[aggregation push down is rejected: filter on aggregate is not supported]");
+                logger.debug("[aggregation push down is rejected: filter on aggregate is not supported]");
                 return Optional.empty();
             }
             if (aggregate.isDistinct())
             {
-                logger.info("[aggregation push down is rejected: distinct on aggregate is not supported]");
+                logger.debug("[aggregation push down is rejected: distinct on aggregate is not supported]");
                 return Optional.empty();
             }
             if (!aggregate.getSortItems().isEmpty())
             {
-                logger.info("[aggregation push down is rejected: sort on aggregate is not supported]");
+                logger.debug("[aggregation push down is rejected: sort on aggregate is not supported]");
                 return Optional.empty();
             }
             if (aggregate.getArguments().size() != 1)
             {
-                logger.info("[aggregation push down is rejected: multi-column aggregation with '" +
+                logger.debug("[aggregation push down is rejected: multi-column aggregation with '" +
                         aggregate.getArguments().size() + "' arguments is not supported]");
                 return Optional.empty();
             }
             if (!FunctionType.isSupported(aggregate.getFunctionName()))
             {
-                logger.info("[aggregation push down is rejected: function type '" +
+                logger.debug("[aggregation push down is rejected: function type '" +
                         aggregate.getFunctionName() + ". is not supported]");
                 return Optional.empty();
             }
@@ -622,7 +622,7 @@ public class PixelsMetadata implements ConnectorMetadata
             Optional<PixelsColumnHandle> aggrColumn = getVariableColumnHandle(assignments, aggrArgument);
             if (aggrColumn.isEmpty())
             {
-                logger.info("[aggregation push down is rejected: aggregate argument is not a single column]");
+                logger.debug("[aggregation push down is rejected: aggregate argument is not a single column]");
                 return Optional.empty();
             }
             aggrColumns.add(aggrColumn.get());
@@ -671,13 +671,13 @@ public class PixelsMetadata implements ConnectorMetadata
 
         PixelsTableHandle leftTable = (PixelsTableHandle) left;
         PixelsTableHandle rightTable = (PixelsTableHandle) right;
-        logger.info("join push down: left=" + leftTable.getTableName() +
+        logger.debug("join push down: left=" + leftTable.getTableName() +
                 ", right=" + rightTable.getTableName());
 
         if ((leftTable.getTableType() != Table.TableType.BASE && leftTable.getTableType() != Table.TableType.JOINED) ||
                 (rightTable.getTableType() != Table.TableType.BASE && rightTable.getTableType() != Table.TableType.JOINED))
         {
-            logger.info("[join push down is rejected: only base or joined tables are currently supported in join].");
+            logger.debug("[join push down is rejected: only base or joined tables are currently supported in join].");
             return Optional.empty();
         }
 
@@ -690,7 +690,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             if (joinCondition.getOperator() != JoinCondition.Operator.EQUAL)
             {
-                logger.info("[join push down is rejected for not supporting non-equal join].");
+                logger.debug("[join push down is rejected for not supporting non-equal join].");
                 return Optional.empty();
             }
             Optional<PixelsColumnHandle> leftKeyColumn = getVariableColumnHandle(
@@ -699,7 +699,7 @@ public class PixelsMetadata implements ConnectorMetadata
                     rightAssignments, joinCondition.getRightExpression());
             if (leftKeyColumn.isEmpty() || rightKeyColumn.isEmpty())
             {
-                logger.info("[join push down is rejected for failed to parse join conditions].");
+                logger.debug("[join push down is rejected for failed to parse join conditions].");
                 return Optional.empty();
             }
             leftKeyColumns.add(leftKeyColumn.get());
@@ -724,7 +724,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 break;
             default:
                 // We only support the above types of joins.
-                logger.info("[join push down is rejected for unsupported join type (" + joinType + ")]");
+                logger.debug("[join push down is rejected for unsupported join type (" + joinType + ")]");
                 return Optional.empty();
         }
 

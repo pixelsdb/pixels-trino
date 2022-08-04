@@ -239,7 +239,6 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         output.setStorageInfo(storageInfo);
         output.setPath(config.getMinioOutputFolderForQuery(inputSplit.getQueryId(),
                 inputSplit.getSchemaName() + "_" + inputSplit.getTableName()));
-        // logger.info("join input: " + JSON.toJSONString(joinInput));
         CompletableFuture<Output> joinOutputFuture;
         if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
         {
@@ -294,7 +293,6 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         tableInfo.setFilter(JSON.toJSONString(filter));
         scanInput.setTableInfo(tableInfo);
         scanInput.setScanProjection(projection);
-        // logger.info("table scan filter: " + tableInfo.getFilter());
         String folder = config.getMinioOutputFolderForQuery(inputSplit.getQueryId());
         String endpoint = config.getMinioEndpoint();
         String accessKey = config.getMinioAccessKey();

@@ -187,7 +187,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // The table type is joined, means lambda has been enabled.
             JoinedTable root = parseJoinPlan(tableHandle);
-            logger.info("join plan: " + JSON.toJSONString(root));
+            // logger.debug("join plan: " + JSON.toJSONString(root));
 
             try
             {
@@ -198,10 +198,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
                 // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = (JoinOperator) executor.getRootOperator();
-                logger.info("join operator: " + JSON.toJSONString(joinOperator));
+                // logger.debug("join operator: " + JSON.toJSONString(joinOperator));
                 CompletableFuture<Void> prevStages = joinOperator.executePrev();
                 prevStages.join();
-                logger.info("invoke " + joinOperator.getName());
+                logger.debug("invoke " + joinOperator.getName());
 
                 Thread outputCollector = new Thread(() -> {
                     try
@@ -243,7 +243,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         else if (tableHandle.getTableType() == TableType.AGGREGATED)
         {
             AggregatedTable root = parseAggregatePlan(tableHandle, transHandle);
-            logger.info("aggregation plan: " + JSON.toJSONString(root));
+            // logger.debug("aggregation plan: " + JSON.toJSONString(root));
             try
             {
                 boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
@@ -252,10 +252,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 PixelsExecutor executor = new PixelsExecutor(
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
                 AggregationOperator aggrOperator = (AggregationOperator) executor.getRootOperator();
-                logger.info("aggregation operator: " + JSON.toJSONString(aggrOperator));
+                // logger.debug("aggregation operator: " + JSON.toJSONString(aggrOperator));
                 CompletableFuture<Void> prevStages = aggrOperator.executePrev();
                 prevStages.join();
-                logger.info("invoke " + aggrOperator.getName());
+                logger.debug("invoke " + aggrOperator.getName());
 
                 Thread outputCollector = new Thread(() -> {
                     try
@@ -668,7 +668,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
         TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
-        // logger.info("constraint from table handle: " + constraint.toString(session));
         List<PixelsColumnHandle> desiredColumns = getIncludeColumns(tableHandle);
 
         String schemaName = tableHandle.getSchemaName();
