@@ -226,7 +226,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 {
                     PixelsSplit split = new PixelsSplit(
                             transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
-                            Storage.Scheme.minio.name(), joinInput.getOutput().getFileNames(),
+                            config.getOutputScheme().name(), joinInput.getOutput().getFileNames(),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
                             false, false, Arrays.asList(address), columnOrder,
@@ -278,7 +278,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 AggregationInput aggrInput = aggrOperator.getFinalAggrInput();
                 PixelsSplit split = new PixelsSplit(
                         transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
-                        Storage.Scheme.minio.name(), ImmutableList.of(aggrInput.getOutput().getPath()),
+                        config.getOutputScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
                         ImmutableList.of(0), ImmutableList.of(-1), false, false,
                         Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, TableType.AGGREGATED,
                         null, null, JSON.toJSONString(aggrInput));
@@ -605,12 +605,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
             functionTypes[i] = functionTypeList.get(i);
         }
 
-        // Build the output endpoint.
-        OutputEndPoint outputEndPoint = new OutputEndPoint(Storage.Scheme.minio,
-                config.getMinioOutputFolderForQuery(transHandle.getTransId(),
-                        tableHandle.getSchemaName() + "_" + tableHandle.getTableName()),
-                config.getMinioAccessKey(), config.getMinioSecretKey(), config.getMinioEndpoint());
-
         // Build the origin table.
         io.pixelsdb.pixels.executor.plan.Table originTable;
         if (originTableHandle.getTableType() == TableType.JOINED)
@@ -624,7 +618,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
         Aggregation aggregation = new Aggregation(
                 groupKeyColumnAlias, resultColumnAlias, resultColumnTypes, groupKeyColumnProj,
-                groupKeyColumnIds, aggregateColumnIds, functionTypes, outputEndPoint, originTable);
+                groupKeyColumnIds, aggregateColumnIds, functionTypes, originTable);
 
         return new AggregatedTable(tableHandle.getSchemaName(), tableHandle.getTableName(),
                 tableHandle.getTableAlias(), aggregation);
