@@ -158,7 +158,7 @@ class PixelsPageSource implements ConnectorPageSource
                 }
                 catch (Exception e)
                 {
-                    logger.error(e, "error in minio read.");
+                    logger.error(e, "error in lambda output read.");
                     throw new RuntimeException(e);
                 }
             }));

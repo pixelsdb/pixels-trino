@@ -132,8 +132,10 @@ public class PixelsConnector implements Connector {
         {
             try
             {
-                IntermediateFileCleaner.Instance().asyncDelete(
-                        config.getMinioOutputFolderForQuery(queryId));
+                if (config.isCleanLocalResult())
+                {
+                    IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(queryId));
+                }
             } catch (InterruptedException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,

@@ -25,7 +25,7 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
-import io.pixelsdb.pixels.common.physical.storage.MinIO;
+import io.pixelsdb.pixels.common.physical.storage.Minio;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
@@ -112,27 +112,24 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
         try
         {
+            if (config.getOutputScheme() == Storage.Scheme.minio)
+            {
+                Minio.ConfigMinio(config.getOutputEndpoint(), config.getOutputAccessKey(), config.getOutputSecretKey());
+            }
+
             if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
             {
                 // perform aggregation push down.
-                MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
-                Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
-                if (config.isCleanLocalResult())
-                {
-                    IntermediateFileCleaner.Instance().registerStorage(storage);
-                }
+                Storage storage = StorageFactory.Instance().getStorage(config.getOutputScheme());
+                IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
             }
             if (pixelsSplit.getTableType() == Table.TableType.JOINED)
             {
                 // perform join push down.
-                MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
-                Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
-                if (config.isCleanLocalResult())
-                {
-                    IntermediateFileCleaner.Instance().registerStorage(storage);
-                }
+                Storage storage = StorageFactory.Instance().getStorage(config.getOutputScheme());
+                IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaJoinOutput(pixelsSplit), null);
             }
@@ -150,12 +147,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                         columnsToRead[i] = withFilterColumns.get(i).getColumnName();
                         projection[i] = i < projectionSize;
                     }
-                    MinIO.ConfigMinIO(config.getMinioEndpoint(), config.getMinioAccessKey(), config.getMinioSecretKey());
-                    Storage storage = StorageFactory.Instance().getStorage(Storage.Scheme.minio);
-                    if (config.isCleanLocalResult())
-                    {
-                        IntermediateFileCleaner.Instance().registerStorage(storage);
-                    }
+                    Storage storage = StorageFactory.Instance().getStorage(config.getOutputScheme());
+                    IntermediateFileCleaner.Instance().registerStorage(storage);
                     return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                             pixelsFooterCache, getLambdaScanOutput(pixelsSplit, columnsToRead, projection), null);
                 } else
@@ -178,6 +171,12 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     {
         String aggrInputJson = inputSplit.getAggrInput();
         AggregationInput aggrInput = JSON.parseObject(aggrInputJson, AggregationInput.class);
+        OutputInfo output = aggrInput.getOutput();
+        StorageInfo storageInfo = new StorageInfo(config.getOutputScheme(), config.getOutputEndpoint(),
+                config.getOutputAccessKey(), config.getOutputSecretKey());
+        output.setStorageInfo(storageInfo);
+        output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
+                inputSplit.getSchemaName() + "_" + inputSplit.getTableName()) + "/final_aggr");
         CompletableFuture<Output> aggrOutputFuture;
 
         if (computeFinalAggrInServer)
@@ -198,12 +197,12 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, (AggregationOutput) aggrOutput);
+                inputSplit.permute(config.getOutputScheme(), (AggregationOutput) aggrOutput);
                 logger.info("final aggr output: " + JSON.toJSONString(aggrOutput));
             }
             catch (Exception e)
             {
-                throw new RuntimeException("error in minio read.", e);
+                throw new RuntimeException("error in lambda output read.", e);
             }
         }));
     }
@@ -234,10 +233,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                     inputSplit.getJoinAlgo() + "' is not supported");
         }
         MultiOutputInfo output = joinInput.getOutput();
-        StorageInfo storageInfo = new StorageInfo(Storage.Scheme.minio, config.getMinioEndpoint(),
-                config.getMinioAccessKey(), config.getMinioSecretKey());
+        StorageInfo storageInfo = new StorageInfo(config.getOutputScheme(), config.getOutputEndpoint(),
+                config.getOutputAccessKey(), config.getOutputSecretKey());
         output.setStorageInfo(storageInfo);
-        output.setPath(config.getMinioOutputFolderForQuery(inputSplit.getQueryId(),
+        output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
                 inputSplit.getSchemaName() + "_" + inputSplit.getTableName()));
         CompletableFuture<Output> joinOutputFuture;
         if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
@@ -269,12 +268,12 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, (JoinOutput) joinOutput);
+                inputSplit.permute(config.getOutputScheme(), (JoinOutput) joinOutput);
                 logger.info("final join output: " + JSON.toJSONString(joinOutput));
             }
             catch (Exception e)
             {
-                throw new RuntimeException("error in minio read.", e);
+                throw new RuntimeException("error in lambda output read.", e);
             }
         }));
     }
@@ -293,11 +292,11 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         tableInfo.setFilter(JSON.toJSONString(filter));
         scanInput.setTableInfo(tableInfo);
         scanInput.setScanProjection(projection);
-        String folder = config.getMinioOutputFolderForQuery(inputSplit.getQueryId());
-        String endpoint = config.getMinioEndpoint();
-        String accessKey = config.getMinioAccessKey();
-        String secretKey = config.getMinioSecretKey();
-        StorageInfo storageInfo = new StorageInfo(Storage.Scheme.minio, endpoint, accessKey, secretKey);
+        String folder = config.getOutputFolderForQuery(inputSplit.getQueryId());
+        String endpoint = config.getOutputEndpoint();
+        String accessKey = config.getOutputAccessKey();
+        String secretKey = config.getOutputSecretKey();
+        StorageInfo storageInfo = new StorageInfo(config.getOutputScheme(), endpoint, accessKey, secretKey);
         OutputInfo outputInfo = new OutputInfo(folder, true, storageInfo, true);
         scanInput.setOutput(outputInfo);
 
@@ -309,11 +308,11 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(Storage.Scheme.minio, (ScanOutput) scanOutput);
+                inputSplit.permute(config.getOutputScheme(), (ScanOutput) scanOutput);
             }
             catch (Exception e)
             {
-                throw new RuntimeException("error in minio read.", e);
+                throw new RuntimeException("error in lambda output read.", e);
             }
         }));
     }
