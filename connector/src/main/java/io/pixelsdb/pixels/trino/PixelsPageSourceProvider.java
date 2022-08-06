@@ -176,7 +176,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 config.getOutputAccessKey(), config.getOutputSecretKey());
         output.setStorageInfo(storageInfo);
         output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
-                inputSplit.getSchemaName() + "_" + inputSplit.getTableName()) + "/final_aggr");
+                inputSplit.getSchemaName() + "/" + inputSplit.getTableName()) + "/final_aggr");
         CompletableFuture<Output> aggrOutputFuture;
 
         if (computeFinalAggrInServer)
@@ -237,7 +237,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 config.getOutputAccessKey(), config.getOutputSecretKey());
         output.setStorageInfo(storageInfo);
         output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
-                inputSplit.getSchemaName() + "_" + inputSplit.getTableName()));
+                inputSplit.getSchemaName() + "/" + inputSplit.getTableName()));
         CompletableFuture<Output> joinOutputFuture;
         if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
         {
