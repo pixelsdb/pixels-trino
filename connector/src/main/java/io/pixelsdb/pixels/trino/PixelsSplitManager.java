@@ -210,7 +210,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.info("join outputs: " + json);
-                        logger.info("cumulated duration " + outputCollection.getCumulativeDurationMs());
+                        logger.info("total billed GB-ms: " + outputCollection.getTotalGBMs());
+                        logger.info("total read requests: " + outputCollection.getTotalNumReadRequests());
+                        logger.info("total write requests: " + outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the join plan using pixels-lambda");
@@ -264,7 +266,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.info("aggregation outputs: " + json);
-                        logger.info("cumulated duration " + outputCollection.getCumulativeDurationMs());
+                        logger.info("total billed GB-ms: " + outputCollection.getTotalGBMs());
+                        logger.info("total read requests: " + outputCollection.getTotalNumReadRequests());
+                        logger.info("total write requests: " + outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the aggregation plan using pixels-lambda");
