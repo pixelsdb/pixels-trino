@@ -77,8 +77,12 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
         // sliceOutput.appendInt((int) varcharArrayBlock.getSizeInBytes());
         for (int position = 0; position < positionCount; position++)
         {
-            sliceOutput.writeBytes(varcharArrayBlock.getRawValue(position), varcharArrayBlock.getPositionOffset(position),
-                    varcharArrayBlock.getSliceLength(position));
+            byte[] rawValue = varcharArrayBlock.getRawValue(position);
+            if (rawValue != null)
+            {
+                sliceOutput.writeBytes(rawValue, varcharArrayBlock.getPositionOffset(position),
+                        varcharArrayBlock.getSliceLength(position));
+            }
         }
     }
 
