@@ -26,6 +26,7 @@ import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.physical.storage.Minio;
+import io.pixelsdb.pixels.common.physical.storage.Redis;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
@@ -115,6 +116,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             if (config.getOutputScheme() == Storage.Scheme.minio)
             {
                 Minio.ConfigMinio(config.getOutputEndpoint(), config.getOutputAccessKey(), config.getOutputSecretKey());
+            }
+            else if (config.getOutputScheme() == Storage.Scheme.redis)
+            {
+                Redis.ConfigRedis(config.getOutputEndpoint(), config.getOutputAccessKey(), config.getOutputSecretKey());
             }
 
             if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
