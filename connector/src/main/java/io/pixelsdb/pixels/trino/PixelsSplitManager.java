@@ -195,7 +195,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
                 // Call executor to execute this join plan.
                 PixelsExecutor executor = new PixelsExecutor(
-                        transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
+                        transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
+                        Optional.of(this.metadataProxy.getMetadataService()));
                 // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = (JoinOperator) executor.getRootOperator();
                 // logger.debug("join operator: " + JSON.toJSONString(joinOperator));
@@ -252,7 +253,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
                 // Call executor to execute this aggregation plan.
                 PixelsExecutor executor = new PixelsExecutor(
-                        transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled);
+                        transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
+                        Optional.of(this.metadataProxy.getMetadataService()));
                 AggregationOperator aggrOperator = (AggregationOperator) executor.getRootOperator();
                 // logger.debug("aggregation operator: " + JSON.toJSONString(aggrOperator));
                 CompletableFuture<Void> prevStages = aggrOperator.executePrev();
