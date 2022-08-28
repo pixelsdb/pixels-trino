@@ -180,8 +180,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         StorageInfo storageInfo = new StorageInfo(config.getOutputScheme(), config.getOutputEndpoint(),
                 config.getOutputAccessKey(), config.getOutputSecretKey());
         output.setStorageInfo(storageInfo);
-        output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
-                inputSplit.getSchemaName() + "/" + inputSplit.getTableName()) + "/final_aggr");
+        output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId()) +
+                output.getPath().substring(output.getPath().indexOf(inputSplit.getSchemaName())));
         CompletableFuture<Output> aggrOutputFuture;
 
         if (computeFinalAggrInServer)

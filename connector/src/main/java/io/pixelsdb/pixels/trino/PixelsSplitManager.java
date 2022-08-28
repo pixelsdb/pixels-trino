@@ -281,14 +281,19 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 outputCollector.start();
 
                 // Build the split of the aggregation result.
-                AggregationInput aggrInput = aggrOperator.getFinalAggrInput();
-                PixelsSplit split = new PixelsSplit(
-                        transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
-                        config.getOutputScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
-                        ImmutableList.of(0), ImmutableList.of(-1), false, false,
-                        Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, TableType.AGGREGATED,
-                        null, null, JSON.toJSONString(aggrInput));
-                return new PixelsSplitSource(ImmutableList.of(split));
+                List<AggregationInput> aggrInputs = aggrOperator.getFinalAggrInputs();
+                ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                for (AggregationInput aggrInput : aggrInputs)
+                {
+                    PixelsSplit split = new PixelsSplit(
+                            transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
+                            config.getOutputScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
+                            ImmutableList.of(0), ImmutableList.of(-1), false, false,
+                            Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, TableType.AGGREGATED,
+                            null, null, JSON.toJSONString(aggrInput));
+                    splitsBuilder.add(split);
+                }
+                return new PixelsSplitSource(splitsBuilder.build());
             } catch (IOException | MetadataException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
