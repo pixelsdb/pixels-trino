@@ -41,7 +41,6 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.PixelsExecutor;
 import io.pixelsdb.pixels.executor.aggregation.FunctionType;
-import io.pixelsdb.pixels.executor.join.JoinAdvisor;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.domain.InputInfo;
 import io.pixelsdb.pixels.executor.lambda.domain.InputSplit;
@@ -476,8 +475,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         JoinAlgorithm joinAlgo;
         try
         {
-            joinEndian = JoinAdvisor.Instance().getJoinEndian(leftTable, rightTable);
-            joinAlgo = JoinAdvisor.Instance().getJoinAlgorithm(leftTable, rightTable, joinEndian);
+            joinEndian = PlanOptimizer.Instance().getJoinEndian(leftTable, rightTable);
+            joinAlgo = PlanOptimizer.Instance().getJoinAlgorithm(leftTable, rightTable, joinEndian);
         } catch (MetadataException | InvalidProtocolBufferException e)
         {
             logger.error("failed to get join algorithm", e);
