@@ -32,7 +32,7 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.stats.RangeStats;
 import io.pixelsdb.pixels.core.stats.StatsRecorder;
 import io.pixelsdb.pixels.executor.aggregation.FunctionType;
-import io.pixelsdb.pixels.executor.plan.Table;
+import io.pixelsdb.pixels.optimizer.plan.Table;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;

@@ -39,6 +39,11 @@
             <artifactId>pixels-executor</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-optimizer</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!-- trino -->
         <dependency>
