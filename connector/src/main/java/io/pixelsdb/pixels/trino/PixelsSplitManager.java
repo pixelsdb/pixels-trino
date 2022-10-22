@@ -39,7 +39,6 @@ import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
-import io.pixelsdb.pixels.executor.PixelsExecutor;
 import io.pixelsdb.pixels.executor.aggregation.FunctionType;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.domain.InputInfo;
@@ -49,12 +48,13 @@ import io.pixelsdb.pixels.executor.lambda.input.JoinInput;
 import io.pixelsdb.pixels.executor.lambda.operator.AggregationOperator;
 import io.pixelsdb.pixels.executor.lambda.operator.JoinOperator;
 import io.pixelsdb.pixels.executor.lambda.operator.Operator;
-import io.pixelsdb.pixels.executor.plan.*;
-import io.pixelsdb.pixels.executor.plan.Table.TableType;
 import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
+import io.pixelsdb.pixels.optimizer.PixelsPlanner;
+import io.pixelsdb.pixels.optimizer.plan.*;
+import io.pixelsdb.pixels.optimizer.plan.Table.TableType;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -192,12 +192,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
                 boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
-                // Call executor to execute this join plan.
-                PixelsExecutor executor = new PixelsExecutor(
+                // Call planner to optimize this join plan.
+                PixelsPlanner planner = new PixelsPlanner(
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
                         Optional.of(this.metadataProxy.getMetadataService()));
                 // Ensure multi-pipeline join is supported.
-                JoinOperator joinOperator = (JoinOperator) executor.getRootOperator();
+                JoinOperator joinOperator = (JoinOperator) planner.getRootOperator();
                 // logger.debug("join operator: " + JSON.toJSONString(joinOperator));
                 CompletableFuture<Void> prevStages = joinOperator.executePrev();
                 prevStages.join();
@@ -250,11 +250,11 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
                 boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
-                // Call executor to execute this aggregation plan.
-                PixelsExecutor executor = new PixelsExecutor(
+                // Call planner to optimize this aggregation plan.
+                PixelsPlanner planner = new PixelsPlanner(
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
                         Optional.of(this.metadataProxy.getMetadataService()));
-                AggregationOperator aggrOperator = (AggregationOperator) executor.getRootOperator();
+                AggregationOperator aggrOperator = (AggregationOperator) planner.getRootOperator();
                 // logger.debug("aggregation operator: " + JSON.toJSONString(aggrOperator));
                 CompletableFuture<Void> prevStages = aggrOperator.executePrev();
                 prevStages.join();
@@ -324,8 +324,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<PixelsColumnHandle> leftColumnHandles;
         List<PixelsColumnHandle> rightColumnHandles;
         String[] leftColumns, rightColumns;
-        io.pixelsdb.pixels.executor.plan.Table leftTable;
-        io.pixelsdb.pixels.executor.plan.Table rightTable;
+        io.pixelsdb.pixels.optimizer.plan.Table leftTable;
+        io.pixelsdb.pixels.optimizer.plan.Table rightTable;
 
         if (leftHandle.getTableType() == TableType.BASE)
         {
@@ -616,7 +616,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
 
         // Build the origin table.
-        io.pixelsdb.pixels.executor.plan.Table originTable;
+        io.pixelsdb.pixels.optimizer.plan.Table originTable;
         if (originTableHandle.getTableType() == TableType.JOINED)
         {
             originTable = parseJoinPlan(originTableHandle);
