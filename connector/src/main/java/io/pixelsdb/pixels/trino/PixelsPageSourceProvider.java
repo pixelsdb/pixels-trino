@@ -40,6 +40,7 @@ import io.pixelsdb.pixels.executor.lambda.output.Output;
 import io.pixelsdb.pixels.executor.lambda.output.ScanOutput;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.optimizer.plan.Table;
+import io.pixelsdb.pixels.optimizer.queue.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.trino.spi.TrinoException;
@@ -142,7 +143,9 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             {
                 // perform scan push down.
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
-                if (config.isLambdaEnabled() && this.localSplitCounter.get() >= config.getLocalScanConcurrency())
+                PixelsTransactionHandle transHandle = (PixelsTransactionHandle) transactionHandle;
+                if (transHandle.getExecutorType() == QueryQueues.ExecutorType.Lambda &&
+                        this.localSplitCounter.get() >= config.getLocalScanConcurrency())
                 {
                     String[] columnsToRead = new String[withFilterColumns.size()];
                     boolean[] projection = new boolean[withFilterColumns.size()];

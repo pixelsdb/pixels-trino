@@ -25,7 +25,9 @@ import io.pixelsdb.pixels.common.exception.TransException;
 import io.pixelsdb.pixels.common.transaction.QueryTransInfo;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
+import io.pixelsdb.pixels.optimizer.queue.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
+import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
 import io.pixelsdb.pixels.trino.properties.PixelsTableProperties;
@@ -36,13 +38,17 @@ import io.trino.spi.transaction.IsolationLevel;
 
 import javax.inject.Inject;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 import static java.util.Objects.requireNonNull;
 
-public class PixelsConnector implements Connector {
+public class PixelsConnector implements Connector
+{
     private static final Logger logger = Logger.get(PixelsConnector.class);
 
+    private final PixelsConnectorId connectorId;
     private final LifeCycleManager lifeCycleManager;
-    private final PixelsMetadata metadata;
+    private final PixelsMetadataProxy metadataProxy;
     private final PixelsSplitManager splitManager;
     private final boolean recordCursorEnabled;
     private final PixelsPageSourceProvider pageSourceProvider;
@@ -54,16 +60,19 @@ public class PixelsConnector implements Connector {
 
     @Inject
     public PixelsConnector(
+            PixelsConnectorId connectorId,
             LifeCycleManager lifeCycleManager,
-            PixelsMetadata metadata,
+            PixelsMetadataProxy metadataProxy,
             PixelsSplitManager splitManager,
             PixelsTrinoConfig config,
             PixelsPageSourceProvider pageSourceProvider,
             PixelsRecordSetProvider recordSetProvider,
             PixelsSessionProperties sessionProperties,
-            PixelsTableProperties tableProperties) {
+            PixelsTableProperties tableProperties)
+    {
+        this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.lifeCycleManager = requireNonNull(lifeCycleManager, "lifeCycleManager is null");
-        this.metadata = requireNonNull(metadata, "metadata is null");
+        this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.splitManager = requireNonNull(splitManager, "splitManager is null");
         this.pageSourceProvider = requireNonNull(pageSourceProvider, "recordSetProvider is null");
         this.recordSetProvider = requireNonNull(recordSetProvider, "recordSetProvider is null");
@@ -93,7 +102,29 @@ public class PixelsConnector implements Connector {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
         }
         TransContext.Instance().beginQuery(info);
-        return new PixelsTransactionHandle(info.getQueryId(), info.getQueryTimestamp());
+        QueryQueues.ExecutorType executorType;
+        if (config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
+        {
+            while ((executorType = QueryQueues.Instance().Enqueue(info.getQueryId())) == QueryQueues.ExecutorType.None)
+            {
+                try
+                {
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (InterruptedException e)
+                {
+                    logger.error("Interrupted while waiting for enqueue the query id.");
+                }
+            }
+        }
+        else if (config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.ON)
+        {
+            executorType = QueryQueues.ExecutorType.Lambda;
+        }
+        else
+        {
+            executorType = QueryQueues.ExecutorType.Cluster;
+        }
+        return new PixelsTransactionHandle(info.getQueryId(), info.getQueryTimestamp(), executorType);
     }
 
     @Override
@@ -102,6 +133,7 @@ public class PixelsConnector implements Connector {
         if (transactionHandle instanceof PixelsTransactionHandle)
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
+            QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
             TransContext.Instance().commitQuery(handle.getTransId());
             cleanIntermediatePathForQuery(handle.getTransId());
         } else
@@ -117,8 +149,12 @@ public class PixelsConnector implements Connector {
         if (transactionHandle instanceof PixelsTransactionHandle)
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
+            QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
             TransContext.Instance().rollbackQuery(handle.getTransId());
-            cleanIntermediatePathForQuery(handle.getTransId());
+            if (handle.getExecutorType() == QueryQueues.ExecutorType.Lambda)
+            {
+                cleanIntermediatePathForQuery(handle.getTransId());
+            }
         } else
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
@@ -128,26 +164,23 @@ public class PixelsConnector implements Connector {
 
     private void cleanIntermediatePathForQuery(long queryId)
     {
-        if (config.isLambdaEnabled())
+        try
         {
-            try
+            if (config.isCleanLocalResult())
             {
-                if (config.isCleanLocalResult())
-                {
-                    IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(queryId));
-                }
-            } catch (InterruptedException e)
-            {
-                throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
-                        "Failed to clean intermediate path for the query");
+                IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(queryId));
             }
+        } catch (InterruptedException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    "Failed to clean intermediate path for the query");
         }
     }
 
     @Override
-    public ConnectorMetadata getMetadata(ConnectorSession session, ConnectorTransactionHandle transactionHandle)
+    public ConnectorMetadata getMetadata(ConnectorSession session, ConnectorTransactionHandle transHandle)
     {
-        return metadata;
+        return new PixelsMetadata(connectorId, metadataProxy, config, (PixelsTransactionHandle) transHandle);
     }
 
     @Override
