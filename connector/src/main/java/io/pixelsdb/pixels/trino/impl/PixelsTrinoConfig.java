@@ -47,8 +47,10 @@ public class PixelsTrinoConfig
         return BatchSize;
     }
 
+    public enum LambdaSwitch { ON, OFF, AUTO }
+
     private String pixelsConfig = null;
-    private boolean lambdaEnabled = false;
+    private LambdaSwitch lambdaSwitch = LambdaSwitch.AUTO;
     private boolean cleanLocalResult = true;
     private int localScanConcurrency = -1;
     private Storage.Scheme outputScheme = null;
@@ -124,10 +126,10 @@ public class PixelsTrinoConfig
         return this;
     }
 
-    @Config("lambda.enabled")
-    public PixelsTrinoConfig setLambdaEnabled(boolean enabled)
+    @Config("lambda.switch")
+    public PixelsTrinoConfig setLambdaSwitch(String lambdaSwitch)
     {
-        this.lambdaEnabled = enabled;
+        this.lambdaSwitch = LambdaSwitch.valueOf(lambdaSwitch.toUpperCase());
         return this;
     }
 
@@ -190,9 +192,10 @@ public class PixelsTrinoConfig
         return this.pixelsConfig;
     }
 
-    public boolean isLambdaEnabled()
+    @NotNull
+    public LambdaSwitch getLambdaSwitch()
     {
-        return lambdaEnabled;
+        return lambdaSwitch;
     }
 
     public int getLocalScanConcurrency()

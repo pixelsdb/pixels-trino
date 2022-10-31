@@ -33,6 +33,7 @@ import io.pixelsdb.pixels.core.stats.RangeStats;
 import io.pixelsdb.pixels.core.stats.StatsRecorder;
 import io.pixelsdb.pixels.executor.aggregation.FunctionType;
 import io.pixelsdb.pixels.optimizer.plan.Table;
+import io.pixelsdb.pixels.optimizer.queue.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -47,7 +48,6 @@ import io.trino.spi.statistics.DoubleRange;
 import io.trino.spi.statistics.Estimate;
 import io.trino.spi.statistics.TableStatistics;
 
-import javax.inject.Inject;
 import java.nio.ByteBuffer;
 import java.util.*;
 
@@ -71,13 +71,15 @@ public class PixelsMetadata implements ConnectorMetadata
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
     private final PixelsTrinoConfig config;
+    private final PixelsTransactionHandle transHandle;
 
-    @Inject
-    public PixelsMetadata(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy, PixelsTrinoConfig config)
+    public PixelsMetadata(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
+                          PixelsTrinoConfig config, PixelsTransactionHandle transHandle)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.config = requireNonNull(config, "config is null");
+        this.transHandle = requireNonNull(transHandle, "transHandle is null");
     }
 
     @Override
@@ -541,7 +543,7 @@ public class PixelsMetadata implements ConnectorMetadata
             ConnectorSession session, ConnectorTableHandle handle, List<AggregateFunction> aggregates,
             Map<String, ColumnHandle> assignments, List<List<ColumnHandle>> groupingSets)
     {
-        if (!config.isLambdaEnabled())
+        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
         {
             return Optional.empty();
         }
@@ -664,7 +666,7 @@ public class PixelsMetadata implements ConnectorMetadata
             Map<String, ColumnHandle> rightAssignments,
             JoinStatistics statistics)
     {
-        if (!config.isLambdaEnabled())
+        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
         {
             return Optional.empty();
         }

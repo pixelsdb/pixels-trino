@@ -21,32 +21,41 @@ package io.pixelsdb.pixels.trino;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.pixelsdb.pixels.optimizer.queue.QueryQueues;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 
 public class PixelsTransactionHandle implements ConnectorTransactionHandle
 {
-    public static final PixelsTransactionHandle Default = new PixelsTransactionHandle(-1, -1);
+    public static final PixelsTransactionHandle Default = new PixelsTransactionHandle(
+            -1, -1, QueryQueues.ExecutorType.None);
 
     /**
-     * transId is also the query id, as each query is a single-statement read-only transaction.
+     * transId is also the query id in Pixels, as each query is a single-statement read-only transaction.
      */
     private final long transId;
     /**
      * The timestamp that is used to get a read snapshot of the query.
      */
     private final long timestamp;
+    /**
+     * The type of executor to execute this query.
+     */
+    private final QueryQueues.ExecutorType executorType;
 
     /**
      * Create a transaction handle.
-     * @param transId is also the queryId as a query is a single-statement read-only transaction.
+     * @param transId is also the query id in Pixels, as a query is a single-statement read-only transaction.
      * @param timestamp the timestamp of a transaction.
+     * @param executorType the type of executor to execute this query.
      */
     @JsonCreator
     public PixelsTransactionHandle(@JsonProperty("transId") long transId,
-                                   @JsonProperty("timestamp") long timestamp)
+                                   @JsonProperty("timestamp") long timestamp,
+                                   @JsonProperty("executorType")QueryQueues.ExecutorType executorType)
     {
         this.transId = transId;
         this.timestamp = timestamp;
+        this.executorType = executorType;
     }
 
     @JsonProperty
@@ -59,5 +68,11 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     public long getTimestamp()
     {
         return this.timestamp;
+    }
+
+    @JsonProperty
+    public QueryQueues.ExecutorType getExecutorType()
+    {
+        return this.executorType;
     }
 }
