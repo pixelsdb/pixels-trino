@@ -25,6 +25,7 @@ import io.pixelsdb.pixels.common.exception.TransException;
 import io.pixelsdb.pixels.common.transaction.QueryTransInfo;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
+import io.pixelsdb.pixels.optimizer.autoscaling.MetricsCollector;
 import io.pixelsdb.pixels.optimizer.queue.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -83,6 +84,10 @@ public class PixelsConnector implements Connector
         this.recordCursorEnabled = Boolean.parseBoolean(config.getConfigFactory().getProperty("record.cursor.enabled"));
         this.transService = new TransService(config.getConfigFactory().getProperty("trans.server.host"),
                 Integer.parseInt(config.getConfigFactory().getProperty("trans.server.port")));
+        if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
+        {
+            MetricsCollector.Instance().startAutoReport();
+        }
     }
 
     @Override
@@ -103,8 +108,9 @@ public class PixelsConnector implements Connector
         }
         TransContext.Instance().beginQuery(info);
         QueryQueues.ExecutorType executorType;
-        if (config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
+        if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
         {
+            MetricsCollector.Instance().report();
             while ((executorType = QueryQueues.Instance().Enqueue(info.getQueryId())) == QueryQueues.ExecutorType.None)
             {
                 try
@@ -217,6 +223,7 @@ public class PixelsConnector implements Connector
     public final void shutdown() {
         try {
             lifeCycleManager.stop();
+            MetricsCollector.Instance().stopAutoReport();
         } catch (Exception e) {
             logger.error(e, "error in shutting down connector");
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, e);
