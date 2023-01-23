@@ -474,8 +474,7 @@ public class PixelsMetadata implements ConnectorMetadata
     }
 
     @Override
-    public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle table,
-                                              Constraint constraint)
+    public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle table)
     {
         TableStatistics.Builder tableStatBuilder = TableStatistics.builder();
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;

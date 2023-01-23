@@ -140,7 +140,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
     public ConnectorSplitSource getSplits(ConnectorTransactionHandle trans,
                                           ConnectorSession session,
                                           ConnectorTableHandle handle,
-                                          SplitSchedulingStrategy splitSchedulingStrategy,
                                           DynamicFilter dynamicFilter,
                                           Constraint extra)
     {
