@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino.impl;
 import io.airlift.configuration.Config;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
@@ -105,7 +106,7 @@ public class PixelsTrinoConfig
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR, e);
             }
-            //try
+            try
             {
                 /**
                  * PIXELS-108:
@@ -117,10 +118,10 @@ public class PixelsTrinoConfig
                  *
                  * I currently don't know the reason (08.27.2021).
                  */
-                //StorageFactory.Instance().reload();
-            } //catch (IOException e)
+                StorageFactory.Instance().reload();
+            } catch (IOException e)
             {
-                //throw new PrestoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
+                throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
             }
         }
         return this;
