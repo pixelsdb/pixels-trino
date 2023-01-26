@@ -17,6 +17,7 @@ import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 import io.trino.spi.block.Block;
 
+import javax.annotation.Nullable;
 import java.util.Arrays;
 
 import static java.lang.Math.ceil;
@@ -39,6 +40,15 @@ final class BlockUtil
     }
 
     static void checkArrayRange(int[] array, int offset, int length)
+    {
+        requireNonNull(array, "array is null");
+        if (offset < 0 || length < 0 || offset + length > array.length) {
+            throw new IndexOutOfBoundsException(format("Invalid offset %s and length %s in array with %s elements",
+                    offset, length, array.length));
+        }
+    }
+
+    static void checkArrayRange(boolean[] array, int offset, int length)
     {
         requireNonNull(array, "array is null");
         if (offset < 0 || length < 0 || offset + length > array.length) {
@@ -255,5 +265,45 @@ final class BlockUtil
         }
         // No newly loaded blocks
         return blocks;
+    }
+
+    static boolean[] copyIsNullAndAppendNull(@Nullable boolean[] isNull, int offsetBase, int positionCount)
+    {
+        int desiredLength = offsetBase + positionCount + 1;
+        boolean[] newIsNull = new boolean[desiredLength];
+        if (isNull != null) {
+            checkArrayRange(isNull, offsetBase, positionCount);
+            System.arraycopy(isNull, 0, newIsNull, 0, desiredLength - 1);
+        }
+        // mark the last element to append null
+        newIsNull[desiredLength - 1] = true;
+        return newIsNull;
+    }
+
+    static int[] copyOffsetsAndAppendNull(int[] offsets, int offsetBase, int positionCount)
+    {
+        int desiredLength = offsetBase + positionCount + 1;
+        checkArrayRange(offsets, offsetBase, positionCount);
+        int[] newOffsets = Arrays.copyOf(offsets, desiredLength);
+        // Null element does not move the offset forward
+        newOffsets[desiredLength - 1] = newOffsets[desiredLength - 2];
+        return newOffsets;
+    }
+
+    /**
+     * Returns a new int array of size capacity if the input buffer is null or
+     * smaller than the capacity. Returns the original array otherwise.
+     * Any original values in the input buffer will be preserved in the output.
+     */
+    public static int[] ensureCapacity(@Nullable int[] buffer, int capacity)
+    {
+        if (buffer == null) {
+            buffer = new int[capacity];
+        }
+        else if (buffer.length < capacity) {
+            buffer = Arrays.copyOf(buffer, capacity);
+        }
+
+        return buffer;
     }
 }

@@ -19,7 +19,6 @@
  */
 package io.pixelsdb.pixels.trino;
 
-import io.trino.spi.connector.ConnectorPartitionHandle;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.connector.ConnectorSplitSource;
 
@@ -27,7 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static io.trino.spi.connector.NotPartitionedPartitionHandle.NOT_PARTITIONED;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 
@@ -46,12 +44,8 @@ public class PixelsSplitSource implements ConnectorSplitSource
     }
 
     @Override
-    public CompletableFuture<ConnectorSplitBatch> getNextBatch(ConnectorPartitionHandle partitionHandle, int maxSize)
+    public CompletableFuture<ConnectorSplitBatch> getNextBatch(int maxSize)
     {
-        if (!partitionHandle.equals(NOT_PARTITIONED)) {
-            throw new IllegalArgumentException("partitionHandle must be NOT_PARTITIONED");
-        }
-
         int remainingSplits = splits.size() - offset;
         int size = Math.min(remainingSplits, maxSize);
         List<ConnectorSplit> results = new ArrayList<>(size);

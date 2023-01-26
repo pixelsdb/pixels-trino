@@ -48,7 +48,7 @@ import static io.pixelsdb.pixels.trino.block.BlockUtil.*;
  */
 public class TimeArrayBlock implements Block
 {
-    private static final int INSTANCE_SIZE = ClassLayout.parseClass(TimeArrayBlock.class).instanceSize();
+    private static final long INSTANCE_SIZE = ClassLayout.parseClass(TimeArrayBlock.class).instanceSize();
     public static final int SIZE_IN_BYTES_PER_POSITION = Integer.BYTES + Byte.BYTES;
 
     private final int arrayOffset;
@@ -137,7 +137,7 @@ public class TimeArrayBlock implements Block
         if (valueIsNull != null) {
             consumer.accept(valueIsNull, sizeOf(valueIsNull));
         }
-        consumer.accept(this, (long) INSTANCE_SIZE);
+        consumer.accept(this, INSTANCE_SIZE);
     }
 
     @Override
@@ -205,6 +205,22 @@ public class TimeArrayBlock implements Block
     {
         checkReadablePosition(position);
         return valueIsNull[position + arrayOffset];
+    }
+
+    /**
+     * Returns a block that contains a copy of the contents of the current block, and an appended null at the end. The
+     * original block will not be modified. The purpose of this method is to leverage the contents of a block and the
+     * structure of the implementation to efficiently produce a copy of the block with a NULL element inserted - so that
+     * it can be used as a dictionary. This method is expected to be invoked on completely built {@link Block} instances
+     * i.e. not on in-progress block builders.
+     */
+    @Override
+    public Block copyWithAppendedNull()
+    {
+        boolean[] newValueIsNull = copyIsNullAndAppendNull(valueIsNull, arrayOffset, positionCount);
+        int[] newValues = ensureCapacity(values, arrayOffset + positionCount + 1);
+
+        return new TimeArrayBlock(arrayOffset, positionCount + 1, newValueIsNull, newValues);
     }
 
     @Override

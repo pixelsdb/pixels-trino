@@ -35,6 +35,8 @@ import java.util.Set;
 import java.util.function.ObjLongConsumer;
 
 import static io.airlift.slice.SizeOf.sizeOf;
+import static io.pixelsdb.pixels.trino.block.BlockUtil.copyIsNullAndAppendNull;
+import static io.pixelsdb.pixels.trino.block.BlockUtil.copyOffsetsAndAppendNull;
 import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
 
 /**
@@ -52,7 +54,7 @@ public class VarcharArrayBlock implements Block
 {
     static final Unsafe unsafe;
     static final long address;
-    private static final int INSTANCE_SIZE = ClassLayout.parseClass(VarcharArrayBlock.class).instanceSize();
+    private static final long INSTANCE_SIZE = ClassLayout.parseClass(VarcharArrayBlock.class).instanceSize();
 
     private final int arrayOffset; // start index of the valid items in offsets and length, usually 0.
     private final int positionCount; // number of items in this block.
@@ -291,7 +293,7 @@ public class VarcharArrayBlock implements Block
         consumer.accept(offsets, sizeOf(offsets));
         consumer.accept(lengths, sizeOf(lengths));
         consumer.accept(valueIsNull, sizeOf(valueIsNull));
-        consumer.accept(this, (long) INSTANCE_SIZE);
+        consumer.accept(this, INSTANCE_SIZE);
     }
 
     /**
@@ -539,6 +541,23 @@ public class VarcharArrayBlock implements Block
     {
         checkReadablePosition(position);
         return valueIsNull[position + arrayOffset];
+    }
+
+    /**
+     * Returns a block that contains a copy of the contents of the current block, and an appended null at the end. The
+     * original block will not be modified. The purpose of this method is to leverage the contents of a block and the
+     * structure of the implementation to efficiently produce a copy of the block with a NULL element inserted - so that
+     * it can be used as a dictionary. This method is expected to be invoked on completely built {@link Block} instances
+     * i.e. not on in-progress block builders.
+     */
+    @Override
+    public Block copyWithAppendedNull()
+    {
+        boolean[] newValueIsNull = copyIsNullAndAppendNull(valueIsNull, arrayOffset, positionCount);
+        int[] newOffsets = copyOffsetsAndAppendNull(offsets, arrayOffset, positionCount);
+        int[] newLengths = copyOffsetsAndAppendNull(lengths, arrayOffset, positionCount);
+
+        return new VarcharArrayBlock(arrayOffset, positionCount + 1, values, newOffsets, newLengths, newValueIsNull);
     }
 
     protected void checkReadablePosition(int position)
