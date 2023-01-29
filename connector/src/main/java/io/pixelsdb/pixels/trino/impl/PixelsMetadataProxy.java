@@ -193,9 +193,9 @@ public class PixelsMetadataProxy
         return metadataService.existView(schemaName, viewName);
     }
 
-    public View getView (String schemaName, String viewName) throws MetadataException
+    public View getView (String schemaName, String viewName, boolean returnNullIfNotExists) throws MetadataException
     {
-        return metadataService.getView(schemaName, viewName);
+        return metadataService.getView(schemaName, viewName, returnNullIfNotExists);
     }
 
     public List<View> getViews (String schemaName) throws MetadataException

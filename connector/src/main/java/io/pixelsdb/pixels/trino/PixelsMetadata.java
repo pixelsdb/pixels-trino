@@ -883,7 +883,12 @@ public class PixelsMetadata implements ConnectorMetadata
     {
         try
         {
-            View view = metadataProxy.getView(viewName.getSchemaName(), viewName.getTableName());
+            /**
+             * Issue #6:
+             * getView is called to check view existence when creating the view, therefore, it should
+             * not throw exception if the view does not exist.
+             */
+            View view = metadataProxy.getView(viewName.getSchemaName(), viewName.getTableName(), true);
             if (view != null)
             {
                 return Optional.of(ViewCodec.fromJson(view.getData()));
