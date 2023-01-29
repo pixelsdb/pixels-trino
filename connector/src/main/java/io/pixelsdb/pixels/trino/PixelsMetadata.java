@@ -23,9 +23,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.InvalidProtocolBufferException;
+import io.airlift.json.JsonCodec;
+import io.airlift.json.JsonCodecFactory;
+import io.airlift.json.ObjectMapperProvider;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
+import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.core.PixelsProto;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -55,7 +59,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
-import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -67,6 +70,8 @@ import static java.util.stream.Collectors.toList;
 public class PixelsMetadata implements ConnectorMetadata
 {
     private static final Logger logger = Logger.get(PixelsMetadata.class);
+    private static final JsonCodec<ConnectorViewDefinition> ViewCodec =
+            new JsonCodecFactory(new ObjectMapperProvider()).jsonCodec(ConnectorViewDefinition.class);
 
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
@@ -792,24 +797,28 @@ public class PixelsMetadata implements ConnectorMetadata
     public void createView(ConnectorSession session, SchemaTableName viewName,
                            ConnectorViewDefinition definition, boolean replace)
     {
-        // TODO: API change in Trino 315 https://trino.io/docs/current/release/release-315.html:
-        //  Allow connectors to provide view definitions. ConnectorViewDefinition now contains the real view definition
-        //  rather than an opaque blob. Connectors that support view storage can use the JSON representation of that
-        //  class as a stable storage format. The JSON representation is the same as the previous opaque blob, thus
-        //  all existing view definitions will continue to work. (https://github.com/trinodb/trino/pull/976)
-        throw new TrinoException(NOT_SUPPORTED, "This connector does not support creating views");
-//        try
-//        {
-//            boolean res = this.pixelsMetadataProxy.createView(viewName.getSchemaName(), viewName.getTableName(), viewData);
-//            if (res == false)
-//            {
-//                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
-//                        "Failed to create view '" + viewName + "'.");
-//            }
-//        } catch (MetadataException e)
-//        {
-//            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
-//        }
+        /**
+         * Issue #6:
+         * API change in Trino 315 https://trino.io/docs/current/release/release-315.html:
+         * Allow connectors to provide view definitions. ConnectorViewDefinition now contains the real view definition
+         * rather than an opaque blob. Connectors that support view storage can use the JSON representation of that
+         * class as a stable storage format. The JSON representation is the same as the previous opaque blob, thus
+         * all existing view definitions will continue to work. (https://github.com/trinodb/trino/pull/976)
+         */
+        String viewData = ViewCodec.toJson(definition);
+        try
+        {
+            boolean res = this.metadataProxy.createView(
+                    viewName.getSchemaName(), viewName.getTableName(), viewData, replace);
+            if (!res)
+            {
+                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                        "Failed to create view '" + viewName + "'.");
+            }
+        } catch (MetadataException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
     }
 
     @Override
@@ -818,7 +827,7 @@ public class PixelsMetadata implements ConnectorMetadata
         try
         {
             boolean res = this.metadataProxy.dropView(viewName.getSchemaName(), viewName.getTableName());
-            if (res == false)
+            if (!res)
             {
                 throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "View '" + viewName.getSchemaName() + "." + viewName.getTableName() + "' does not exist.");
@@ -859,6 +868,78 @@ public class PixelsMetadata implements ConnectorMetadata
                     for (String table : metadataProxy.getViewNames(schema))
                     {
                         builder.add(new SchemaTableName(schema, table));
+                    }
+                }
+            }
+            return builder.build();
+        } catch (MetadataException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
+    }
+
+    @Override
+    public Optional<ConnectorViewDefinition> getView(ConnectorSession session, SchemaTableName viewName)
+    {
+        try
+        {
+            View view = metadataProxy.getView(viewName.getSchemaName(), viewName.getTableName());
+            if (view != null)
+            {
+                return Optional.of(ViewCodec.fromJson(view.getData()));
+            }
+        } catch (MetadataException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Gets the definitions of views, possibly filtered by schema.
+     * This optional method may be implemented by connectors that can support fetching
+     * view data in bulk. It is used to implement {@code information_schema.views}.
+     *
+     * @param session the connector session.
+     * @param filterSchema get all the views in the connector if not present.
+     */
+    @Override
+    public Map<SchemaTableName, ConnectorViewDefinition> getViews(ConnectorSession session, Optional<String> filterSchema)
+    {
+        ImmutableMap.Builder<SchemaTableName, ConnectorViewDefinition> builder = ImmutableMap.builder();
+        try
+        {
+            if (filterSchema.isPresent())
+            {
+                String schemaName = filterSchema.get();
+                if (this.metadataProxy.existSchema(schemaName))
+                {
+                    /**
+                     * PIXELS-194:
+                     * Only try to get views if the schema exists.
+                     * Otherwise, return an empty set, which is required by Presto
+                     * when reading the content of information_schema tables.
+                     */
+                    List<View> views = this.metadataProxy.getViews(schemaName);
+                    for (View view : views)
+                    {
+                        SchemaTableName stName = new SchemaTableName(schemaName, view.getName());
+                        builder.put(stName, ViewCodec.fromJson(view.getData()));
+                    }
+                }
+            }
+            else
+            {
+                /**
+                 * Issue #6:
+                 * Get all the views in Pixels if filterSchema is not present.
+                 */
+                for (String schemaName : metadataProxy.getSchemaNames())
+                {
+                    for (View view : metadataProxy.getViews(schemaName))
+                    {
+                        SchemaTableName stName = new SchemaTableName(schemaName, view.getName());
+                        builder.put(stName, ViewCodec.fromJson(view.getData()));
                     }
                 }
             }
