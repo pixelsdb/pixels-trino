@@ -20,6 +20,7 @@
 package io.pixelsdb.pixels.trino;
 
 import io.airlift.log.Logger;
+import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
 import io.pixelsdb.pixels.common.physical.Storage;
@@ -183,6 +184,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.option = new PixelsReaderOption();
         this.option.skipCorruptRecords(true);
         this.option.tolerantSchemaEvolution(true);
+        this.option.enableEncodedColumnVector(true);
         this.option.includeCols(includeCols);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.queryId(split.getQueryId());
@@ -570,34 +572,18 @@ class PixelsPageSource implements ConnectorPageSource
                 case STRING:
                 case BINARY:
                 case VARBINARY:
-                    BinaryColumnVector scv = (BinaryColumnVector) vector;
-                    /*
-                    int vectorContentLen = 0;
-                    byte[] vectorContent;
-                    int[] vectorOffsets = new int[rowBatch.size + 1];
-                    int curVectorOffset = 0;
-                    for (int i = 0; i < rowBatch.size; ++i)
+                    if (vector instanceof BinaryColumnVector)
                     {
-                        vectorContentLen += scv.lens[i];
+                        BinaryColumnVector scv = (BinaryColumnVector) vector;
+                        block = new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, scv.isNull);
                     }
-                    vectorContent = new byte[vectorContentLen];
-                    for (int i = 0; i < rowBatch.size; ++i)
+                    else
                     {
-                        int elementLen = scv.lens[i];
-                        if (!scv.isNull[i])
-                        {
-                            System.arraycopy(scv.vector[i], scv.start[i], vectorContent, curVectorOffset, elementLen);
-                        }
-                        vectorOffsets[i] = curVectorOffset;
-                        curVectorOffset += elementLen;
+                        DictionaryColumnVector dscv = (DictionaryColumnVector) vector;
+                        Block dictionary = new VariableWidthBlock(dscv.dictOffsets.length - 1,
+                                Slices.wrappedBuffer(dscv.dictArray), dscv.dictOffsets, Optional.empty());
+                        block = DictionaryBlock.create(batchSize, dictionary, dscv.ids);
                     }
-                    vectorOffsets[rowBatch.size] = vectorContentLen;
-                    block = new VariableWidthBlock(rowBatch.size,
-                            Slices.wrappedBuffer(vectorContent, 0, vectorContentLen),
-                            vectorOffsets,
-                            scv.isNull);
-                            */
-                    block = new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, scv.isNull);
                     break;
                 case BOOLEAN:
                     ByteColumnVector bcv = (ByteColumnVector) vector;
