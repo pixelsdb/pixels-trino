@@ -23,6 +23,9 @@ import io.airlift.slice.SliceInput;
 import io.airlift.slice.SliceOutput;
 import io.trino.spi.block.*;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static java.util.Objects.requireNonNull;
+
 /**
  * We reimplemented writeBlock and readBlock
  *
@@ -39,7 +42,7 @@ public class PairVariableWidthBlockEncoding implements BlockEncoding
         return instance;
     }
 
-    private VariableWidthBlockEncoding variableWidthBlockEncoding = new VariableWidthBlockEncoding();
+    private static VariableWidthBlockEncoding LeafNodeEncoding = new VariableWidthBlockEncoding();
 
     @Override
     public String getName()
@@ -53,6 +56,7 @@ public class PairVariableWidthBlockEncoding implements BlockEncoding
         // The down casts here are safe because it is the block itself the provides this encoding implementation.
         PairVariableWidthBlock pairBlock = (PairVariableWidthBlock) block;
 
+        // For pair node, we write the position count and the left position count.
         sliceOutput.appendInt(pairBlock.getPositionCount());
         sliceOutput.appendInt(pairBlock.getLeftPositionCount());
 
@@ -60,13 +64,58 @@ public class PairVariableWidthBlockEncoding implements BlockEncoding
         Block rightBlock = pairBlock.getRightBlock();
         if (leftBlock instanceof VariableWidthBlock)
         {
-            //((VariableWidthBlock) leftBlock).
+            sliceOutput.appendByte(0); // 0 means this is a leaf node.
+            LeafNodeEncoding.writeBlock(blockEncodingSerde, sliceOutput, leftBlock);
+        }
+        else
+        {
+            sliceOutput.appendByte(1); // 1 means this is a pair node.
+            this.writeBlock(blockEncodingSerde, sliceOutput, leftBlock);
+        }
+        if (rightBlock instanceof VariableWidthBlock)
+        {
+            sliceOutput.appendByte(0); // 0 means this is a leaf node.
+            LeafNodeEncoding.writeBlock(blockEncodingSerde, sliceOutput, rightBlock);
+        }
+        else
+        {
+            sliceOutput.appendByte(1); // 1 means this is a pair node.
+            this.writeBlock(blockEncodingSerde, sliceOutput, rightBlock);
         }
     }
 
     @Override
     public Block readBlock(BlockEncodingSerde blockEncodingSerde, SliceInput sliceInput)
     {
-        return null;
+        int positionCount = sliceInput.readInt();
+        int leftPositionCount = sliceInput.readInt();
+        Block leftNode, rightNode;
+        byte isPairNode = sliceInput.readByte();
+        if (isPairNode == 0)
+        {
+            // this is a leaf node
+            leftNode = LeafNodeEncoding.readBlock(blockEncodingSerde, sliceInput);
+        }
+        else
+        {
+            leftNode = this.readBlock(blockEncodingSerde, sliceInput);
+        }
+        isPairNode = sliceInput.readByte();
+        if (isPairNode == 0)
+        {
+            // this is a leaf node
+            rightNode = LeafNodeEncoding.readBlock(blockEncodingSerde, sliceInput);
+        }
+        else
+        {
+            rightNode = this.readBlock(blockEncodingSerde, sliceInput);
+        }
+        requireNonNull(leftNode, "the decoded left node is null");
+        requireNonNull(rightNode, "the decoded right node is null");
+        checkArgument(leftNode.getPositionCount() == leftPositionCount,
+                "the decoded left node has an incorrect position");
+        checkArgument(leftNode.getPositionCount() + rightNode.getPositionCount() == positionCount,
+                "the decoded right node has an incorrect position count");
+        return new PairVariableWidthBlock(leftNode, rightNode);
     }
 }
