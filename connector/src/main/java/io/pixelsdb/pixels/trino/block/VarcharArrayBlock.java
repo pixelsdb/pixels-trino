@@ -22,12 +22,12 @@ package io.pixelsdb.pixels.trino.block;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 import io.airlift.slice.XxHash64;
+import io.pixelsdb.pixels.common.utils.JvmUtils;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockBuilder;
 import org.openjdk.jol.info.ClassLayout;
 import sun.misc.Unsafe;
 
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.OptionalInt;
@@ -76,16 +76,11 @@ public class VarcharArrayBlock implements Block
     {
         try
         {
-            /**
-             * refer to io.airlift.slice.JvmUtils
-             */
             // fetch theUnsafe object
-            Field field = Unsafe.class.getDeclaredField("theUnsafe");
-            field.setAccessible(true);
-            unsafe = (Unsafe) field.get(null);
+            unsafe = JvmUtils.unsafe;
             if (unsafe == null)
             {
-                throw new RuntimeException("Unsafe access not available");
+                throw new UnsupportedOperationException("Unsafe access not available");
             }
             address = ARRAY_BYTE_BASE_OFFSET;
         } catch (Exception e)
