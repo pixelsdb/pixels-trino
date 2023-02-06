@@ -41,7 +41,7 @@
         </dependency>
         <dependency>
             <groupId>io.pixelsdb</groupId>
-            <artifactId>pixels-optimizer</artifactId>
+            <artifactId>pixels-planner</artifactId>
             <optional>true</optional>
         </dependency>
 
