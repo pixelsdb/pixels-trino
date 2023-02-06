@@ -22,7 +22,7 @@ package io.pixelsdb.pixels.trino;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Joiner;
-import io.pixelsdb.pixels.optimizer.plan.Table;
+import io.pixelsdb.pixels.planner.plan.Table;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.predicate.TupleDomain;

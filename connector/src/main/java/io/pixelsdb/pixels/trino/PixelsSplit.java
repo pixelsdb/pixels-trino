@@ -25,7 +25,7 @@ import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.lambda.output.NonPartitionOutput;
-import io.pixelsdb.pixels.optimizer.plan.Table;
+import io.pixelsdb.pixels.planner.plan.Table;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;

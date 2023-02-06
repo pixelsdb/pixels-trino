@@ -52,9 +52,9 @@ import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
-import io.pixelsdb.pixels.optimizer.PixelsPlanner;
-import io.pixelsdb.pixels.optimizer.plan.*;
-import io.pixelsdb.pixels.optimizer.plan.Table.TableType;
+import io.pixelsdb.pixels.planner.PixelsPlanner;
+import io.pixelsdb.pixels.planner.plan.*;
+import io.pixelsdb.pixels.planner.plan.Table.TableType;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -323,8 +323,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<PixelsColumnHandle> leftColumnHandles;
         List<PixelsColumnHandle> rightColumnHandles;
         String[] leftColumns, rightColumns;
-        io.pixelsdb.pixels.optimizer.plan.Table leftTable;
-        io.pixelsdb.pixels.optimizer.plan.Table rightTable;
+        io.pixelsdb.pixels.planner.plan.Table leftTable;
+        io.pixelsdb.pixels.planner.plan.Table rightTable;
 
         if (leftHandle.getTableType() == TableType.BASE)
         {
@@ -615,7 +615,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
 
         // Build the origin table.
-        io.pixelsdb.pixels.optimizer.plan.Table originTable;
+        io.pixelsdb.pixels.planner.plan.Table originTable;
         if (originTableHandle.getTableType() == TableType.JOINED)
         {
             originTable = parseJoinPlan(originTableHandle);
