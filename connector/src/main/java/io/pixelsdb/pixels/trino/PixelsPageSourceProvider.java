@@ -145,7 +145,14 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
                 PixelsTransactionHandle transHandle = (PixelsTransactionHandle) transactionHandle;
                 if (transHandle.getExecutorType() == QueryQueues.ExecutorType.Lambda &&
-                        this.localSplitCounter.get() >= config.getLocalScanConcurrency())
+                        this.localSplitCounter.get() >= config.getLocalScanConcurrency()
+                        /**
+                         * Issue #57:
+                         * If the number of columns to read is 0, the spits should not be processed by Lambda.
+                         * It usually means that the query is like select count(*) from table.
+                         * Such queries can be served on the metadata headers that are cached locally, without touching the data.
+                         */
+                        && !withFilterColumns.isEmpty())
                 {
                     String[] columnsToRead = new String[withFilterColumns.size()];
                     boolean[] projection = new boolean[withFilterColumns.size()];
