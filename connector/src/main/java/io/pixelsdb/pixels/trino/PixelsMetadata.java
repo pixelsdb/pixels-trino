@@ -406,6 +406,12 @@ public class PixelsMetadata implements ConnectorMetadata
     public Optional<ConstraintApplicationResult<ConnectorTableHandle>> applyFilter(
             ConnectorSession session, ConnectorTableHandle handle, Constraint constraint)
     {
+        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
+        {
+            // Issue #60: Trino's filters are currently more efficient, so pushdown should only be used for Lambda.
+            return Optional.empty();
+        }
+
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
 
         TupleDomain<PixelsColumnHandle> oldDomain = tableHandle.getConstraint();
@@ -512,19 +518,18 @@ public class PixelsMetadata implements ConnectorMetadata
             try
             {
                 TypeDescription pixelsType = metadataProxy.parsePixelsType(columnHandle.getColumnType());
-                ByteBuffer statsBytes = column.getRecordStats();
+                ByteBuffer statsBytes = column.getRecordStats().slice();
                 if (statsBytes != null && statsBytes.remaining() > 0)
                 {
                     PixelsProto.ColumnStatistic columnStatsPb = PixelsProto.ColumnStatistic.parseFrom(statsBytes);
                     StatsRecorder statsRecorder = StatsRecorder.create(pixelsType, columnStatsPb);
-                    if (statsRecorder instanceof RangeStats)
+                    if (statsRecorder instanceof RangeStats<?> rangeStats)
                     {
                         /**
                          * When needed, we can also get a general range stats like this:
                          * GeneralRangeStats rangeStats = StatsRecorder.toGeneral(pixelsType, (RangeStats<?>) statsRecorder);
                          * The double min/max in general range stats is the readable representation of the min/max value.
                          */
-                        RangeStats<?> rangeStats = (RangeStats<?>) statsRecorder;
                         logger.debug(column.getName() + " column range: {min:" + rangeStats.getMinimum() + ", max:" +
                                 rangeStats.getMaximum() + ", hasMin:" + rangeStats.hasMinimum() +
                                 ", hasMax:" + rangeStats.hasMaximum() + "}");
