@@ -118,7 +118,11 @@ public class PixelsTrinoConfig
                  *
                  * I currently don't know the reason (08.27.2021).
                  */
-                StorageFactory.Instance().reload();
+                if (StorageFactory.Instance().isEnabled(Storage.Scheme.hdfs))
+                {
+                    // PIXELS-385: only reload HDFS if it is enabled.
+                    StorageFactory.Instance().reload(Storage.Scheme.hdfs);
+                }
             } catch (IOException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
