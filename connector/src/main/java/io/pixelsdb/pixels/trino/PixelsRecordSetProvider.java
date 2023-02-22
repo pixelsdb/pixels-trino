@@ -20,9 +20,9 @@
 package io.pixelsdb.pixels.trino;
 
 import com.google.inject.Inject;
-import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
+import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.planner.queue.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
