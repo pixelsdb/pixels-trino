@@ -21,9 +21,9 @@ package io.pixelsdb.pixels.trino;
 
 import io.airlift.log.Logger;
 import io.airlift.slice.Slices;
-import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
 import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.PixelsReader;
 import io.pixelsdb.pixels.core.PixelsReaderImpl;

@@ -19,8 +19,8 @@
  */
 package io.pixelsdb.pixels.trino;
 
-import io.pixelsdb.pixels.cache.MemoryMappedFile;
 import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.trino.spi.connector.RecordCursor;
 import io.trino.spi.connector.RecordSet;
