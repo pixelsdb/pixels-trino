@@ -34,7 +34,7 @@ import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
 import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
-import io.pixelsdb.pixels.planner.plan.Table;
+import io.pixelsdb.pixels.turbo.planner.plan.logical.Table;
 import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;

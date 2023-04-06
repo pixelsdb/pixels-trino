@@ -24,7 +24,7 @@ import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
-import io.pixelsdb.pixels.planner.queue.QueryQueues;
+import io.pixelsdb.pixels.turbo.planner.queue.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.trino.spi.TrinoException;

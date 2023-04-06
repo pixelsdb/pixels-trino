@@ -36,12 +36,17 @@
         </dependency>
         <dependency>
             <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-turbo-planner</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
             <artifactId>pixels-executor</artifactId>
             <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>io.pixelsdb</groupId>
-            <artifactId>pixels-planner</artifactId>
+            <artifactId>pixels-lambda-invoker</artifactId>
             <optional>true</optional>
         </dependency>
 
