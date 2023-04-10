@@ -21,12 +21,12 @@ package io.pixelsdb.pixels.trino;
 
 import io.airlift.bootstrap.LifeCycleManager;
 import io.airlift.log.Logger;
-import io.pixelsdb.pixels.aws.scaling.AwsMetricsCollector;
 import io.pixelsdb.pixels.common.exception.TransException;
 import io.pixelsdb.pixels.common.transaction.QueryTransInfo;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
-import io.pixelsdb.pixels.planner.queue.QueryQueues;
+import io.pixelsdb.pixels.common.turbo.MetricsCollector;
+import io.pixelsdb.pixels.common.turbo.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -39,6 +39,7 @@ import io.trino.spi.transaction.IsolationLevel;
 
 import javax.inject.Inject;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static java.util.Objects.requireNonNull;
@@ -86,7 +87,21 @@ public class PixelsConnector implements Connector
                 Integer.parseInt(config.getConfigFactory().getProperty("trans.server.port")));
         if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
         {
-            AwsMetricsCollector.Instance().startAutoReport();
+            this.getMetricsCollector().startAutoReport();
+        }
+    }
+
+    private MetricsCollector getMetricsCollector()
+    {
+        Optional<MetricsCollector> collector = MetricsCollector.Instance();
+        if (collector.isPresent())
+        {
+            return collector.get();
+        }
+        else
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR,
+                    "no implementation for metrics collector");
         }
     }
 
@@ -110,7 +125,7 @@ public class PixelsConnector implements Connector
         QueryQueues.ExecutorType executorType;
         if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
         {
-            AwsMetricsCollector.Instance().report();
+            this.getMetricsCollector().report();
             while ((executorType = QueryQueues.Instance().Enqueue(info.getQueryId())) == QueryQueues.ExecutorType.None)
             {
                 try
@@ -223,7 +238,7 @@ public class PixelsConnector implements Connector
     public final void shutdown() {
         try {
             lifeCycleManager.stop();
-            AwsMetricsCollector.Instance().stopAutoReport();
+            this.getMetricsCollector().stopAutoReport();
         } catch (Exception e) {
             logger.error(e, "error in shutting down connector");
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, e);

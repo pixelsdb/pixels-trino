@@ -21,7 +21,7 @@ package io.pixelsdb.pixels.trino;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.pixelsdb.pixels.planner.queue.QueryQueues;
+import io.pixelsdb.pixels.common.turbo.QueryQueues;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 
 public class PixelsTransactionHandle implements ConnectorTransactionHandle
