@@ -45,16 +45,17 @@ import io.pixelsdb.pixels.executor.predicate.Bound;
 import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
-import io.pixelsdb.pixels.turbo.planner.PixelsPlanner;
-import io.pixelsdb.pixels.turbo.planner.plan.logical.*;
-import io.pixelsdb.pixels.turbo.planner.plan.logical.Table.TableType;
-import io.pixelsdb.pixels.turbo.planner.plan.physical.domain.InputInfo;
-import io.pixelsdb.pixels.turbo.planner.plan.physical.domain.InputSplit;
-import io.pixelsdb.pixels.turbo.planner.plan.physical.input.AggregationInput;
-import io.pixelsdb.pixels.turbo.planner.plan.physical.input.JoinInput;
-import io.pixelsdb.pixels.turbo.planner.plan.physical.AggregationOperator;
-import io.pixelsdb.pixels.turbo.planner.plan.physical.JoinOperator;
-import io.pixelsdb.pixels.turbo.planner.plan.physical.Operator;
+import io.pixelsdb.pixels.planner.PixelsPlanner;
+import io.pixelsdb.pixels.planner.plan.PlanOptimizer;
+import io.pixelsdb.pixels.planner.plan.logical.*;
+import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
+import io.pixelsdb.pixels.planner.plan.physical.AggregationOperator;
+import io.pixelsdb.pixels.planner.plan.physical.JoinOperator;
+import io.pixelsdb.pixels.planner.plan.physical.Operator;
+import io.pixelsdb.pixels.planner.plan.physical.domain.InputInfo;
+import io.pixelsdb.pixels.planner.plan.physical.domain.InputSplit;
+import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
+import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -323,8 +324,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<PixelsColumnHandle> leftColumnHandles;
         List<PixelsColumnHandle> rightColumnHandles;
         String[] leftColumns, rightColumns;
-        io.pixelsdb.pixels.turbo.planner.plan.logical.Table leftTable;
-        io.pixelsdb.pixels.turbo.planner.plan.logical.Table rightTable;
+        io.pixelsdb.pixels.planner.plan.logical.Table leftTable;
+        io.pixelsdb.pixels.planner.plan.logical.Table rightTable;
 
         if (leftHandle.getTableType() == TableType.BASE)
         {
@@ -615,7 +616,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
 
         // Build the origin table.
-        io.pixelsdb.pixels.turbo.planner.plan.logical.Table originTable;
+        io.pixelsdb.pixels.planner.plan.logical.Table originTable;
         if (originTableHandle.getTableType() == TableType.JOINED)
         {
             originTable = parseJoinPlan(originTableHandle);

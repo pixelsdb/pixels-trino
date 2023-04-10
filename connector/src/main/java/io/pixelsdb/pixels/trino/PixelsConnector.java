@@ -21,12 +21,12 @@ package io.pixelsdb.pixels.trino;
 
 import io.airlift.bootstrap.LifeCycleManager;
 import io.airlift.log.Logger;
+import io.pixelsdb.pixels.aws.scaling.AwsMetricsCollector;
 import io.pixelsdb.pixels.common.exception.TransException;
 import io.pixelsdb.pixels.common.transaction.QueryTransInfo;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
-import io.pixelsdb.pixels.turbo.planner.autoscaling.MetricsCollector;
-import io.pixelsdb.pixels.turbo.planner.queue.QueryQueues;
+import io.pixelsdb.pixels.planner.queue.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -86,7 +86,7 @@ public class PixelsConnector implements Connector
                 Integer.parseInt(config.getConfigFactory().getProperty("trans.server.port")));
         if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
         {
-            MetricsCollector.Instance().startAutoReport();
+            AwsMetricsCollector.Instance().startAutoReport();
         }
     }
 
@@ -110,7 +110,7 @@ public class PixelsConnector implements Connector
         QueryQueues.ExecutorType executorType;
         if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
         {
-            MetricsCollector.Instance().report();
+            AwsMetricsCollector.Instance().report();
             while ((executorType = QueryQueues.Instance().Enqueue(info.getQueryId())) == QueryQueues.ExecutorType.None)
             {
                 try
@@ -223,7 +223,7 @@ public class PixelsConnector implements Connector
     public final void shutdown() {
         try {
             lifeCycleManager.stop();
-            MetricsCollector.Instance().stopAutoReport();
+            AwsMetricsCollector.Instance().stopAutoReport();
         } catch (Exception e) {
             logger.error(e, "error in shutting down connector");
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, e);
