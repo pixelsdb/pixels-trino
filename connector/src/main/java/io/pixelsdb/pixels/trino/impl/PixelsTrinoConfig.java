@@ -24,6 +24,7 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.turbo.InvokerFactory;
+import io.pixelsdb.pixels.common.turbo.MetricsCollector;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
@@ -145,6 +146,11 @@ public class PixelsTrinoConfig
              * successfully. The detailed reason is to be analyzed.
              */
             InvokerFactory.Instance();
+            if (this.lambdaSwitch == LambdaSwitch.AUTO)
+            {
+                // PIXELS-416: same as the invoker providers.
+                MetricsCollector.Instance();
+            }
         }
         return this;
     }
