@@ -23,6 +23,8 @@ import io.airlift.configuration.Config;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
+import io.pixelsdb.pixels.common.turbo.InvokerFactory;
+import io.pixelsdb.pixels.common.turbo.MetricsCollector;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
@@ -135,6 +137,21 @@ public class PixelsTrinoConfig
     public PixelsTrinoConfig setLambdaSwitch(String lambdaSwitch)
     {
         this.lambdaSwitch = LambdaSwitch.valueOf(lambdaSwitch.toUpperCase());
+        if (this.lambdaSwitch == LambdaSwitch.ON || this.lambdaSwitch == LambdaSwitch.AUTO)
+        {
+            /**
+             * PIXELS-416:
+             * We must load the invoker providers here. The split manager and the page source
+             * provider are running in working threads and can not load the invoker providers
+             * successfully. The detailed reason is to be analyzed.
+             */
+            InvokerFactory.Instance();
+            if (this.lambdaSwitch == LambdaSwitch.AUTO)
+            {
+                // PIXELS-416: same as the invoker providers.
+                MetricsCollector.Instance();
+            }
+        }
         return this;
     }
 

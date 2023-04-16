@@ -8,6 +8,7 @@
         <artifactId>pixels</artifactId>
         <groupId>io.pixelsdb</groupId>
         <version>0.1.0-SNAPSHOT</version>
+        <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
     <artifactId>pixels-trino</artifactId>

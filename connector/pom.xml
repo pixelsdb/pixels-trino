@@ -36,12 +36,42 @@
         </dependency>
         <dependency>
             <groupId>io.pixelsdb</groupId>
-            <artifactId>pixels-executor</artifactId>
+            <artifactId>pixels-storage-localfs</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-storage-hdfs</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-storage-s3</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-storage-redis</artifactId>
             <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>io.pixelsdb</groupId>
             <artifactId>pixels-planner</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-executor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-invoker-lambda</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.pixelsdb</groupId>
+            <artifactId>pixels-scaling-ec2</artifactId>
             <optional>true</optional>
         </dependency>
 
@@ -55,70 +85,6 @@
         <dependency>
             <groupId>io.trino</groupId>
             <artifactId>trino-plugin-toolkit</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <!-- aws sdk -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>lambda</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudwatch</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudwatchevents</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudwatchlogs</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <!--
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>netty-nio-client</artifactId>
-            <optional>true</optional>
-        </dependency>
-        -->
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>apache-client</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>aws-crt-client</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <!-- hdfs -->
-        <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client</artifactId>
             <optional>true</optional>
         </dependency>
 
@@ -151,6 +117,7 @@
             <artifactId>fastjson</artifactId>
             <optional>true</optional>
         </dependency>
+
         <dependency>
             <groupId>io.etcd</groupId>
             <artifactId>jetcd-core</artifactId>
