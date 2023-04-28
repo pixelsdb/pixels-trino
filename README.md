@@ -18,4 +18,4 @@ before building this project.
 ## Use Pixels in Trino
 
 Follow the instructions
-[here](https://github.com/pixelsdb/pixels#installation-in-aws) to install Pixels and use it in Trino.
+[HERE](https://github.com/pixelsdb/pixels/blob/master/docs/INSTALL.md) to install Pixels and use it in Trino.
