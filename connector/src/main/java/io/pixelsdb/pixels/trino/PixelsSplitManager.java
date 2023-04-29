@@ -228,7 +228,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 {
                     PixelsSplit split = new PixelsSplit(
                             transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
-                            config.getOutputScheme().name(), joinInput.getOutput().getFileNames(),
+                            config.getOutputStorageScheme().name(), joinInput.getOutput().getFileNames(),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
                             false, false, Arrays.asList(address), columnOrder,
@@ -286,7 +286,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 {
                     PixelsSplit split = new PixelsSplit(
                             transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
-                            config.getOutputScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
+                            config.getOutputStorageScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
                             ImmutableList.of(0), ImmutableList.of(-1), false, false,
                             Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, TableType.AGGREGATED,
                             null, null, JSON.toJSONString(aggrInput));

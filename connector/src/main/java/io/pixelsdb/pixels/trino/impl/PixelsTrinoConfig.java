@@ -26,6 +26,7 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.turbo.InvokerFactory;
 import io.pixelsdb.pixels.common.turbo.MetricsCollector;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
+import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfo;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
 
@@ -56,11 +57,17 @@ public class PixelsTrinoConfig
     private LambdaSwitch lambdaSwitch = LambdaSwitch.AUTO;
     private boolean cleanLocalResult = true;
     private int localScanConcurrency = -1;
-    private Storage.Scheme outputScheme = null;
+    /**
+     * The storage info of the inputs of Pixels Turbo.
+     */
+    private StorageInfo inputStorageInfo = null;
+    private Storage.Scheme inputStorageScheme = null;
+    /**
+     * The storage info of the outputs of Pixels Turbo.
+     */
+    private StorageInfo outputStorageInfo = null;
+    private Storage.Scheme outputStorageScheme = null;
     private String outputFolder = null;
-    private String outputEndpoint = null;
-    private String outputAccessKey = null;
-    private String outputSecretKey = null;
 
     @Config("pixels.config")
     public PixelsTrinoConfig setPixelsConfig (String pixelsConfig)
@@ -130,6 +137,24 @@ public class PixelsTrinoConfig
                 throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
             }
         }
+
+        this.inputStorageScheme = Storage.Scheme.from(this.configFactory.getProperty("executor.input.storage.scheme"));
+        String inputEndpoint = this.configFactory.getProperty("executor.input.storage.endpoint");
+        String inputAccessKey = this.configFactory.getProperty("executor.input.storage.access.key");
+        String inputSecretKey = this.configFactory.getProperty("executor.input.storage.secret.key");
+        this.inputStorageInfo = new StorageInfo(this.inputStorageScheme, inputEndpoint, inputAccessKey, inputSecretKey);
+
+        this.outputStorageScheme = Storage.Scheme.from(this.configFactory.getProperty("executor.output.storage.scheme"));
+        String outputEndpoint = this.configFactory.getProperty("executor.output.storage.endpoint");
+        String outputAccessKey = this.configFactory.getProperty("executor.output.storage.access.key");
+        String outputSecretKey = this.configFactory.getProperty("executor.output.storage.secret.key");
+        this.outputStorageInfo = new StorageInfo(this.outputStorageScheme, outputEndpoint, outputAccessKey, outputSecretKey);
+        this.outputFolder = this.configFactory.getProperty("executor.output.folder");
+        if (!this.outputFolder.endsWith("/"))
+        {
+            this.outputFolder += "/";
+        }
+
         return this;
     }
 
@@ -169,45 +194,6 @@ public class PixelsTrinoConfig
         return this;
     }
 
-    @Config("output.scheme")
-    public PixelsTrinoConfig setOutputScheme(String outputScheme)
-    {
-        this.outputScheme = Storage.Scheme.from(outputScheme);
-        return this;
-    }
-
-    @Config("output.folder")
-    public PixelsTrinoConfig setOutputFolder(String folder)
-    {
-        if (!folder.endsWith("/"))
-        {
-            folder = folder + "/";
-        }
-        this.outputFolder = folder;
-        return this;
-    }
-
-    @Config("output.access.key")
-    public PixelsTrinoConfig setOutputAccessKey(String accessKey)
-    {
-        this.outputAccessKey = accessKey;
-        return this;
-    }
-
-    @Config("output.secret.key")
-    public PixelsTrinoConfig setOutputSecretKey(String secretKey)
-    {
-        this.outputSecretKey = secretKey;
-        return this;
-    }
-
-    @Config("output.endpoint")
-    public PixelsTrinoConfig setOutputEndpoint(String endpoint)
-    {
-        this.outputEndpoint = endpoint;
-        return this;
-    }
-
     @NotNull
     public String getPixelsConfig ()
     {
@@ -231,15 +217,27 @@ public class PixelsTrinoConfig
     }
 
     @NotNull
-    public Storage.Scheme getOutputScheme()
+    public StorageInfo getInputStorageInfo()
     {
-        return outputScheme;
+        return inputStorageInfo;
     }
 
     @NotNull
-    public String getOutputFolder()
+    public Storage.Scheme getInputStorageScheme()
     {
-        return outputFolder;
+        return inputStorageScheme;
+    }
+
+    @NotNull
+    public StorageInfo getOutputStorageInfo()
+    {
+        return outputStorageInfo;
+    }
+
+    @NotNull
+    public Storage.Scheme getOutputStorageScheme()
+    {
+        return outputStorageScheme;
     }
 
     @NotNull
@@ -258,24 +256,6 @@ public class PixelsTrinoConfig
          * as a folder in S3-like storage.
          */
         return this.outputFolder + queryId + "/" +post + "/";
-    }
-
-    @NotNull
-    public String getOutputAccessKey()
-    {
-        return outputAccessKey;
-    }
-
-    @NotNull
-    public String getOutputSecretKey()
-    {
-        return outputSecretKey;
-    }
-
-    @NotNull
-    public String getOutputEndpoint()
-    {
-        return outputEndpoint;
     }
 
     /**
