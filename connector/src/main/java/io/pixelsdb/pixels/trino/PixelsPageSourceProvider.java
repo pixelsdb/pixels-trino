@@ -114,19 +114,20 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
         try
         {
-            if (config.getOutputScheme() == Storage.Scheme.minio)
+            StorageInfo storageInfo = config.getOutputStorageInfo();
+            if (storageInfo.getScheme() == Storage.Scheme.minio)
             {
-                Minio.ConfigMinio(config.getOutputEndpoint(), config.getOutputAccessKey(), config.getOutputSecretKey());
+                Minio.ConfigMinio(storageInfo.getEndpoint(), storageInfo.getAccessKey(), storageInfo.getSecretKey());
             }
-            else if (config.getOutputScheme() == Storage.Scheme.redis)
+            else if (storageInfo.getScheme() == Storage.Scheme.redis)
             {
-                Redis.ConfigRedis(config.getOutputEndpoint(), config.getOutputAccessKey(), config.getOutputSecretKey());
+                Redis.ConfigRedis(storageInfo.getEndpoint(), storageInfo.getAccessKey(), storageInfo.getSecretKey());
             }
 
             if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
             {
                 // perform aggregation push down.
-                Storage storage = StorageFactory.Instance().getStorage(config.getOutputScheme());
+                Storage storage = StorageFactory.Instance().getStorage(config.getOutputStorageScheme());
                 IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
@@ -134,7 +135,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             if (pixelsSplit.getTableType() == Table.TableType.JOINED)
             {
                 // perform join push down.
-                Storage storage = StorageFactory.Instance().getStorage(config.getOutputScheme());
+                Storage storage = StorageFactory.Instance().getStorage(config.getOutputStorageScheme());
                 IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                         pixelsFooterCache, getLambdaJoinOutput(pixelsSplit), null);
@@ -162,7 +163,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                         columnsToRead[i] = withFilterColumns.get(i).getColumnName();
                         projection[i] = i < projectionSize;
                     }
-                    Storage storage = StorageFactory.Instance().getStorage(config.getOutputScheme());
+                    Storage storage = StorageFactory.Instance().getStorage(config.getOutputStorageScheme());
                     IntermediateFileCleaner.Instance().registerStorage(storage);
                     return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
                             pixelsFooterCache, getLambdaScanOutput(pixelsSplit, columnsToRead, projection), null);
@@ -187,9 +188,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         String aggrInputJson = inputSplit.getAggrInput();
         AggregationInput aggrInput = JSON.parseObject(aggrInputJson, AggregationInput.class);
         OutputInfo output = aggrInput.getOutput();
-        StorageInfo storageInfo = new StorageInfo(config.getOutputScheme(), config.getOutputEndpoint(),
-                config.getOutputAccessKey(), config.getOutputSecretKey());
-        output.setStorageInfo(storageInfo);
+        output.setStorageInfo(config.getOutputStorageInfo());
         output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId()) +
                 output.getPath().substring(output.getPath().indexOf(inputSplit.getSchemaName())));
         CompletableFuture<Output> aggrOutputFuture;
@@ -212,7 +211,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(config.getOutputScheme(), (AggregationOutput) aggrOutput);
+                inputSplit.permute(config.getOutputStorageScheme(), (AggregationOutput) aggrOutput);
                 logger.info("final aggr output: " + JSON.toJSONString(aggrOutput));
             }
             catch (Exception e)
@@ -248,9 +247,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                     inputSplit.getJoinAlgo() + "' is not supported");
         }
         MultiOutputInfo output = joinInput.getOutput();
-        StorageInfo storageInfo = new StorageInfo(config.getOutputScheme(), config.getOutputEndpoint(),
-                config.getOutputAccessKey(), config.getOutputSecretKey());
-        output.setStorageInfo(storageInfo);
+        output.setStorageInfo(config.getOutputStorageInfo());
         output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
                 inputSplit.getSchemaName() + "/" + inputSplit.getTableName()));
         CompletableFuture<Output> joinOutputFuture;
@@ -283,7 +280,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(config.getOutputScheme(), (JoinOutput) joinOutput);
+                inputSplit.permute(config.getOutputStorageScheme(), (JoinOutput) joinOutput);
                 logger.info("final join output: " + JSON.toJSONString(joinOutput));
             }
             catch (Exception e)
@@ -295,6 +292,9 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
     private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit, String[] columnsToRead, boolean[] projection)
     {
+        checkArgument(Storage.Scheme.from(inputSplit.getStorageScheme()).equals(config.getInputStorageScheme()), String.format(
+                "the storage scheme of table '%s.%s' is not consistent with the input storage scheme for Pixels Turbo",
+                inputSplit.getSchemaName(), inputSplit.getTableName()));
         ScanInput scanInput = new ScanInput();
         scanInput.setQueryId(inputSplit.getQueryId());
         ScanTableInfo tableInfo = new ScanTableInfo();
@@ -305,14 +305,12 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         TableScanFilter filter = createTableScanFilter(inputSplit.getSchemaName(),
                 inputSplit.getTableName(), columnsToRead, inputSplit.getConstraint());
         tableInfo.setFilter(JSON.toJSONString(filter));
+        tableInfo.setBase(true);
+        tableInfo.setStorageInfo(config.getInputStorageInfo());
         scanInput.setTableInfo(tableInfo);
         scanInput.setScanProjection(projection);
         String folder = config.getOutputFolderForQuery(inputSplit.getQueryId());
-        String endpoint = config.getOutputEndpoint();
-        String accessKey = config.getOutputAccessKey();
-        String secretKey = config.getOutputSecretKey();
-        StorageInfo storageInfo = new StorageInfo(config.getOutputScheme(), endpoint, accessKey, secretKey);
-        OutputInfo outputInfo = new OutputInfo(folder, true, storageInfo, true);
+        OutputInfo outputInfo = new OutputInfo(folder, true, config.getOutputStorageInfo(), true);
         scanInput.setOutput(outputInfo);
 
         return InvokerFactory.Instance().getInvoker(WorkerType.SCAN)
@@ -323,7 +321,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             }
             try
             {
-                inputSplit.permute(config.getOutputScheme(), (ScanOutput) scanOutput);
+                inputSplit.permute(config.getOutputStorageScheme(), (ScanOutput) scanOutput);
             }
             catch (Exception e)
             {
