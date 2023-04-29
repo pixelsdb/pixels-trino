@@ -251,6 +251,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
                 inputSplit.getSchemaName() + "/" + inputSplit.getTableName()));
         CompletableFuture<Output> joinOutputFuture;
+        // logger.debug("join input: " + JSON.toJSONString(joinInput));
         if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
         {
             joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.BROADCAST_CHAIN_JOIN).invoke(joinInput);
