@@ -9,7 +9,7 @@ with the Connector SPI in Trino 405 should also work well with Pixels.
 ## Build
 This project can be opened as a maven project in Intellij and built using maven.
 
-**Note** that Trino 405 requires Java 17, thus this project should be build by Jdk 17 (17.0.6 is tested).
+**Note** that Trino 405 requires Java 17, thus this project should be built by Jdk 17 (17.0.6 is tested).
 
 [Pixels](https://github.com/pixelsdb/pixels) is the parent of this project,
 therefore use `mvn install` to install Pixels modules into your local maven repository,
