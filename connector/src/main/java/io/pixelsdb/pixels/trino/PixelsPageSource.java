@@ -187,7 +187,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.enableEncodedColumnVector(true);
         this.option.includeCols(includeCols);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
-        this.option.queryId(split.getQueryId());
+        this.option.transId(split.getTransId());
 
         if (split.getConstraint().getDomains().isPresent() && !split.getColumnOrder().isEmpty())
         {

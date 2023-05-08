@@ -189,7 +189,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         AggregationInput aggrInput = JSON.parseObject(aggrInputJson, AggregationInput.class);
         OutputInfo output = aggrInput.getOutput();
         output.setStorageInfo(config.getOutputStorageInfo());
-        output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId()) +
+        output.setPath(config.getOutputFolderForQuery(inputSplit.getTransId()) +
                 output.getPath().substring(output.getPath().indexOf(inputSplit.getSchemaName())));
         CompletableFuture<Output> aggrOutputFuture;
 
@@ -248,7 +248,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         }
         MultiOutputInfo output = joinInput.getOutput();
         output.setStorageInfo(config.getOutputStorageInfo());
-        output.setPath(config.getOutputFolderForQuery(inputSplit.getQueryId(),
+        output.setPath(config.getOutputFolderForQuery(inputSplit.getTransId(),
                 inputSplit.getSchemaName() + "/" + inputSplit.getTableName()));
         CompletableFuture<Output> joinOutputFuture;
         // logger.debug("join input: " + JSON.toJSONString(joinInput));
@@ -297,7 +297,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 "the storage scheme of table '%s.%s' is not consistent with the input storage scheme for Pixels Turbo",
                 inputSplit.getSchemaName(), inputSplit.getTableName()));
         ScanInput scanInput = new ScanInput();
-        scanInput.setQueryId(inputSplit.getQueryId());
+        scanInput.setTransId(inputSplit.getTransId());
         ScanTableInfo tableInfo = new ScanTableInfo();
         tableInfo.setTableName(inputSplit.getTableName());
         tableInfo.setColumnsToRead(columnsToRead);
@@ -310,7 +310,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         tableInfo.setStorageInfo(config.getInputStorageInfo());
         scanInput.setTableInfo(tableInfo);
         scanInput.setScanProjection(projection);
-        String folder = config.getOutputFolderForQuery(inputSplit.getQueryId());
+        String folder = config.getOutputFolderForQuery(inputSplit.getTransId());
         OutputInfo outputInfo = new OutputInfo(folder, true, config.getOutputStorageInfo(), true);
         scanInput.setOutput(outputInfo);
 

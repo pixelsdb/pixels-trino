@@ -129,7 +129,7 @@ public class PixelsRecordCursor implements RecordCursor
         this.option.tolerantSchemaEvolution(true);
         this.option.includeCols(this.includeCols);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
-        this.option.queryId(split.getQueryId());
+        this.option.transId(split.getTransId());
 
         if (split.getConstraint().getDomains().isPresent() && !split.getColumnOrder().isEmpty())
         {
