@@ -84,7 +84,7 @@ public class PixelsConnector implements Connector
         this.recordCursorEnabled = Boolean.parseBoolean(config.getConfigFactory().getProperty("record.cursor.enabled"));
         this.transService = new TransService(config.getConfigFactory().getProperty("trans.server.host"),
                 Integer.parseInt(config.getConfigFactory().getProperty("trans.server.port")));
-        if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
+        if (this.config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
         {
             this.getMetricsCollector().startAutoReport();
         }
@@ -121,7 +121,7 @@ public class PixelsConnector implements Connector
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
         }
         QueryQueues.ExecutorType executorType;
-        if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
+        if (this.config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
         {
             this.getMetricsCollector().report();
             while ((executorType = QueryQueues.Instance().Enqueue(context.getTransId())) ==
@@ -136,7 +136,7 @@ public class PixelsConnector implements Connector
                 }
             }
         }
-        else if (config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.ON)
+        else if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.ON)
         {
             executorType = QueryQueues.ExecutorType.Lambda;
         }
