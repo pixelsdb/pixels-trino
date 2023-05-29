@@ -31,7 +31,7 @@ import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
-import io.pixelsdb.pixels.common.turbo.QueryQueues;
+import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.core.PixelsProto;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.stats.RangeStats;
@@ -406,7 +406,7 @@ public class PixelsMetadata implements ConnectorMetadata
     public Optional<ConstraintApplicationResult<ConnectorTableHandle>> applyFilter(
             ConnectorSession session, ConnectorTableHandle handle, Constraint constraint)
     {
-        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
+        if (transHandle.getExecutorType() != ExecutorType.CF)
         {
             // Issue #60: Trino's filters are currently more efficient, so pushdown should only be used for Lambda.
             return Optional.empty();
@@ -552,7 +552,7 @@ public class PixelsMetadata implements ConnectorMetadata
             ConnectorSession session, ConnectorTableHandle handle, List<AggregateFunction> aggregates,
             Map<String, ColumnHandle> assignments, List<List<ColumnHandle>> groupingSets)
     {
-        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
+        if (transHandle.getExecutorType() != ExecutorType.CF)
         {
             return Optional.empty();
         }
@@ -675,7 +675,7 @@ public class PixelsMetadata implements ConnectorMetadata
             Map<String, ColumnHandle> rightAssignments,
             JoinStatistics statistics)
     {
-        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
+        if (transHandle.getExecutorType() != ExecutorType.CF)
         {
             return Optional.empty();
         }

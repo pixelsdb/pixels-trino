@@ -51,7 +51,7 @@ public class PixelsTrinoConfig
         return BatchSize;
     }
 
-    public enum CloudFunctionSwitch { ON, OFF, AUTO }
+    public enum CloudFunctionSwitch { ON, OFF, AUTO, SESSION }
 
     private String pixelsConfig = null;
     private CloudFunctionSwitch cloudFunctionSwitch = CloudFunctionSwitch.AUTO;

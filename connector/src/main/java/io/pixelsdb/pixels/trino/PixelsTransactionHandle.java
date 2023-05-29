@@ -21,13 +21,13 @@ package io.pixelsdb.pixels.trino;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.pixelsdb.pixels.common.turbo.QueryQueues;
+import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 
 public class PixelsTransactionHandle implements ConnectorTransactionHandle
 {
     public static final PixelsTransactionHandle Default = new PixelsTransactionHandle(
-            -1, -1, QueryQueues.ExecutorType.None);
+            -1, -1, ExecutorType.PENDING);
 
     /**
      * transId is also the query id in Pixels, as each query is a single-statement read-only transaction.
@@ -40,7 +40,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     /**
      * The type of executor to execute this query.
      */
-    private final QueryQueues.ExecutorType executorType;
+    private ExecutorType executorType;
 
     /**
      * Create a transaction handle.
@@ -51,7 +51,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     @JsonCreator
     public PixelsTransactionHandle(@JsonProperty("transId") long transId,
                                    @JsonProperty("timestamp") long timestamp,
-                                   @JsonProperty("executorType")QueryQueues.ExecutorType executorType)
+                                   @JsonProperty("executorType") ExecutorType executorType)
     {
         this.transId = transId;
         this.timestamp = timestamp;
@@ -71,8 +71,13 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     }
 
     @JsonProperty
-    public QueryQueues.ExecutorType getExecutorType()
+    public ExecutorType getExecutorType()
     {
         return this.executorType;
+    }
+
+    public void setExecutorType(ExecutorType executorType)
+    {
+        this.executorType = executorType;
     }
 }

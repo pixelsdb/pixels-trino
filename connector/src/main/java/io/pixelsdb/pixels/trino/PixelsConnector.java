@@ -24,6 +24,7 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.TransException;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
+import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.MetricsCollector;
 import io.pixelsdb.pixels.common.turbo.QueryQueues;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
@@ -120,12 +121,12 @@ public class PixelsConnector implements Connector
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
         }
-        QueryQueues.ExecutorType executorType;
+        ExecutorType executorType;
         if (this.config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
         {
             this.getMetricsCollector().report();
             while ((executorType = QueryQueues.Instance().Enqueue(context.getTransId())) ==
-                    QueryQueues.ExecutorType.None)
+                    ExecutorType.PENDING)
             {
                 try
                 {
@@ -138,11 +139,16 @@ public class PixelsConnector implements Connector
         }
         else if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.ON)
         {
-            executorType = QueryQueues.ExecutorType.Lambda;
+            executorType = ExecutorType.CF;
+        }
+        else if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.OFF)
+        {
+            executorType = ExecutorType.MPP;
         }
         else
         {
-            executorType = QueryQueues.ExecutorType.Cluster;
+            // cloud.function.switch is session, executor type to be determined in getMetadata()
+            executorType = ExecutorType.PENDING;
         }
         return new PixelsTransactionHandle(context.getTransId(), context.getTimestamp(), executorType);
     }
@@ -153,7 +159,10 @@ public class PixelsConnector implements Connector
         if (transactionHandle instanceof PixelsTransactionHandle)
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
-            QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
+            if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
+            {
+                QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
+            }
             try
             {
                 this.transService.commitTrans(handle.getTransId(), handle.getTimestamp());
@@ -175,7 +184,10 @@ public class PixelsConnector implements Connector
         if (transactionHandle instanceof PixelsTransactionHandle)
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
-            QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
+            if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
+            {
+                QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
+            }
             try
             {
                 this.transService.rollbackTrans(handle.getTransId());
@@ -183,7 +195,7 @@ public class PixelsConnector implements Connector
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
             }
-            if (handle.getExecutorType() == QueryQueues.ExecutorType.Lambda)
+            if (handle.getExecutorType() == ExecutorType.CF)
             {
                 cleanIntermediatePathForQuery(handle.getTransId());
             }
@@ -212,7 +224,26 @@ public class PixelsConnector implements Connector
     @Override
     public ConnectorMetadata getMetadata(ConnectorSession session, ConnectorTransactionHandle transHandle)
     {
-        return new PixelsMetadata(connectorId, metadataProxy, config, (PixelsTransactionHandle) transHandle);
+        PixelsTransactionHandle pixelsTransHandle = (PixelsTransactionHandle) transHandle;
+        if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.SESSION)
+        {
+            ExecutorType executorType = ExecutorType.MPP;
+            if (PixelsSessionProperties.getCloudFunctionEnabled(session))
+            {
+                executorType = ExecutorType.CF;
+            }
+            // Issue #431: note that setExecuteType may not take effect on Trino workers.
+            pixelsTransHandle.setExecutorType(executorType);
+        }
+        try
+        {
+            this.transService.bindExternalTraceId(pixelsTransHandle.getTransId(), session.getQueryId());
+        } catch (TransException e)
+        {
+            logger.error(e, "failed to bind query id to transaction");
+            throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
+        }
+        return new PixelsMetadata(connectorId, metadataProxy, config, pixelsTransHandle);
     }
 
     @Override
