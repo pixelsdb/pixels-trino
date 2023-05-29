@@ -22,7 +22,6 @@ package io.pixelsdb.pixels.trino;
 import io.airlift.bootstrap.LifeCycleManager;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.TransException;
-import io.pixelsdb.pixels.common.transaction.QueryTransInfo;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.turbo.MetricsCollector;
@@ -85,7 +84,7 @@ public class PixelsConnector implements Connector
         this.recordCursorEnabled = Boolean.parseBoolean(config.getConfigFactory().getProperty("record.cursor.enabled"));
         this.transService = new TransService(config.getConfigFactory().getProperty("trans.server.host"),
                 Integer.parseInt(config.getConfigFactory().getProperty("trans.server.port")));
-        if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
+        if (this.config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
         {
             this.getMetricsCollector().startAutoReport();
         }
@@ -113,31 +112,31 @@ public class PixelsConnector implements Connector
          * PIXELS-172:
          * Be careful that Presto does not set readOnly to true for normal queries.
          */
-        QueryTransInfo info;
+        TransContext context;
         try
         {
-            info = this.transService.getQueryTransInfo();
+            context = this.transService.beginTrans(true);
         } catch (TransException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
         }
-        TransContext.Instance().beginQuery(info);
         QueryQueues.ExecutorType executorType;
-        if (this.config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.AUTO)
+        if (this.config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
         {
             this.getMetricsCollector().report();
-            while ((executorType = QueryQueues.Instance().Enqueue(info.getQueryId())) == QueryQueues.ExecutorType.None)
+            while ((executorType = QueryQueues.Instance().Enqueue(context.getTransId())) ==
+                    QueryQueues.ExecutorType.None)
             {
                 try
                 {
                     TimeUnit.SECONDS.sleep(1);
                 } catch (InterruptedException e)
                 {
-                    logger.error("Interrupted while waiting for enqueue the query id.");
+                    logger.error("Interrupted while waiting for enqueue the transaction id.");
                 }
             }
         }
-        else if (config.getLambdaSwitch() == PixelsTrinoConfig.LambdaSwitch.ON)
+        else if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.ON)
         {
             executorType = QueryQueues.ExecutorType.Lambda;
         }
@@ -145,7 +144,7 @@ public class PixelsConnector implements Connector
         {
             executorType = QueryQueues.ExecutorType.Cluster;
         }
-        return new PixelsTransactionHandle(info.getQueryId(), info.getQueryTimestamp(), executorType);
+        return new PixelsTransactionHandle(context.getTransId(), context.getTimestamp(), executorType);
     }
 
     @Override
@@ -155,7 +154,13 @@ public class PixelsConnector implements Connector
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
-            TransContext.Instance().commitQuery(handle.getTransId());
+            try
+            {
+                this.transService.commitTrans(handle.getTransId(), handle.getTimestamp());
+            } catch (TransException e)
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
+            }
             cleanIntermediatePathForQuery(handle.getTransId());
         } else
         {
@@ -171,7 +176,13 @@ public class PixelsConnector implements Connector
         {
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             QueryQueues.Instance().Dequeue(handle.getTransId(), handle.getExecutorType());
-            TransContext.Instance().rollbackQuery(handle.getTransId());
+            try
+            {
+                this.transService.rollbackTrans(handle.getTransId());
+            } catch (TransException e)
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
+            }
             if (handle.getExecutorType() == QueryQueues.ExecutorType.Lambda)
             {
                 cleanIntermediatePathForQuery(handle.getTransId());
@@ -183,13 +194,13 @@ public class PixelsConnector implements Connector
         }
     }
 
-    private void cleanIntermediatePathForQuery(long queryId)
+    private void cleanIntermediatePathForQuery(long transId)
     {
         try
         {
             if (config.isCleanLocalResult())
             {
-                IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(queryId));
+                IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(transId));
             }
         } catch (InterruptedException e)
         {

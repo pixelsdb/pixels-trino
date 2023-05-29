@@ -51,10 +51,10 @@ public class PixelsTrinoConfig
         return BatchSize;
     }
 
-    public enum LambdaSwitch { ON, OFF, AUTO }
+    public enum CloudFunctionSwitch { ON, OFF, AUTO }
 
     private String pixelsConfig = null;
-    private LambdaSwitch lambdaSwitch = LambdaSwitch.AUTO;
+    private CloudFunctionSwitch cloudFunctionSwitch = CloudFunctionSwitch.AUTO;
     private boolean cleanLocalResult = true;
     private int localScanConcurrency = -1;
     /**
@@ -158,11 +158,11 @@ public class PixelsTrinoConfig
         return this;
     }
 
-    @Config("lambda.switch")
-    public PixelsTrinoConfig setLambdaSwitch(String lambdaSwitch)
+    @Config("cloud.function.switch")
+    public PixelsTrinoConfig setCloudFunctionSwitch(String cloudFunctionSwitch)
     {
-        this.lambdaSwitch = LambdaSwitch.valueOf(lambdaSwitch.toUpperCase());
-        if (this.lambdaSwitch == LambdaSwitch.ON || this.lambdaSwitch == LambdaSwitch.AUTO)
+        this.cloudFunctionSwitch = CloudFunctionSwitch.valueOf(cloudFunctionSwitch.toUpperCase());
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.ON || this.cloudFunctionSwitch == CloudFunctionSwitch.AUTO)
         {
             /**
              * PIXELS-416:
@@ -171,7 +171,7 @@ public class PixelsTrinoConfig
              * successfully. The detailed reason is to be analyzed.
              */
             InvokerFactory.Instance();
-            if (this.lambdaSwitch == LambdaSwitch.AUTO)
+            if (this.cloudFunctionSwitch == CloudFunctionSwitch.AUTO)
             {
                 // PIXELS-416: same as the invoker providers.
                 MetricsCollector.Instance();
@@ -201,9 +201,9 @@ public class PixelsTrinoConfig
     }
 
     @NotNull
-    public LambdaSwitch getLambdaSwitch()
+    public PixelsTrinoConfig.CloudFunctionSwitch getCloudFunctionSwitch()
     {
-        return lambdaSwitch;
+        return cloudFunctionSwitch;
     }
 
     public int getLocalScanConcurrency()
@@ -241,21 +241,21 @@ public class PixelsTrinoConfig
     }
 
     @NotNull
-    public String getOutputFolderForQuery(long queryId)
+    public String getOutputFolderForQuery(long transId)
     {
         /* Must end with '/', otherwise it will not be considered
          * as a folder in S3-like storage.
          */
-        return this.outputFolder + queryId + "/";
+        return this.outputFolder + transId + "/";
     }
 
     @NotNull
-    public String getOutputFolderForQuery(long queryId, String post)
+    public String getOutputFolderForQuery(long transId, String post)
     {
         /* Must end with '/', otherwise it will not be considered
          * as a folder in S3-like storage.
          */
-        return this.outputFolder + queryId + "/" +post + "/";
+        return this.outputFolder + transId + "/" +post + "/";
     }
 
     /**
