@@ -237,7 +237,14 @@ public class PixelsConnector implements Connector
         }
         try
         {
-            this.transService.bindExternalTraceId(pixelsTransHandle.getTransId(), session.getQueryId());
+            Optional<String> traceToken = session.getTraceToken();
+            if (traceToken.isPresent())
+            {
+                /*
+                 Trace token is optionally set by the jdbc driver of Trino
+                 */
+                this.transService.bindExternalTraceId(pixelsTransHandle.getTransId(), traceToken.get());
+            }
         } catch (TransException e)
         {
             logger.error(e, "failed to bind query id to transaction");
