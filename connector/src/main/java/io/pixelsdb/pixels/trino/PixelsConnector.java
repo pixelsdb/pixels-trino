@@ -158,7 +158,8 @@ public class PixelsConnector implements Connector
             }
 
             // finish the query after commit transaction
-            if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
+            if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO ||
+                    config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.SESSION)
             {
                 this.queryScheduleService.finishQuery(handle.getTransId(), handle.getExecutorType());
             }
@@ -190,7 +191,8 @@ public class PixelsConnector implements Connector
             }
 
             // finish the query after commit rollback
-            if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO)
+            if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO ||
+                    config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.SESSION)
             {
                 this.queryScheduleService.finishQuery(handle.getTransId(), handle.getExecutorType());
             }
@@ -232,7 +234,7 @@ public class PixelsConnector implements Connector
             try
             {
                 ExecutorType executorType = this.queryScheduleService
-                        .scheduleQuery(pixelsTransHandle.getTransId(), false);
+                        .scheduleQuery(pixelsTransHandle.getTransId(), forceMpp);
                 // Issue #431: note that setExecuteType may not take effect on Trino workers.
                 pixelsTransHandle.setExecutorType(executorType);
             } catch (QueryScheduleException e)
@@ -293,10 +295,15 @@ public class PixelsConnector implements Connector
     }
 
     @Override
-    public final void shutdown() {
-        try {
+    public final void shutdown()
+    {
+        try
+        {
             lifeCycleManager.stop();
-        } catch (Exception e) {
+            this.transService.shutdown();
+            this.queryScheduleService.shutdown();
+        } catch (Exception e)
+        {
             logger.error(e, "error in shutting down connector");
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, e);
         }
