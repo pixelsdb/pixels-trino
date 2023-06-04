@@ -248,7 +248,7 @@ public class PixelsMetadata implements ConnectorMetadata
         }
         if (columnHandleList == null)
         {
-            throw new TableNotFoundException(pixelsTableHandle.toSchemaTableName());
+            throw new TableNotFoundException(pixelsTableHandle.getSchemaTableName());
         }
 
         ImmutableMap.Builder<String, ColumnHandle> columnHandles = ImmutableMap.builder();
@@ -489,6 +489,19 @@ public class PixelsMetadata implements ConnectorMetadata
     {
         TableStatistics.Builder tableStatBuilder = TableStatistics.builder();
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;
+        try
+        {
+            // PIXELS-423: Trino may try to get statistics on synthetic tables, for example on tpch-q7.
+            if (!metadataProxy.existTable(tableHandle.getSchemaName(), tableHandle.getTableName()))
+            {
+                return TableStatistics.empty();
+            }
+        } catch (MetadataException e)
+        {
+            logger.error(e, "failed to check existence of '" +
+                    tableHandle.getSchemaTableName() + "' through metadata service");
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
         List<Column> columns = metadataProxy.getColumnStatistics(tableHandle.getSchemaName(), tableHandle.getTableName());
         requireNonNull(columns, "columns is null");
         Map<String, Column> columnMap = new HashMap<>(columns.size());
