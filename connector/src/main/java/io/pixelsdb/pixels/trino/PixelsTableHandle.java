@@ -154,7 +154,7 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         return aggrHandle;
     }
 
-    public SchemaTableName toSchemaTableName()
+    public SchemaTableName getSchemaTableName()
     {
         return new SchemaTableName(schemaName, tableName);
     }

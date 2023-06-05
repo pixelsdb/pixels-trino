@@ -31,7 +31,7 @@ import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
-import io.pixelsdb.pixels.common.turbo.QueryQueues;
+import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.core.PixelsProto;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.stats.RangeStats;
@@ -248,7 +248,7 @@ public class PixelsMetadata implements ConnectorMetadata
         }
         if (columnHandleList == null)
         {
-            throw new TableNotFoundException(pixelsTableHandle.toSchemaTableName());
+            throw new TableNotFoundException(pixelsTableHandle.getSchemaTableName());
         }
 
         ImmutableMap.Builder<String, ColumnHandle> columnHandles = ImmutableMap.builder();
@@ -406,7 +406,7 @@ public class PixelsMetadata implements ConnectorMetadata
     public Optional<ConstraintApplicationResult<ConnectorTableHandle>> applyFilter(
             ConnectorSession session, ConnectorTableHandle handle, Constraint constraint)
     {
-        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
+        if (transHandle.getExecutorType() != ExecutorType.CF)
         {
             // Issue #60: Trino's filters are currently more efficient, so pushdown should only be used for Lambda.
             return Optional.empty();
@@ -489,6 +489,19 @@ public class PixelsMetadata implements ConnectorMetadata
     {
         TableStatistics.Builder tableStatBuilder = TableStatistics.builder();
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;
+        try
+        {
+            // PIXELS-423: Trino may try to get statistics on synthetic tables, for example on tpch-q7.
+            if (!metadataProxy.existTable(tableHandle.getSchemaName(), tableHandle.getTableName()))
+            {
+                return TableStatistics.empty();
+            }
+        } catch (MetadataException e)
+        {
+            logger.error(e, "failed to check existence of '" +
+                    tableHandle.getSchemaTableName() + "' through metadata service");
+            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+        }
         List<Column> columns = metadataProxy.getColumnStatistics(tableHandle.getSchemaName(), tableHandle.getTableName());
         requireNonNull(columns, "columns is null");
         Map<String, Column> columnMap = new HashMap<>(columns.size());
@@ -552,7 +565,7 @@ public class PixelsMetadata implements ConnectorMetadata
             ConnectorSession session, ConnectorTableHandle handle, List<AggregateFunction> aggregates,
             Map<String, ColumnHandle> assignments, List<List<ColumnHandle>> groupingSets)
     {
-        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
+        if (transHandle.getExecutorType() != ExecutorType.CF)
         {
             return Optional.empty();
         }
@@ -675,7 +688,7 @@ public class PixelsMetadata implements ConnectorMetadata
             Map<String, ColumnHandle> rightAssignments,
             JoinStatistics statistics)
     {
-        if (transHandle.getExecutorType() != QueryQueues.ExecutorType.Lambda)
+        if (transHandle.getExecutorType() != ExecutorType.CF)
         {
             return Optional.empty();
         }

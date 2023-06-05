@@ -35,6 +35,7 @@ public class PixelsSessionProperties
 {
     private static final String ORDERED_PATH_ENABLED = "ordered_path_enabled";
     private static final String COMPACT_PATH_ENABLED = "compact_path_enabled";
+    private static final String CLOUD_FUNCTION_ENABLED = "cloud_function_enabled";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -43,13 +44,18 @@ public class PixelsSessionProperties
     {
         PropertyMetadata<Boolean> s1 = booleanProperty(
                 ORDERED_PATH_ENABLED,
-                "Set to true to enable the ordered path for queries.", true, false);
+                "Set true to enable the ordered path for queries.", true, false);
 
         PropertyMetadata<Boolean> s2 = booleanProperty(
                 COMPACT_PATH_ENABLED,
-                "Set to true to enable the compact path for queries.", true, false);
+                "Set true to enable the compact path for queries.", true, false);
 
-        sessionProperties = ImmutableList.of(s1, s2);
+        PropertyMetadata<Boolean> s3 = booleanProperty(
+                CLOUD_FUNCTION_ENABLED,
+                "Set true to enable cloud-function workers for query processing,",
+                false, false);
+
+        sessionProperties = ImmutableList.of(s1, s2, s3);
     }
 
     public List<PropertyMetadata<?>> getSessionProperties()
@@ -65,5 +71,10 @@ public class PixelsSessionProperties
     public static boolean getCompactPathEnabled(ConnectorSession session)
     {
         return session.getProperty(COMPACT_PATH_ENABLED, Boolean.class);
+    }
+
+    public static boolean getCloudFunctionEnabled(ConnectorSession session)
+    {
+        return session.getProperty(CLOUD_FUNCTION_ENABLED, Boolean.class);
     }
 }
