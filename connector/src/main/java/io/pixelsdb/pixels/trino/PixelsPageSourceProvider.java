@@ -39,8 +39,6 @@ import io.pixelsdb.pixels.planner.plan.physical.input.*;
 import io.pixelsdb.pixels.planner.plan.physical.output.AggregationOutput;
 import io.pixelsdb.pixels.planner.plan.physical.output.JoinOutput;
 import io.pixelsdb.pixels.planner.plan.physical.output.ScanOutput;
-import io.pixelsdb.pixels.storage.redis.Redis;
-import io.pixelsdb.pixels.storage.s3.Minio;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
@@ -115,16 +113,6 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
         try
         {
-            StorageInfo storageInfo = config.getOutputStorageInfo();
-            if (storageInfo.getScheme() == Storage.Scheme.minio)
-            {
-                Minio.ConfigMinio(storageInfo.getEndpoint(), storageInfo.getAccessKey(), storageInfo.getSecretKey());
-            }
-            else if (storageInfo.getScheme() == Storage.Scheme.redis)
-            {
-                Redis.ConfigRedis(storageInfo.getEndpoint(), storageInfo.getAccessKey(), storageInfo.getSecretKey());
-            }
-
             if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
             {
                 // perform aggregation push down.

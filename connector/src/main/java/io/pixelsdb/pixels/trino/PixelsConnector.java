@@ -213,7 +213,7 @@ public class PixelsConnector implements Connector
     {
         try
         {
-            if (config.isCleanLocalResult())
+            if (config.isCleanIntermediateResult())
             {
                 IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(transId));
             }
