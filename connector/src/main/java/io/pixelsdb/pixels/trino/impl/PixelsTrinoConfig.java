@@ -56,7 +56,7 @@ public class PixelsTrinoConfig
 
     private String pixelsConfig = null;
     private CloudFunctionSwitch cloudFunctionSwitch = CloudFunctionSwitch.AUTO;
-    private boolean cleanLocalResult = true;
+    private boolean cleanIntermediateResult = true;
     private int localScanConcurrency = -1;
     /**
      * The storage info of the inputs of Pixels Turbo.
@@ -175,10 +175,10 @@ public class PixelsTrinoConfig
         return this;
     }
 
-    @Config("clean.local.result")
-    public PixelsTrinoConfig setCleanLocalResult(boolean cleanLocalResult)
+    @Config("clean.intermediate.result")
+    public PixelsTrinoConfig setCleanIntermediateResult(boolean cleanIntermediateResult)
     {
-        this.cleanLocalResult = cleanLocalResult;
+        this.cleanIntermediateResult = cleanIntermediateResult;
         return this;
     }
 
@@ -206,9 +206,9 @@ public class PixelsTrinoConfig
         return localScanConcurrency;
     }
 
-    public boolean isCleanLocalResult()
+    public boolean isCleanIntermediateResult()
     {
-        return cleanLocalResult;
+        return cleanIntermediateResult;
     }
 
     @NotNull
