@@ -712,7 +712,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
         /**
          * PIXELS-169:
-         * We use session properties to configure if the ordered and compact layout path are enabled.
+         * We use session properties to configure if the ordered and compact layout paths are enabled.
          */
         boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
         boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
