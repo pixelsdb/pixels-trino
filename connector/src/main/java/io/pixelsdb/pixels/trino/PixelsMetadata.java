@@ -396,7 +396,7 @@ public class PixelsMetadata implements ConnectorMetadata
         try
         {
             boolean res = this.metadataProxy.dropTable(schemaName, tableName);
-            if (res == false)
+            if (!res)
             {
                 throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Table " + schemaName + "." + tableName + " does not exist.");
