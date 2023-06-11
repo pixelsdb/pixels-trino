@@ -163,11 +163,9 @@ public class PixelsMetadataProxy
     }
 
     public boolean createTable (String schemaName, String tableName, Storage.Scheme storageScheme,
-                                List<String> orderedPathUris, List<String> compactPathUris,
-                                List<Column> columns) throws MetadataException
+                                List<String> basePathUris, List<Column> columns) throws MetadataException
     {
-        return metadataService.createTable(schemaName, tableName, storageScheme,
-                orderedPathUris, compactPathUris, columns);
+        return metadataService.createTable(schemaName, tableName, storageScheme, basePathUris, columns);
     }
 
     public boolean dropTable (String schemaName, String tableName) throws MetadataException
