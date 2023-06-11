@@ -19,13 +19,11 @@
  */
 package io.pixelsdb.pixels.trino.exception;
 
-
 import io.trino.spi.ErrorCode;
 import io.trino.spi.ErrorCodeSupplier;
 import io.trino.spi.ErrorType;
 
 import static io.trino.spi.ErrorType.*;
-
 
 public enum PixelsErrorCode implements ErrorCodeSupplier
 {
@@ -46,7 +44,7 @@ public enum PixelsErrorCode implements ErrorCodeSupplier
     PIXELS_DATABASE_LOCATION_ERROR(14, EXTERNAL),
     PIXELS_PATH_ALREADY_EXISTS(15, EXTERNAL),
     PIXELS_FILESYSTEM_ERROR(16, EXTERNAL),
-    // code PIXELS_WRITER_ERROR(17) is deprecated
+    PIXELS_WRITER_ERROR(17, EXTERNAL),
     PIXELS_SERDE_NOT_FOUND(18, EXTERNAL),
     PIXELS_UNSUPPORTED_FORMAT(19, EXTERNAL),
     PIXELS_PARTITION_READ_ONLY(20, USER_ERROR),
@@ -72,7 +70,7 @@ public enum PixelsErrorCode implements ErrorCodeSupplier
     PIXELS_SQL_EXECUTE_ERROR(40, EXTERNAL),
     PIXELS_CLIENT_ERROR(41, EXTERNAL),
     PIXELS_THREAD_ERROR(42, EXTERNAL),
-    PIXELS_CLIENT_SERIVCE_ERROR(43, EXTERNAL),
+    PIXELS_CLIENT_SERVICE_ERROR(43, EXTERNAL),
     PIXELS_CONNECTOR_ERROR(44, EXTERNAL),
     PIXELS_INVERTED_INDEX_ERROR(45, EXTERNAL),
     PIXELS_CACHE_NODE_FILE_ERROR(46, EXTERNAL),
@@ -83,7 +81,8 @@ public enum PixelsErrorCode implements ErrorCodeSupplier
     PIXELS_TRANS_SERVICE_ERROR(51, EXTERNAL),
     PIXELS_TRANS_HANDLE_TYPE_ERROR(52, EXTERNAL),
     PIXELS_DATA_TYPE_ERROR(53, EXTERNAL),
-    PIXELS_QUERY_SCHEDULE_ERROR(54, EXTERNAL)
+    PIXELS_QUERY_SCHEDULE_ERROR(54, EXTERNAL),
+    PIXELS_QUERY_PARSING_ERROR(55, EXTERNAL)
     /**/;
 
     private final ErrorCode errorCode;
