@@ -721,9 +721,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
         for (Layout layout : layouts)
         {
             // get index
-            int version = layout.getVersion();
+            long version = layout.getVersion();
             SchemaTableName schemaTableName = new SchemaTableName(schemaName, tableName);
-            Order order = JSON.parseObject(layout.getOrder(), Order.class);
+            Ordered ordered = layout.getOrdered();
             ColumnSet columnSet = new ColumnSet();
             for (PixelsColumnHandle column : desiredColumns)
             {
@@ -732,7 +732,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
             // get split size
             int splitSize;
-            Splits splits = JSON.parseObject(layout.getSplits(), Splits.class);
+            Splits splits = layout.getSplits();
             if (this.fixedSplitSize > 0)
             {
                 splitSize = this.fixedSplitSize;
@@ -744,7 +744,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 if (splitsIndex == null)
                 {
                     logger.debug("splits index not exist in factory, building index...");
-                    splitsIndex = buildSplitsIndex(order, splits, schemaTableName);
+                    splitsIndex = buildSplitsIndex(ordered, splits, schemaTableName);
                 }
                 else
                 {
@@ -752,7 +752,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     if (indexVersion < version)
                     {
                         logger.debug("splits index version is not up-to-date, updating index...");
-                        splitsIndex = buildSplitsIndex(order, splits, schemaTableName);
+                        splitsIndex = buildSplitsIndex(ordered, splits, schemaTableName);
                     }
                 }
                 SplitPattern bestSplitPattern = splitsIndex.search(columnSet);
@@ -762,16 +762,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
             logger.debug("using split size: " + splitSize);
             int rowGroupNum = splits.getNumRowGroupInBlock();
 
-            // get compact path
-            String compactPath;
+            // get compact paths
+            String[] compactPaths;
             if (projectionReadEnabled)
             {
                 ProjectionsIndex projectionsIndex = IndexFactory.Instance().getProjectionsIndex(schemaTableName);
-                Projections projections = JSON.parseObject(layout.getProjections(), Projections.class);
+                Projections projections = layout.getProjections();
                 if (projectionsIndex == null)
                 {
                     logger.debug("projections index not exist in factory, building index...");
-                    projectionsIndex = buildProjectionsIndex(order, projections, schemaTableName);
+                    projectionsIndex = buildProjectionsIndex(ordered, projections, schemaTableName);
                 }
                 else
                 {
@@ -779,29 +779,29 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     if (indexVersion < version)
                     {
                         logger.debug("projections index is not up-to-date, updating index...");
-                        projectionsIndex = buildProjectionsIndex(order, projections, schemaTableName);
+                        projectionsIndex = buildProjectionsIndex(ordered, projections, schemaTableName);
                     }
                 }
                 ProjectionPattern projectionPattern = projectionsIndex.search(columnSet);
                 if (projectionPattern != null)
                 {
                     logger.debug("suitable projection pattern is found, path='" + projectionPattern.getPath() + '\'');
-                    compactPath = projectionPattern.getPath();
+                    compactPaths = projectionPattern.getPath().split(";");
                 }
                 else
                 {
-                    compactPath = layout.getCompactPath();
+                    compactPaths = layout.getCompactPathUris();
                 }
             }
             else
             {
-                compactPath = layout.getCompactPath();
+                compactPaths = layout.getCompactPathUris();
             }
-            logger.debug("using compact path: " + compactPath);
+            logger.debug("using compact paths: " + compactPaths);
 
             if(usingCache)
             {
-                Compact compact = layout.getCompactObject();
+                Compact compact = layout.getCompact();
                 int cacheBorder = compact.getCacheBorder();
                 List<String> cacheColumnletOrders = compact.getColumnletOrder().subList(0, cacheBorder);
                 String cacheVersion;
@@ -830,12 +830,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         }
                         try
                         {
-                            // 3. add splits in orderedPath
+                            // 3. add splits in orderedPaths
                             if (orderedPathEnabled)
                             {
-                                List<String> orderedPaths = storage.listPaths(layout.getOrderPath());
+                                List<String> orderedFilePaths = storage.listPaths(layout.getOrderedPathUris());
 
-                                int numPath = orderedPaths.size();
+                                int numPath = orderedFilePaths.size();
                                 for (int i = 0; i < numPath; )
                                 {
                                     int firstPath = i; // the path of the first ordered file in the split.
@@ -844,36 +844,36 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     {
                                         for (int j = 0; j < splitSize && i < numPath; ++j, ++i)
                                         {
-                                            paths.add(orderedPaths.get(i));
+                                            paths.add(orderedFilePaths.get(i));
                                         }
                                     } else
                                     {
-                                        paths.add(orderedPaths.get(i++));
+                                        paths.add(orderedFilePaths.get(i++));
                                     }
 
-                                    // We do not cache files in the ordered path, thus get locations from the storage.
+                                    // We do not cache files in the ordered paths, thus get locations from the storage.
                                     List<HostAddress> orderedAddresses = toHostAddresses(
-                                            storage.getLocations(orderedPaths.get(firstPath)));
+                                            storage.getLocations(orderedFilePaths.get(firstPath)));
 
                                     PixelsSplit pixelsSplit = new PixelsSplit(
                                             transHandle.getTransId(), connectorId,
                                             tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                            table.getStorageScheme(), paths,
+                                            table.getStorageScheme().name(), paths,
                                             Collections.nCopies(paths.size(), 0),
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
-                                            order.getColumnOrder(), new ArrayList<>(0),
+                                            ordered.getColumnOrder(), new ArrayList<>(0),
                                             constraint, TableType.BASE, null, null, null);
-                                    // log.debug("Split in orderPath: " + pixelsSplit.toString());
+                                    // log.debug("Split in orderPaths: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
                             }
-                            // 4. add splits in compactPath
+                            // 4. add splits in compactPaths
                             if (compactPathEnabled)
                             {
                                 int curFileRGIdx;
-                                List<String> compactPaths = storage.listPaths(compactPath);
-                                for (String path : compactPaths)
+                                List<String> compactFilePaths = storage.listPaths(compactPaths);
+                                for (String path : compactFilePaths)
                                 {
                                     curFileRGIdx = 0;
                                     while (curFileRGIdx < rowGroupNum)
@@ -898,13 +898,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         PixelsSplit pixelsSplit = new PixelsSplit(
                                                 transHandle.getTransId(), connectorId,
                                                 tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                                table.getStorageScheme(), Arrays.asList(path),
+                                                table.getStorageScheme().name(), Arrays.asList(path),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
-                                                true, ensureLocality, compactAddresses, order.getColumnOrder(),
+                                                true, ensureLocality, compactAddresses, ordered.getColumnOrder(),
                                                 cacheColumnletOrders, constraint, TableType.BASE,
                                                 null, null, null);
                                         pixelsSplits.add(pixelsSplit);
-                                        // log.debug("Split in compactPath" + pixelsSplit.toString());
+                                        // log.debug("Split in compactPaths" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
                                     }
                                 }
@@ -931,12 +931,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 logger.debug("cache is disabled or no cache available on this table");
                 try
                 {
-                    // 1. add splits in orderedPath
+                    // 1. add splits in orderedPaths
                     if (orderedPathEnabled)
                     {
-                        List<String> orderedPaths = storage.listPaths(layout.getOrderPath());
+                        List<String> orderedFilePaths = storage.listPaths(layout.getOrderedPathUris());
 
-                        int numPath = orderedPaths.size();
+                        int numPath = orderedFilePaths.size();
                         for (int i = 0; i < numPath; )
                         {
                             int firstPath = i;
@@ -945,36 +945,36 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             {
                                 for (int j = 0; j < splitSize && i < numPath; ++j, ++i)
                                 {
-                                    paths.add(orderedPaths.get(i));
+                                    paths.add(orderedFilePaths.get(i));
                                 }
                             } else
                             {
-                                paths.add(orderedPaths.get(i++));
+                                paths.add(orderedFilePaths.get(i++));
                             }
 
                             List<HostAddress> orderedAddresses = toHostAddresses(
-                                    storage.getLocations(orderedPaths.get(firstPath)));
+                                    storage.getLocations(orderedFilePaths.get(firstPath)));
 
                             PixelsSplit pixelsSplit = new PixelsSplit(
                                     transHandle.getTransId(), connectorId,
                                     tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                    table.getStorageScheme(), paths,
+                                    table.getStorageScheme().name(), paths,
                                     Collections.nCopies(paths.size(), 0),
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
-                                    order.getColumnOrder(), new ArrayList<>(0),
+                                    ordered.getColumnOrder(), new ArrayList<>(0),
                                     constraint, TableType.BASE, null, null, null);
-                            // logger.debug("Split in orderPath: " + pixelsSplit.toString());
+                            // logger.debug("Split in orderPaths: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
                     }
-                    // 2. add splits in compactPath
+                    // 2. add splits in compactPaths
                     if (compactPathEnabled)
                     {
-                        List<String> compactPaths = storage.listPaths(compactPath);
+                        List<String> compactFilePaths = storage.listPaths(compactPaths);
 
                         int curFileRGIdx;
-                        for (String path : compactPaths)
+                        for (String path : compactFilePaths)
                         {
                             curFileRGIdx = 0;
                             while (curFileRGIdx < rowGroupNum)
@@ -984,10 +984,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 PixelsSplit pixelsSplit = new PixelsSplit(
                                         transHandle.getTransId(), connectorId,
                                         tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                        table.getStorageScheme(), Arrays.asList(path),
+                                        table.getStorageScheme().name(), Arrays.asList(path),
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
-                                        order.getColumnOrder(), new ArrayList<>(0),
+                                        ordered.getColumnOrder(), new ArrayList<>(0),
                                         constraint, TableType.BASE, null, null, null);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
@@ -1177,10 +1177,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return addressBuilder.build();
     }
 
-    private SplitsIndex buildSplitsIndex(Order order, Splits splits, SchemaTableName schemaTableName)
+    private SplitsIndex buildSplitsIndex(Ordered ordered, Splits splits, SchemaTableName schemaTableName)
             throws MetadataException
     {
-        List<String> columnOrder = order.getColumnOrder();
+        List<String> columnOrder = ordered.getColumnOrder();
         SplitsIndex index;
         String indexTypeName = config.getConfigFactory().getProperty("splits.index.type");
         SplitsIndex.IndexType indexType = SplitsIndex.IndexType.valueOf(indexTypeName.toUpperCase());
@@ -1201,9 +1201,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return index;
     }
 
-    private ProjectionsIndex buildProjectionsIndex(Order order, Projections projections, SchemaTableName schemaTableName)
+    private ProjectionsIndex buildProjectionsIndex(Ordered ordered, Projections projections, SchemaTableName schemaTableName)
     {
-        List<String> columnOrder = order.getColumnOrder();
+        List<String> columnOrder = ordered.getColumnOrder();
         ProjectionsIndex index;
         index = new InvertedProjectionsIndex(columnOrder, ProjectionPattern.buildPatterns(columnOrder, projections));
         IndexFactory.Instance().cacheProjectionsIndex(schemaTableName, index);
