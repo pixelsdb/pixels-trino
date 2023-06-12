@@ -27,6 +27,7 @@ import io.pixelsdb.pixels.common.metadata.MetadataCache;
 import io.pixelsdb.pixels.common.metadata.MetadataService;
 import io.pixelsdb.pixels.common.metadata.SchemaTableName;
 import io.pixelsdb.pixels.common.metadata.domain.*;
+import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
@@ -161,10 +162,10 @@ public class PixelsMetadataProxy
         return metadataService.dropSchema(schemaName);
     }
 
-    public boolean createTable (String schemaName, String tableName, String storageScheme,
-                                List<Column> columns) throws MetadataException
+    public boolean createTable (String schemaName, String tableName, Storage.Scheme storageScheme,
+                                List<String> basePathUris, List<Column> columns) throws MetadataException
     {
-        return metadataService.createTable(schemaName, tableName, storageScheme, columns);
+        return metadataService.createTable(schemaName, tableName, storageScheme, basePathUris, columns);
     }
 
     public boolean dropTable (String schemaName, String tableName) throws MetadataException

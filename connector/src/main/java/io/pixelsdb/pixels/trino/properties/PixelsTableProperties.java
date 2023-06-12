@@ -39,6 +39,7 @@ import static io.trino.spi.session.PropertyMetadata.stringProperty;
 public class PixelsTableProperties
 {
     public static final String STORAGE = "storage";
+    public static final String PATHS = "paths";
 
     private final List<PropertyMetadata<?>> tableProperties;
 
@@ -46,9 +47,12 @@ public class PixelsTableProperties
     public PixelsTableProperties()
     {
         PropertyMetadata<String> s1 = stringProperty(
-                STORAGE, "The storage scheme of the table.", "hdfs", false);
+                STORAGE, "The storage scheme of the table.", "file", false);
 
-        tableProperties = ImmutableList.of(s1);
+        PropertyMetadata<String> s2 = stringProperty(
+                PATHS, "The storage paths of the table.", null, false);
+
+        tableProperties = ImmutableList.of(s1, s2);
     }
 
     public List<PropertyMetadata<?>> getTableProperties()

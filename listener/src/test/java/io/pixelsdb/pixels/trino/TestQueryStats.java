@@ -40,7 +40,7 @@ public class TestQueryStats
     @Test
     public void test () throws IOException
     {
-        String content = HttpUtil.GetContentByGet("http://dbiir10:8080/v1/query/20181209_062931_00226_4ahrk");
+        String content = HttpUtil.GetContentByGet("http://node01:8080/v1/query/20181209_062931_00226_4ahrk");
         JSONObject object = JSONObject.parseObject(content);
         String str = object.getJSONObject("queryStats").getString("elapsedTime");
         if (str.endsWith("ms"))
