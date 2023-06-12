@@ -59,6 +59,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.PATHS;
+import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.STORAGE;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -306,8 +308,8 @@ public class PixelsMetadata implements ConnectorMetadata
         SchemaTableName schemaTableName = tableMetadata.getTable();
         String schemaName = schemaTableName.getSchemaName();
         String tableName = schemaTableName.getTableName();
-        String storage = (String) tableMetadata.getProperties().get("storage");
-        String paths = (String) tableMetadata.getProperties().get("paths");
+        String storage = (String) tableMetadata.getProperties().get(STORAGE);
+        String paths = (String) tableMetadata.getProperties().get(PATHS);
         if (storage == null)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_PARSING_ERROR,
