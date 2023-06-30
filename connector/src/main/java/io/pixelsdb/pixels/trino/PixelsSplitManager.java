@@ -405,6 +405,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
         int[] leftKeyColumnIds = new int[joinHandle.getLeftKeyColumns().size()];
         int[] rightKeyColumnIds = new int[joinHandle.getRightKeyColumns().size()];
         int leftKeysIndex = 0, rightKeysIndex = 0;
+        /*
+         * Issue #72:
+         * leftKeyColumnIds and rightKeyColumnIds must be assigned following the orders of columns
+         * in joinHandle.leftKeyColumns and joinHandle.rightKeyColumns, respectively.
+         * This is because the serverless worker assumes the ith leftKeyColumn joins with the ith
+         * rightKeyColumn.
+         */
         for (PixelsColumnHandle leftKeyColumn : joinHandle.getLeftKeyColumns())
         {
             for (int i = 0; i < leftColumnHandles.size(); ++i)
