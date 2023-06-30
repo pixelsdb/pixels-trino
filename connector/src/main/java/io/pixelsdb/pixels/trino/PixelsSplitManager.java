@@ -402,21 +402,36 @@ public class PixelsSplitManager implements ConnectorSplitManager
         // Parse the left and right key columns, projections, and joined columns.
         List<PixelsColumnHandle> leftJoinedColumnHandles = new LinkedList<>();
         List<PixelsColumnHandle> rightJoinedColumnHandles = new ArrayList<>();
-        Map<PixelsColumnHandle, PixelsColumnHandle> leftKeyColumnMap =
-                new HashMap<>(joinHandle.getLeftKeyColumns().size());
-        Map<PixelsColumnHandle, PixelsColumnHandle> rightKeyColumnMap =
-                new HashMap<>(joinHandle.getRightKeyColumns().size());
-        for (PixelsColumnHandle leftKeyColumn : joinHandle.getLeftKeyColumns())
-        {
-            leftKeyColumnMap.put(leftKeyColumn, leftKeyColumn);
-        }
-        for (PixelsColumnHandle rightKeyColumn : joinHandle.getRightKeyColumns())
-        {
-            rightKeyColumnMap.put(rightKeyColumn, rightKeyColumn);
-        }
         int[] leftKeyColumnIds = new int[joinHandle.getLeftKeyColumns().size()];
         int[] rightKeyColumnIds = new int[joinHandle.getRightKeyColumns().size()];
         int leftKeysIndex = 0, rightKeysIndex = 0;
+        /*
+         * Issue #72:
+         * leftKeyColumnIds and rightKeyColumnIds must be assigned following the orders of columns
+         * in joinHandle.leftKeyColumns and joinHandle.rightKeyColumns, respectively.
+         * This is because the serverless worker assumes the ith leftKeyColumn joins with the ith
+         * rightKeyColumn.
+         */
+        for (PixelsColumnHandle leftKeyColumn : joinHandle.getLeftKeyColumns())
+        {
+            for (int i = 0; i < leftColumnHandles.size(); ++i)
+            {
+                if (leftColumnHandles.get(i).getLogicalOrdinal() == leftKeyColumn.getLogicalOrdinal())
+                {
+                    leftKeyColumnIds[leftKeysIndex++] = i;
+                }
+            }
+        }
+        for (PixelsColumnHandle rightKeyColumn : joinHandle.getRightKeyColumns())
+        {
+            for (int i = 0; i < rightColumnHandles.size(); ++i)
+            {
+                if (rightColumnHandles.get(i).getLogicalOrdinal() == rightKeyColumn.getLogicalOrdinal())
+                {
+                    rightKeyColumnIds[rightKeysIndex++] = i;
+                }
+            }
+        }
 
         Map<PixelsColumnHandle, PixelsColumnHandle> joinedColumnHandleMap =
                 new HashMap<>(tableHandle.getColumns().size());
@@ -432,11 +447,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         for (int i = 0; i < leftProjection.length; ++i)
         {
             PixelsColumnHandle leftColumnHandle = leftColumnHandles.get(i);
-            PixelsColumnHandle leftKeyColumn = leftKeyColumnMap.get(leftColumnHandle);
-            if (leftKeyColumn != null && leftColumnHandle.getLogicalOrdinal() == leftKeyColumn.getLogicalOrdinal())
-            {
-                leftKeyColumnIds[leftKeysIndex++] = i;
-            }
             leftProjection[i] = joinedColumnHandleMap.containsKey(leftColumnHandle);
             if (leftProjection[i])
             {
@@ -447,11 +457,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         for (int i = 0; i < rightProjection.length; ++i)
         {
             PixelsColumnHandle rightColumnHandle = rightColumnHandles.get(i);
-            PixelsColumnHandle rightKeyColumn = rightKeyColumnMap.get(rightColumnHandle);
-            if (rightKeyColumn != null && rightColumnHandle.getLogicalOrdinal() == rightKeyColumn.getLogicalOrdinal())
-            {
-                rightKeyColumnIds[rightKeysIndex++] = i;
-            }
             rightProjection[i] = joinedColumnHandleMap.containsKey(rightColumnHandle);
             if (rightProjection[i])
             {
