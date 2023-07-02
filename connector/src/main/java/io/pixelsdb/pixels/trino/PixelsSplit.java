@@ -44,6 +44,7 @@ import static java.util.Objects.requireNonNull;
 public class PixelsSplit implements ConnectorSplit
 {
     private final long transId;
+    private final long splitId;
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
@@ -66,6 +67,7 @@ public class PixelsSplit implements ConnectorSplit
     @JsonCreator
     public PixelsSplit(
             @JsonProperty("transId") long transId,
+            @JsonProperty("splitId") long splitId,
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
@@ -84,6 +86,7 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("joinInput") String joinInput,
             @JsonProperty("aggrInput") String aggrInput) {
         this.transId = transId;
+        this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
@@ -179,6 +182,12 @@ public class PixelsSplit implements ConnectorSplit
     public long getTransId()
     {
         return transId;
+    }
+
+    @JsonProperty
+    public long getSplitId()
+    {
+        return splitId;
     }
 
     @JsonProperty
@@ -304,7 +313,8 @@ public class PixelsSplit implements ConnectorSplit
 
         PixelsSplit that = (PixelsSplit) o;
 
-        return Objects.equals(this.connectorId, that.connectorId) &&
+        return this.transId == that.transId && this.splitId == that.splitId &&
+                Objects.equals(this.connectorId, that.connectorId) &&
                 Objects.equals(this.schemaName, that.schemaName) &&
                 Objects.equals(this.tableName, that.tableName) &&
                 Objects.equals(this.paths, that.paths) &&
@@ -319,8 +329,8 @@ public class PixelsSplit implements ConnectorSplit
     public int hashCode()
     {
         // No need to consider this.order and this.cacheOrder.
-        return Objects.hash(connectorId, schemaName, tableName, paths,
-                rgStarts, rgLengths, addresses, cached, constraint);
+        return Objects.hash(transId, splitId, connectorId, schemaName, tableName,
+                paths, rgStarts, rgLengths, addresses, cached, constraint);
     }
 
     @Override
@@ -328,7 +338,8 @@ public class PixelsSplit implements ConnectorSplit
     {
         // No need to print order, cacheOrder, and constraint, in most cases.
         return "PixelsSplit{" +
-                "connectorId=" + connectorId +
+                "transId=" + transId + ", splitId=" + splitId +
+                ", connectorId='" + connectorId + '\'' +
                 ", schemaName='" + schemaName + '\'' +
                 ", tableName='" + tableName + '\'' +
                 ", storageScheme='" + storageScheme + '\'' +

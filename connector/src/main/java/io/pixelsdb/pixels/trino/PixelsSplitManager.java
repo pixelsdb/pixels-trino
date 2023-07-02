@@ -182,6 +182,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         HostAddress address = HostAddress.fromString("localhost:8080");
         TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
                 columnHandle -> (PixelsColumnHandle) columnHandle);
+        long splitId = 0;
         if (tableHandle.getTableType() == TableType.JOINED)
         {
             // The table type is joined, means lambda has been enabled.
@@ -227,7 +228,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 for (JoinInput joinInput : joinOperator.getJoinInputs())
                 {
                     PixelsSplit split = new PixelsSplit(
-                            transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
+                            transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
                             config.getOutputStorageScheme().name(), joinInput.getOutput().getFileNames(),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
@@ -285,7 +286,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 for (AggregationInput aggrInput : aggrInputs)
                 {
                     PixelsSplit split = new PixelsSplit(
-                            transHandle.getTransId(), connectorId, root.getSchemaName(), root.getTableName(),
+                            transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
                             config.getOutputStorageScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
                             ImmutableList.of(0), ImmutableList.of(-1), false, false,
                             Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, TableType.AGGREGATED,
@@ -804,6 +805,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
             logger.debug("using compact paths: " + compactPaths);
 
+            long splitId = 0;
             if(usingCache)
             {
                 Compact compact = layout.getCompact();
@@ -861,7 +863,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             storage.getLocations(orderedFilePaths.get(firstPath)));
 
                                     PixelsSplit pixelsSplit = new PixelsSplit(
-                                            transHandle.getTransId(), connectorId,
+                                            transHandle.getTransId(), splitId++, connectorId,
                                             tableHandle.getSchemaName(), tableHandle.getTableName(),
                                             table.getStorageScheme().name(), paths,
                                             Collections.nCopies(paths.size(), 0),
@@ -901,7 +903,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         }
 
                                         PixelsSplit pixelsSplit = new PixelsSplit(
-                                                transHandle.getTransId(), connectorId,
+                                                transHandle.getTransId(), splitId++, connectorId,
                                                 tableHandle.getSchemaName(), tableHandle.getTableName(),
                                                 table.getStorageScheme().name(), Arrays.asList(path),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
@@ -961,7 +963,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     storage.getLocations(orderedFilePaths.get(firstPath)));
 
                             PixelsSplit pixelsSplit = new PixelsSplit(
-                                    transHandle.getTransId(), connectorId,
+                                    transHandle.getTransId(), splitId++, connectorId,
                                     tableHandle.getSchemaName(), tableHandle.getTableName(),
                                     table.getStorageScheme().name(), paths,
                                     Collections.nCopies(paths.size(), 0),
@@ -987,7 +989,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 List<HostAddress> compactAddresses = toHostAddresses(storage.getLocations(path));
 
                                 PixelsSplit pixelsSplit = new PixelsSplit(
-                                        transHandle.getTransId(), connectorId,
+                                        transHandle.getTransId(), splitId++, connectorId,
                                         tableHandle.getSchemaName(), tableHandle.getTableName(),
                                         table.getStorageScheme().name(), Arrays.asList(path),
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
