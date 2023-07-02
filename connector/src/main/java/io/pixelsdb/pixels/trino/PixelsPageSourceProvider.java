@@ -302,8 +302,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         tableInfo.setStorageInfo(config.getInputStorageInfo());
         scanInput.setTableInfo(tableInfo);
         scanInput.setScanProjection(projection);
-        String folder = config.getOutputFolderForQuery(inputSplit.getTransId());
-        OutputInfo outputInfo = new OutputInfo(folder, true, config.getOutputStorageInfo(), true);
+        String folder = config.getOutputFolderForQuery(inputSplit.getTransId()) + inputSplit.getSplitId() + "/";
+        OutputInfo outputInfo = new OutputInfo(folder, config.getOutputStorageInfo(), true);
         scanInput.setOutput(outputInfo);
 
         return InvokerFactory.Instance().getInvoker(WorkerType.SCAN)
