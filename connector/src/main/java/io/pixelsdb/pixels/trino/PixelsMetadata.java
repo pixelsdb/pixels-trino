@@ -334,7 +334,7 @@ public class PixelsMetadata implements ConnectorMetadata
             {
                 basePathUris[i] = storageScheme + "://" + basePathUris[i];
             }
-            if (scheme != storageScheme)
+            else if (scheme != storageScheme)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_PARSING_ERROR,
                         "The storage schemes in 'paths' are inconsistent with 'storage'.");
