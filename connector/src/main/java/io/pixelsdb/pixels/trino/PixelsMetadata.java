@@ -126,7 +126,7 @@ public class PixelsMetadata implements ConnectorMetadata
         requireNonNull(tableName, "tableName is null");
         try
         {
-            if (this.metadataProxy.existTable(tableName.getSchemaName(), tableName.getTableName()))
+            if (metadataProxy.existTable(tableName.getSchemaName(), tableName.getTableName()))
             {
                 List<PixelsColumnHandle> columns;
                 try
