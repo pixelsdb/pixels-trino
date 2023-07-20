@@ -131,8 +131,16 @@ public class PixelsMetadata implements ConnectorMetadata
                 List<PixelsColumnHandle> columns;
                 try
                 {
+                    /*
+                     * Issue #485:
+                     * This is the first methods to be called for a table accessed by a query.
+                     * So we refresh the cache for the table here. All the following operations during query parsing
+                     * and query planning can directly get the table's metadata from the metadata cache, without sending
+                     * duplicated requests to pixels metadata server.
+                     */
+                    metadataProxy.refreshCachedTableAndColumns(tableName.getSchemaName(), tableName.getTableName());
                     // initially, get all the columns from the table.
-                    columns = metadataProxy.getTableColumn(
+                    columns = metadataProxy.getTableColumns(
                             connectorId, tableName.getSchemaName(), tableName.getTableName());
                 } catch (MetadataException e)
                 {
@@ -175,7 +183,7 @@ public class PixelsMetadata implements ConnectorMetadata
         List<PixelsColumnHandle> columnHandleList;
         try
         {
-            columnHandleList = metadataProxy.getTableColumn(connectorId, schemaName, tableName);
+            columnHandleList = metadataProxy.getTableColumns(connectorId, schemaName, tableName);
         } catch (MetadataException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
@@ -241,7 +249,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             try
             {
-                columnHandleList = metadataProxy.getTableColumn(
+                columnHandleList = metadataProxy.getTableColumns(
                         connectorId, pixelsTableHandle.getSchemaName(), pixelsTableHandle.getTableName());
             } catch (MetadataException e)
             {

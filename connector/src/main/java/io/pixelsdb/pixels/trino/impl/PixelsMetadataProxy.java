@@ -108,9 +108,31 @@ public class PixelsMetadataProxy
         return viewList;
     }
 
+    /**
+     * This method should be called exactly once when the query firstly accesses the metadata of the
+     * table and the table's columns. This will get the latest metadata of the table and columns
+     * from pixels metadata server and refresh the metadata cache. By doing this, it ensures metadata
+     * updates are seen by the queries in time.
+     * <p><b>NOTE: </b> Currently, we do not ensure the consistency of the metadata cache for concurrent
+     * queries. For example, given two concurrent queries q1 and q2, q1 may fresh the metadata cache
+     * between two cache reads of q2, thus causes non-repeatable reads for q2. This problem is to be
+     * solved when schema version is supported.</p>
+     * @param schemaName the schema name of the table
+     * @param tableName the table name of the table
+     * @throws MetadataException
+     */
+    public void refreshCachedTableAndColumns(String schemaName, String tableName) throws MetadataException
+    {
+        Table table = metadataService.getTable(schemaName, tableName);
+        SchemaTableName schemaTableName = new SchemaTableName(schemaName, tableName);
+        this.metadataCache.cacheTable(schemaTableName, table);
+        List<Column> columnsList = metadataService.getColumns(schemaName, tableName, true);
+        this.metadataCache.cacheTableColumns(schemaTableName, columnsList);
+    }
+
     public Table getTable(String schemaName, String tableName) throws MetadataException
     {
-        return metadataService.getTable(schemaName, tableName);
+        return this.metadataCache.getTable(new SchemaTableName(schemaName, tableName));
     }
 
     public TypeDescription parsePixelsType(Type type)
@@ -118,13 +140,12 @@ public class PixelsMetadataProxy
         return typeParser.parsePixelsType(type.getDisplayName());
     }
 
-    public List<PixelsColumnHandle> getTableColumn(String connectorId, String schemaName, String tableName) throws MetadataException
+    public List<PixelsColumnHandle> getTableColumns(String connectorId, String schemaName, String tableName) throws MetadataException
     {
         ImmutableList.Builder<PixelsColumnHandle> columnsBuilder = ImmutableList.builder();
-        List<Column> columnsList = metadataService.getColumns(schemaName, tableName, true);
-        SchemaTableName schemaTableName = new SchemaTableName(schemaName, tableName);
-        this.metadataCache.cacheTableColumns(schemaTableName, columnsList);
-        for (int i = 0; i < columnsList.size(); i++) {
+        List<Column> columnsList = this.metadataCache.getTableColumns(new SchemaTableName(schemaName, tableName));
+        for (int i = 0; i < columnsList.size(); i++)
+        {
             Column c = columnsList.get(i);
             Type trinoType = typeParser.parseTrinoType(c.getType());
             TypeDescription pixelsType = typeParser.parsePixelsType(c.getType());
