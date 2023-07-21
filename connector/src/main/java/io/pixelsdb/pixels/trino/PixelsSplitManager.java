@@ -1188,8 +1188,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     }
 
     private SplitsIndex buildSplitsIndex(long transId, long version, Ordered ordered,
-                                         Splits splits, SchemaTableName schemaTableName)
-            throws MetadataException
+                                         Splits splits, SchemaTableName schemaTableName) throws MetadataException
     {
         List<String> columnOrder = ordered.getColumnOrder();
         SplitsIndex index;
