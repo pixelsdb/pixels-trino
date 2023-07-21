@@ -186,7 +186,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         if (tableHandle.getTableType() == TableType.JOINED)
         {
             // The table type is joined, means lambda has been enabled.
-            JoinedTable root = parseJoinPlan(tableHandle);
+            JoinedTable root = parseJoinPlan(transHandle.getTransId(), tableHandle);
             // logger.debug("join plan: " + JSON.toJSONString(root));
 
             try
@@ -245,7 +245,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
         else if (tableHandle.getTableType() == TableType.AGGREGATED)
         {
-            AggregatedTable root = parseAggregatePlan(tableHandle, transHandle);
+            AggregatedTable root = parseAggregatePlan(transHandle.getTransId(), tableHandle);
             // logger.debug("aggregation plan: " + JSON.toJSONString(root));
             try
             {
@@ -311,10 +311,11 @@ public class PixelsSplitManager implements ConnectorSplitManager
      * to read the join result, and are generated from the column name plus the logical ordinary id
      * of the columns from the left and right tables.
      *
+     * @param transId the transaction id
      * @param tableHandle the joined table handle
      * @return the parsed join plan
      */
-    private JoinedTable parseJoinPlan(PixelsTableHandle tableHandle)
+    private JoinedTable parseJoinPlan(long transId, PixelsTableHandle tableHandle)
     {
         checkArgument(tableHandle.getTableType() == TableType.JOINED,
                 "tableHandle is not a joined table");
@@ -346,7 +347,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             checkArgument(joinHandle.getLeftTable().getTableType() == TableType.JOINED,
                     "left table is not a base or joined table, can not parse");
             // recursive deep left.
-            leftTable = parseJoinPlan(joinHandle.getLeftTable());
+            leftTable = parseJoinPlan(transId, joinHandle.getLeftTable());
             leftColumns = leftTable.getColumnNames();
             List<PixelsColumnHandle> columnHandles = getIncludeColumns(leftHandle);
             ImmutableList.Builder<PixelsColumnHandle> leftColumnHandlesBuilder = ImmutableList.builder();
@@ -382,7 +383,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             checkArgument(joinHandle.getRightTable().getTableType() == TableType.JOINED,
                     "right table is not a base or joined table, can not parse");
             // recursive deep right.
-            rightTable = parseJoinPlan(joinHandle.getRightTable());
+            rightTable = parseJoinPlan(transId, joinHandle.getRightTable());
             rightColumns = rightTable.getColumnNames();
             List<PixelsColumnHandle> columnHandles = getIncludeColumns(rightHandle);
             ImmutableList.Builder<PixelsColumnHandle> rightColumnHandlesBuilder = ImmutableList.builder();
@@ -481,8 +482,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         JoinAlgorithm joinAlgo;
         try
         {
-            joinEndian = PlanOptimizer.Instance().getJoinEndian(leftTable, rightTable);
-            joinAlgo = PlanOptimizer.Instance().getJoinAlgorithm(leftTable, rightTable, joinEndian);
+            joinEndian = PlanOptimizer.Instance().getJoinEndian(transId, leftTable, rightTable);
+            joinAlgo = PlanOptimizer.Instance().getJoinAlgorithm(transId, leftTable, rightTable, joinEndian);
         } catch (MetadataException | InvalidProtocolBufferException e)
         {
             logger.error("failed to get join algorithm", e);
@@ -529,7 +530,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 tableHandle.getTableAlias(), join);
     }
 
-    private AggregatedTable parseAggregatePlan(PixelsTableHandle tableHandle, PixelsTransactionHandle transHandle)
+    private AggregatedTable parseAggregatePlan(long transId, PixelsTableHandle tableHandle)
     {
         PixelsAggrHandle aggrHandle = tableHandle.getAggrHandle();
         PixelsTableHandle originTableHandle = aggrHandle.getOriginTable();
@@ -625,7 +626,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         io.pixelsdb.pixels.planner.plan.logical.Table originTable;
         if (originTableHandle.getTableType() == TableType.JOINED)
         {
-            originTable = parseJoinPlan(originTableHandle);
+            originTable = parseJoinPlan(transId, originTableHandle);
         }
         else
         {
@@ -687,7 +688,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<Layout> layouts;
         try
         {
-            table = metadataProxy.getTable(schemaName, tableName);
+            table = metadataProxy.getTable(transHandle.getTransId(), schemaName, tableName);
             storage = StorageFactory.Instance().getStorage(table.getStorageScheme());
             layouts = metadataProxy.getDataLayouts(schemaName, tableName);
         }
@@ -750,15 +751,17 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 if (splitsIndex == null)
                 {
                     logger.debug("splits index not exist in factory, building index...");
-                    splitsIndex = buildSplitsIndex(ordered, splits, schemaTableName);
+                    splitsIndex = buildSplitsIndex(transHandle.getTransId(),
+                            version, ordered, splits, schemaTableName);
                 }
                 else
                 {
-                    int indexVersion = splitsIndex.getVersion();
+                    long indexVersion = splitsIndex.getVersion();
                     if (indexVersion < version)
                     {
                         logger.debug("splits index version is not up-to-date, updating index...");
-                        splitsIndex = buildSplitsIndex(ordered, splits, schemaTableName);
+                        splitsIndex = buildSplitsIndex(transHandle.getTransId(),
+                                version, ordered, splits, schemaTableName);
                     }
                 }
                 SplitPattern bestSplitPattern = splitsIndex.search(columnSet);
@@ -1184,8 +1187,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return addressBuilder.build();
     }
 
-    private SplitsIndex buildSplitsIndex(Ordered ordered, Splits splits, SchemaTableName schemaTableName)
-            throws MetadataException
+    private SplitsIndex buildSplitsIndex(long transId, long version, Ordered ordered,
+                                         Splits splits, SchemaTableName schemaTableName) throws MetadataException
     {
         List<String> columnOrder = ordered.getColumnOrder();
         SplitsIndex index;
@@ -1194,12 +1197,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
         switch (indexType)
         {
             case INVERTED:
-                index = new InvertedSplitsIndex(columnOrder, SplitPattern.buildPatterns(columnOrder, splits),
+                index = new InvertedSplitsIndex(version, columnOrder, SplitPattern.buildPatterns(columnOrder, splits),
                         splits.getNumRowGroupInFile());
                 break;
             case COST_BASED:
-                index = new CostBasedSplitsIndex(this.metadataProxy.getMetadataService(), schemaTableName,
-                        splits.getNumRowGroupInFile(), splits.getNumRowGroupInFile());
+                index = new CostBasedSplitsIndex(transId, version, this.metadataProxy.getMetadataService(),
+                        schemaTableName, splits.getNumRowGroupInFile(), splits.getNumRowGroupInFile());
                 break;
             default:
                 throw new UnsupportedOperationException("splits index type '" + indexType + "' is not supported");

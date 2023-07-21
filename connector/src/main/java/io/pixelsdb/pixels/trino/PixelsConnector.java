@@ -256,7 +256,7 @@ public class PixelsConnector implements Connector
             }
         } catch (TransException e)
         {
-            logger.error(e, "failed to bind query id to transaction");
+            logger.error(e, "failed to bind external trace id to transaction");
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
         }
         return new PixelsMetadata(connectorId, metadataProxy, config, pixelsTransHandle);
