@@ -138,10 +138,11 @@ public class PixelsMetadata implements ConnectorMetadata
                      * and query planning can directly get the table's metadata from the metadata cache, without sending
                      * duplicated requests to pixels metadata server.
                      */
-                    metadataProxy.refreshCachedTableAndColumns(tableName.getSchemaName(), tableName.getTableName());
+                    metadataProxy.refreshCachedTableAndColumns(
+                            transHandle.getTransId(), tableName.getSchemaName(), tableName.getTableName());
                     // initially, get all the columns from the table.
                     columns = metadataProxy.getTableColumns(
-                            connectorId, tableName.getSchemaName(), tableName.getTableName());
+                            connectorId, transHandle.getTransId(), tableName.getSchemaName(), tableName.getTableName());
                 } catch (MetadataException e)
                 {
                     throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
@@ -183,7 +184,7 @@ public class PixelsMetadata implements ConnectorMetadata
         List<PixelsColumnHandle> columnHandleList;
         try
         {
-            columnHandleList = metadataProxy.getTableColumns(connectorId, schemaName, tableName);
+            columnHandleList = metadataProxy.getTableColumns(connectorId, transHandle.getTransId(), schemaName, tableName);
         } catch (MetadataException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
@@ -249,8 +250,8 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             try
             {
-                columnHandleList = metadataProxy.getTableColumns(
-                        connectorId, pixelsTableHandle.getSchemaName(), pixelsTableHandle.getTableName());
+                columnHandleList = metadataProxy.getTableColumns(connectorId, transHandle.getTransId(),
+                        pixelsTableHandle.getSchemaName(), pixelsTableHandle.getTableName());
             } catch (MetadataException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
@@ -542,7 +543,8 @@ public class PixelsMetadata implements ConnectorMetadata
                     tableHandle.getSchemaTableName() + "' through metadata service");
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
         }
-        List<Column> columns = metadataProxy.getColumnStatistics(tableHandle.getSchemaName(), tableHandle.getTableName());
+        List<Column> columns = metadataProxy.getColumnStatistics(
+                transHandle.getTransId(), tableHandle.getSchemaName(), tableHandle.getTableName());
         requireNonNull(columns, "columns is null");
         Map<String, Column> columnMap = new HashMap<>(columns.size());
         for (Column column : columns)
@@ -552,7 +554,8 @@ public class PixelsMetadata implements ConnectorMetadata
 
         try
         {
-            long rowCount = metadataProxy.getTable(tableHandle.getSchemaName(), tableHandle.getTableName()).getRowCount();
+            long rowCount = metadataProxy.getTable(
+                    transHandle.getTransId(), tableHandle.getSchemaName(), tableHandle.getTableName()).getRowCount();
             tableStatBuilder.setRowCount(Estimate.of(rowCount));
             logger.debug("table '" + tableHandle.getTableName() + "' row count: " + rowCount);
         } catch (MetadataException e)

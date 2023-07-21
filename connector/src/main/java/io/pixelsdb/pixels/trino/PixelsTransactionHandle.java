@@ -30,7 +30,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
             -1, -1, ExecutorType.PENDING);
 
     /**
-     * transId is also the query id in Pixels, as each query is a single-statement read-only transaction.
+     * transId is the transaction id of the query, which is a single-statement read-only transaction.
      */
     private final long transId;
     /**
@@ -44,7 +44,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
 
     /**
      * Create a transaction handle.
-     * @param transId is also the query id in Pixels, as a query is a single-statement read-only transaction.
+     * @param transId the transaction id of the query, which is a single-statement read-only transaction.
      * @param timestamp the timestamp of a transaction.
      * @param executorType the type of executor to execute this query.
      */
