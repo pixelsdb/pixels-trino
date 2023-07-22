@@ -90,7 +90,8 @@ public class PixelsConnector implements Connector
         {
             this.queryScheduleService = new QueryScheduleService(
                     config.getConfigFactory().getProperty("query.schedule.server.host"),
-                    Integer.parseInt(config.getConfigFactory().getProperty("query.schedule.server.port")));
+                    Integer.parseInt(config.getConfigFactory().getProperty("query.schedule.server.port")),
+                    Boolean.parseBoolean(config.getConfigFactory().getProperty("scaling.enabled")));
         } catch (QueryScheduleException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_SCHEDULE_ERROR, e);
