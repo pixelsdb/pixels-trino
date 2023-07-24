@@ -157,7 +157,9 @@ public class PixelsTrinoConfig
     public PixelsTrinoConfig setCloudFunctionSwitch(String cloudFunctionSwitch)
     {
         this.cloudFunctionSwitch = CloudFunctionSwitch.valueOf(cloudFunctionSwitch.toUpperCase());
-        if (this.cloudFunctionSwitch == CloudFunctionSwitch.ON || this.cloudFunctionSwitch == CloudFunctionSwitch.AUTO)
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.ON ||
+                this.cloudFunctionSwitch == CloudFunctionSwitch.AUTO ||
+                this.cloudFunctionSwitch == CloudFunctionSwitch.SESSION)
         {
             /**
              * PIXELS-416:
@@ -166,7 +168,8 @@ public class PixelsTrinoConfig
              * successfully. The detailed reason is to be analyzed.
              */
             InvokerFactory.Instance();
-            if (this.cloudFunctionSwitch == CloudFunctionSwitch.AUTO)
+            if (this.cloudFunctionSwitch == CloudFunctionSwitch.AUTO ||
+                    this.cloudFunctionSwitch == CloudFunctionSwitch.SESSION)
             {
                 // PIXELS-416: same as the invoker providers.
                 MetricsCollector.Instance();

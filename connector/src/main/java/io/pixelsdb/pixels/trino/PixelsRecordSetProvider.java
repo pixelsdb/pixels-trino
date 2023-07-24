@@ -27,7 +27,6 @@ import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
-import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 
@@ -77,9 +76,7 @@ public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
     public RecordSet getRecordSet(ConnectorTransactionHandle transaction, ConnectorSession session,
                                   ConnectorSplit split, ConnectorTableHandle table, List<? extends ColumnHandle> columns)
     {
-        if (((PixelsTransactionHandle) transaction).getExecutorType() == ExecutorType.CF ||
-                config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.SESSION &&
-                        PixelsSessionProperties.getCloudFunctionEnabled(session))
+        if (((PixelsTransactionHandle) transaction).getExecutorType() == ExecutorType.CF)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR,
                     "PixelsRecordSet does not support lambda coprocessor.");
