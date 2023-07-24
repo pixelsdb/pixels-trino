@@ -34,14 +34,16 @@ import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.planner.plan.logical.Table;
-import io.pixelsdb.pixels.planner.plan.physical.domain.*;
+import io.pixelsdb.pixels.planner.plan.physical.domain.InputSplit;
+import io.pixelsdb.pixels.planner.plan.physical.domain.MultiOutputInfo;
+import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
+import io.pixelsdb.pixels.planner.plan.physical.domain.ScanTableInfo;
 import io.pixelsdb.pixels.planner.plan.physical.input.*;
 import io.pixelsdb.pixels.planner.plan.physical.output.AggregationOutput;
 import io.pixelsdb.pixels.planner.plan.physical.output.JoinOutput;
 import io.pixelsdb.pixels.planner.plan.physical.output.ScanOutput;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
-import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 
@@ -134,9 +136,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 // perform scan push down.
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
                 PixelsTransactionHandle transHandle = (PixelsTransactionHandle) transactionHandle;
-                if ((transHandle.getExecutorType() == ExecutorType.CF ||
-                        config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.SESSION &&
-                                PixelsSessionProperties.getCloudFunctionEnabled(session)) &&
+                if (transHandle.getExecutorType() == ExecutorType.CF &&
                         this.localSplitCounter.get() >= config.getLocalScanConcurrency()
                         /**
                          * Issue #57:
