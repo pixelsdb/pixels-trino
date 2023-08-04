@@ -7,12 +7,12 @@
     <parent>
         <artifactId>pixels</artifactId>
         <groupId>io.pixelsdb</groupId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
     <artifactId>pixels-trino</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <description>Pixels Trino Integration</description>
     <url>https://github.com/pixelsdb/pixels-trino</url>
     <inceptionYear>2022</inceptionYear>
