@@ -50,6 +50,11 @@ public class TimeArrayBlock implements Block
 {
     private static final long INSTANCE_SIZE = ClassLayout.parseClass(TimeArrayBlock.class).instanceSize();
     public static final int SIZE_IN_BYTES_PER_POSITION = Integer.BYTES + Byte.BYTES;
+    /**
+     * Trino assumes each time value is a long of precision 12,
+     * so we need to multiply a scale factor for each value.
+     */
+    private static final long SCALE_FACTOR = 1000000000L;
 
     private final int arrayOffset;
     private final int positionCount;
@@ -153,7 +158,7 @@ public class TimeArrayBlock implements Block
         if (offset != 0) {
             throw new IllegalArgumentException("offset must be zero");
         }
-        return values[position + arrayOffset];
+        return values[position + arrayOffset] * SCALE_FACTOR;
     }
 
     @Override
