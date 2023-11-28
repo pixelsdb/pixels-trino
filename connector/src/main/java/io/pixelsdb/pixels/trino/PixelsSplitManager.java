@@ -806,7 +806,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 compactPaths = layout.getCompactPathUris();
             }
-            logger.debug("using compact paths: " + compactPaths);
 
             long splitId = 0;
             if(usingCache)
