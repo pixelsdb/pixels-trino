@@ -7,6 +7,7 @@ import io.trino.spi.function.SqlNullable;
 import io.trino.spi.function.SqlType;
 import io.trino.spi.type.StandardTypes;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -21,21 +22,21 @@ public class VectorUDF {
     @Description("exact nearest neighbours search")
     @SqlType(StandardTypes.DOUBLE)
     public static double exactNNS(
-            @SqlNullable @SqlType("map(bigint,double)") Block vector)
+            @SqlNullable @SqlType("array(double)") Block vector)
     {
         // for now just retreive each element of the vector
         //todo deploy and set up debbug environment
 
-        Map<Integer, Double> features = new HashMap<>();
+        ArrayList<Double> features = new ArrayList<>();
 
         if (vector != null) {
-            for (int position = 0; position < vector.getPositionCount(); position += 2) {
-                features.put((int) BIGINT.getLong(vector, position), DOUBLE.getDouble(vector, position + 1));
+            for (int position = 0; position < vector.getPositionCount(); position++) {
+                features.add(DOUBLE.getDouble(vector, position));
             }
         }
 
         double sum = 0.0;
-        for (double v : features.values()) {
+        for (double v : features) {
             sum += v;
         }
         return sum;
