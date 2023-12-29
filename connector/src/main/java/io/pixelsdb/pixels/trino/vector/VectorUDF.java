@@ -1,5 +1,8 @@
 package io.pixelsdb.pixels.trino.vector;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.airlift.slice.Slice;
+import io.airlift.slice.Slices;
 import io.trino.spi.block.Block;
 import io.trino.spi.function.Description;
 import io.trino.spi.function.ScalarFunction;
@@ -7,11 +10,8 @@ import io.trino.spi.function.SqlNullable;
 import io.trino.spi.function.SqlType;
 import io.trino.spi.type.StandardTypes;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-
-import static io.trino.spi.type.BigintType.BIGINT;
 import static io.trino.spi.type.DoubleType.DOUBLE;
 
 public class VectorUDF {
@@ -20,25 +20,43 @@ public class VectorUDF {
 
     @ScalarFunction("exactNNS")
     @Description("exact nearest neighbours search")
-    @SqlType(StandardTypes.DOUBLE)
-    public static double exactNNS(
-            @SqlNullable @SqlType("array(double)") Block vector)
+    @SqlType(StandardTypes.JSON)
+    @SqlNullable
+    public static Slice exactNNS(
+            @SqlNullable @SqlType("array(double)") Block trinoVector, @SqlType("integer") long columnId, @SqlType(StandardTypes.VARCHAR) Slice strForVectorDistFunc, @SqlType("integer") long k)
     {
-        // for now just retreive each element of the vector
-
-        ArrayList<Double> features = new ArrayList<>();
-
-        if (vector != null) {
-            for (int position = 0; position < vector.getPositionCount(); position++) {
-                features.add(DOUBLE.getDouble(vector, position));
-            }
+        // prepare input vector
+        double[] inputVector;
+        if (trinoVector == null) {
+            return null;
+        }
+        inputVector = new double[trinoVector.getPositionCount()];
+        for (int i = 0; i < trinoVector.getPositionCount(); i++) {
+            inputVector[i] = DOUBLE.getDouble(trinoVector, i);
         }
 
-        double sum = 0.0;
-        for (double v : features) {
-            sum += v;
+        // prepare list of files to read
+        // todo how to go from (tableId, columnId) to the list of files belong to that column?
+        String[] listOfFiles = new String[2];
+        listOfFiles[0] = System.getenv("PIXELS_S3_TEST_BUCKET_PATH") + "exactNNS-test-file1.pxl";
+        listOfFiles[1] = System.getenv("PIXELS_S3_TEST_BUCKET_PATH") + "exactNNS-test-file2.pxl";
+
+        // prepare distance function
+        VectorDistFunc vectorDistFunc =  switch (strForVectorDistFunc.toStringUtf8()) {
+            case "euc" -> VectorDistMetrics::eucDist;
+            case "cos" -> VectorDistMetrics::cosSim;
+            case "dot" -> VectorDistMetrics::dotProd;
+            default -> null;
+        };
+
+        ExactNNS exactNNS = new ExactNNS(inputVector, listOfFiles, (int)k, vectorDistFunc, (int)columnId);
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            return Slices.utf8Slice(objectMapper.writeValueAsString(exactNNS.getNearestNbrs()));
+        } catch(IOException e) {
+            e.printStackTrace();
         }
-        return sum;
+        return null;
     }
 
     @ScalarFunction("eucDist")
