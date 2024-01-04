@@ -139,17 +139,6 @@ public class PixelsTrinoConfig
             }
         }
 
-        this.inputStorageScheme = Storage.Scheme.from(this.configFactory.getProperty("executor.input.storage.scheme"));
-        this.inputStorageInfo = StorageInfoBuilder.BuildFromConfig(this.inputStorageScheme);
-
-        this.outputStorageScheme = Storage.Scheme.from(this.configFactory.getProperty("executor.output.storage.scheme"));
-        this.outputStorageInfo = StorageInfoBuilder.BuildFromConfig(this.outputStorageScheme);
-        this.outputFolder = this.configFactory.getProperty("executor.output.folder");
-        if (!this.outputFolder.endsWith("/"))
-        {
-            this.outputFolder += "/";
-        }
-
         return this;
     }
 
@@ -173,6 +162,18 @@ public class PixelsTrinoConfig
             {
                 // PIXELS-416: same as the invoker providers.
                 MetricsCollector.Instance();
+            }
+
+            // Issue #81: only init input and output storage schemes when serverless workers are enabled.
+            this.inputStorageScheme = Storage.Scheme.from(this.configFactory.getProperty("executor.input.storage.scheme"));
+            this.inputStorageInfo = StorageInfoBuilder.BuildFromConfig(this.inputStorageScheme);
+
+            this.outputStorageScheme = Storage.Scheme.from(this.configFactory.getProperty("executor.output.storage.scheme"));
+            this.outputStorageInfo = StorageInfoBuilder.BuildFromConfig(this.outputStorageScheme);
+            this.outputFolder = this.configFactory.getProperty("executor.output.folder");
+            if (!this.outputFolder.endsWith("/"))
+            {
+                this.outputFolder += "/";
             }
         }
         return this;
