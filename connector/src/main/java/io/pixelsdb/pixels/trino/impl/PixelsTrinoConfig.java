@@ -215,42 +215,66 @@ public class PixelsTrinoConfig
         return cleanIntermediateResult;
     }
 
-    @NotNull
     public StorageInfo getInputStorageInfo()
     {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use input storage when cloud function is turned off"));
+        }
         return inputStorageInfo;
     }
 
-    @NotNull
     public Storage.Scheme getInputStorageScheme()
     {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use input storage when cloud function is turned off"));
+        }
         return inputStorageScheme;
     }
 
-    @NotNull
     public StorageInfo getOutputStorageInfo()
     {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use output storage when cloud function is turned off"));
+        }
         return outputStorageInfo;
     }
 
-    @NotNull
     public Storage.Scheme getOutputStorageScheme()
     {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use output storage when cloud function is turned off"));
+        }
         return outputStorageScheme;
     }
 
-    @NotNull
     public String getOutputFolderForQuery(long transId)
     {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use output storage when cloud function is turned off"));
+        }
         /* Must end with '/', otherwise it will not be considered
          * as a folder in S3-like storage.
          */
         return this.outputFolder + transId + "/";
     }
 
-    @NotNull
     public String getOutputFolderForQuery(long transId, String post)
     {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use output storage when cloud function is turned off"));
+        }
         /* Must end with '/', otherwise it will not be considered
          * as a folder in S3-like storage.
          */
