@@ -1,10 +1,13 @@
 package io.pixelsdb.pixels.trino.vector;
 
+import com.google.common.collect.ImmutableMap;
 import io.pixelsdb.pixels.trino.PixelsPlugin;
 import io.trino.Session;
+import io.trino.testing.DistributedQueryRunner;
 import io.trino.testing.LocalQueryRunner;
 import io.trino.testing.MaterializedResult;
 import io.trino.testing.QueryRunner;
+import io.trino.testing.sql.TestTable;
 import org.junit.Test;
 
 import static io.trino.testing.TestingSession.testSessionBuilder;
@@ -15,7 +18,7 @@ public class UdfTest {
     private static final QueryRunner queryRunner;
 
     static {
-        queryRunner = createQueryRunner();
+        queryRunner = createLocalQueryRunner();
         queryRunner.installPlugin(new PixelsPlugin());
     }
 
@@ -84,10 +87,42 @@ public class UdfTest {
         assertEquals("[[0.1,0.1]]", res1.getMaterializedRows().get(0).getField(0));
     }
 
-    private static QueryRunner createQueryRunner() {
+    @Test
+    public void testPlayGround() {
+        try {
+            TestTable testTable = new TestTable(createDistributedQueryRunner()::execute, "test_arr_table", "(arr_col array(double))");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        MaterializedResult res1 = queryRunner.execute(createSession(), "select * from test_arr_table");
+        System.out.println(res1);
+    }
+
+    private static QueryRunner createLocalQueryRunner() {
         QueryRunner queryRunner = LocalQueryRunner.create(createSession());
         // Install any necessary plugins or connectors
-        // e.g., queryRunner.installPlugin(new YourPlugin());
+//        queryRunner.installPlugin(new PixelsPlugin());
+        return queryRunner;
+    }
+
+    public static QueryRunner createDistributedQueryRunner()
+            throws Exception
+    {
+        // Create a Trino session
+        Session session = createSession();
+
+        // Create a distributed query runner with one node
+        DistributedQueryRunner queryRunner = DistributedQueryRunner.builder(session)
+                .setNodeCount(1)
+                .build();
+
+        // Install your connector plugin
+        queryRunner.installPlugin(new PixelsPlugin());
+
+//        // Create a catalog for your connector
+//        queryRunner.createCatalog("your_connector_catalog", "pixels", ImmutableMap.of());
+
+        // Return the configured QueryRunner
         return queryRunner;
     }
 
