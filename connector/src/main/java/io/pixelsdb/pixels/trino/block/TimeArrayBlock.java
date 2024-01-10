@@ -71,21 +71,25 @@ public class TimeArrayBlock implements Block
 
     TimeArrayBlock(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values)
     {
-        if (arrayOffset < 0) {
+        if (arrayOffset < 0)
+        {
             throw new IllegalArgumentException("arrayOffset is negative");
         }
         this.arrayOffset = arrayOffset;
-        if (positionCount < 0) {
+        if (positionCount < 0)
+        {
             throw new IllegalArgumentException("positionCount is negative");
         }
         this.positionCount = positionCount;
 
-        if (values.length - arrayOffset < positionCount) {
+        if (values.length - arrayOffset < positionCount)
+        {
             throw new IllegalArgumentException("values length is less than positionCount");
         }
         this.values = values;
 
-        if (valueIsNull.length - arrayOffset < positionCount) {
+        if (valueIsNull.length - arrayOffset < positionCount)
+        {
             throw new IllegalArgumentException("isNull length is less than positionCount");
         }
         this.valueIsNull = valueIsNull;
@@ -139,7 +143,8 @@ public class TimeArrayBlock implements Block
     @Override
     public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer) {
         consumer.accept(values, sizeOf(values));
-        if (valueIsNull != null) {
+        if (valueIsNull != null)
+        {
             consumer.accept(valueIsNull, sizeOf(valueIsNull));
         }
         consumer.accept(this, INSTANCE_SIZE);
@@ -155,7 +160,8 @@ public class TimeArrayBlock implements Block
     public long getLong(int position, int offset)
     {
         checkReadablePosition(position);
-        if (offset != 0) {
+        if (offset != 0)
+        {
             throw new IllegalArgumentException("offset must be zero");
         }
         return values[position + arrayOffset] * SCALE_FACTOR;
@@ -165,7 +171,8 @@ public class TimeArrayBlock implements Block
     public int getInt(int position, int offset)
     {
         checkReadablePosition(position);
-        if (offset != 0) {
+        if (offset != 0)
+        {
             throw new IllegalArgumentException("offset must be zero");
         }
         return values[position + arrayOffset];
@@ -177,12 +184,14 @@ public class TimeArrayBlock implements Block
     public short getShort(int position, int offset)
     {
         checkReadablePosition(position);
-        if (offset != 0) {
+        if (offset != 0)
+        {
             throw new IllegalArgumentException("offset must be zero");
         }
 
         short value = (short) (values[position + arrayOffset]);
-        if (value != values[position + arrayOffset]) {
+        if (value != values[position + arrayOffset])
+        {
             throw new ArithmeticException("short overflow");
         }
         return value;
@@ -194,12 +203,14 @@ public class TimeArrayBlock implements Block
     public byte getByte(int position, int offset)
     {
         checkReadablePosition(position);
-        if (offset != 0) {
+        if (offset != 0)
+        {
             throw new IllegalArgumentException("offset must be zero");
         }
 
         byte value = (byte) (values[position + arrayOffset]);
-        if (value != values[position + arrayOffset]) {
+        if (value != values[position + arrayOffset])
+        {
             throw new ArithmeticException("byte overflow");
         }
         return value;
@@ -252,7 +263,8 @@ public class TimeArrayBlock implements Block
 
         boolean[] newValueIsNull = new boolean[length];
         int[] newValues = new int[length];
-        for (int i = 0; i < length; i++) {
+        for (int i = 0; i < length; i++)
+        {
             int position = positions[offset + i];
             checkReadablePosition(position);
             newValueIsNull[i] = valueIsNull[position + arrayOffset];
@@ -278,7 +290,8 @@ public class TimeArrayBlock implements Block
         boolean[] newValueIsNull = compactArray(valueIsNull, positionOffset, length);
         int[] newValues = compactArray(values, positionOffset, length);
 
-        if (newValueIsNull == valueIsNull && newValues == values) {
+        if (newValueIsNull == valueIsNull && newValues == values)
+        {
             return this;
         }
         return new TimeArrayBlock(length, newValueIsNull, newValues);
@@ -301,7 +314,8 @@ public class TimeArrayBlock implements Block
 
     private void checkReadablePosition(int position)
     {
-        if (position < 0 || position >= getPositionCount()) {
+        if (position < 0 || position >= getPositionCount())
+        {
             throw new IllegalArgumentException("position is not valid");
         }
     }
