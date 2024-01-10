@@ -58,8 +58,10 @@ public class TimeArrayBlockEncoding implements BlockEncoding
 
         encodeNullsAsBits(sliceOutput, block);
 
-        for (int position = 0; position < positionCount; position++) {
-            if (!block.isNull(position)) {
+        for (int position = 0; position < positionCount; position++)
+        {
+            if (!block.isNull(position))
+            {
                 sliceOutput.writeInt(block.getInt(position, 0));
             }
         }
@@ -73,8 +75,10 @@ public class TimeArrayBlockEncoding implements BlockEncoding
         boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).get();
 
         int[] values = new int[positionCount];
-        for (int position = 0; position < positionCount; position++) {
-            if (!valueIsNull[position]) {
+        for (int position = 0; position < positionCount; position++)
+        {
+            if (!valueIsNull[position])
+            {
                 values[position] = sliceInput.readInt();
             }
         }

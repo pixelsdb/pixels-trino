@@ -586,6 +586,19 @@ class PixelsPageSource implements ConnectorPageSource
                         DictionaryColumnVector dscv = (DictionaryColumnVector) vector;
                         Block dictionary = new VariableWidthBlock(dscv.dictOffsets.length - 1,
                                 Slices.wrappedBuffer(dscv.dictArray), dscv.dictOffsets, Optional.empty());
+                        if (!dscv.noNulls)
+                        {
+                            // Issue #84: Trino's stupid DictionaryBlock stores null value in dictionary.
+                            int nullValueId = dictionary.getPositionCount();
+                            dictionary = dictionary.copyWithAppendedNull();
+                            for (int i = 0; i < batchSize; ++i)
+                            {
+                                if (dscv.isNull[i])
+                                {
+                                    dscv.ids[i] = nullValueId;
+                                }
+                            }
+                        }
                         block = DictionaryBlock.create(batchSize, dictionary, dscv.ids);
                     }
                     break;
