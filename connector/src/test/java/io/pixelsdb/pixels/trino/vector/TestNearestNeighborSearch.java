@@ -1,5 +1,6 @@
 package io.pixelsdb.pixels.trino.vector;
 
+import io.pixelsdb.pixels.trino.vector.exactnns.ExactNNS;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -27,7 +28,7 @@ public class TestNearestNeighborSearch {
         listOfFiles[1] = System.getenv("PIXELS_S3_TEST_BUCKET_PATH") + "exactNNS-test-file4.pxl";
         int k = 4;
         int colId = 0;
-        ExactNNS exactNNS = new ExactNNS(inputVec, listOfFiles, k, VectorDistMetrics::eucDist, colId);
+        ExactNNS exactNNS = new ExactNNS(inputVec, listOfFiles, k, VectorDistFuncs::eucDist, colId);
         System.out.println("Nearest Neighbours:");
         double[][] expected = new double[4][2];
         expected[0][0] = 2.0;

@@ -1,6 +1,26 @@
 package io.pixelsdb.pixels.trino.vector;
 
-public class VectorDistMetrics {
+public class VectorDistFuncs {
+
+    public enum DistFuncEnum {
+        EUCLIDEAN_DISTANCE(VectorDistFuncs::eucDist),
+        DOT_PRODUCT(VectorDistFuncs::dotProd),
+        COSINE_SIMILARITY(VectorDistFuncs::cosSim);
+
+        private final VectorDistFunc vectorDistFunc;
+
+        DistFuncEnum(VectorDistFunc vectorDistFunc) {
+            this.vectorDistFunc = vectorDistFunc;
+        }
+
+        public VectorDistFunc getDistFunc() {
+            return vectorDistFunc;
+        }
+
+        public static DistFuncEnum getDistFuncEnumByOrdinal(int ordinal) {
+            return values()[ordinal];
+        }
+    }
 
     public static Double eucDist(
             double[] vec1,

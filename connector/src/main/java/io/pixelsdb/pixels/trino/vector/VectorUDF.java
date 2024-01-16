@@ -3,6 +3,7 @@ package io.pixelsdb.pixels.trino.vector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
+import io.pixelsdb.pixels.trino.vector.exactnns.ExactNNS;
 import io.trino.spi.block.Block;
 import io.trino.spi.function.Description;
 import io.trino.spi.function.ScalarFunction;
@@ -11,7 +12,7 @@ import io.trino.spi.function.SqlType;
 import io.trino.spi.type.StandardTypes;
 
 import java.io.IOException;
-import java.util.ArrayList;
+
 import static io.trino.spi.type.DoubleType.DOUBLE;
 
 public class VectorUDF {
@@ -43,9 +44,9 @@ public class VectorUDF {
 
         // prepare distance function
         VectorDistFunc vectorDistFunc =  switch (strForVectorDistFunc.toStringUtf8()) {
-            case "euc" -> VectorDistMetrics::eucDist;
-            case "cos" -> VectorDistMetrics::cosSim;
-            case "dot" -> VectorDistMetrics::dotProd;
+            case "euc" -> VectorDistFuncs::eucDist;
+            case "cos" -> VectorDistFuncs::cosSim;
+            case "dot" -> VectorDistFuncs::dotProd;
             default -> null;
         };
 
