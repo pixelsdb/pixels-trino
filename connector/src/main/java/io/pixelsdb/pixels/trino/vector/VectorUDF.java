@@ -1,9 +1,5 @@
 package io.pixelsdb.pixels.trino.vector;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.airlift.slice.Slice;
-import io.airlift.slice.Slices;
-import io.pixelsdb.pixels.trino.vector.exactnns.ExactNNS;
 import io.trino.spi.block.Block;
 import io.trino.spi.function.Description;
 import io.trino.spi.function.ScalarFunction;
@@ -18,47 +14,6 @@ import static io.trino.spi.type.DoubleType.DOUBLE;
 public class VectorUDF {
 
     private VectorUDF() {}
-
-    @ScalarFunction("exactNNS")
-    @Description("exact nearest neighbours search")
-    @SqlType(StandardTypes.JSON)
-    @SqlNullable
-    public static Slice exactNNS(
-            @SqlNullable @SqlType("array(double)") Block trinoVector, @SqlType("integer") long columnId, @SqlType(StandardTypes.VARCHAR) Slice strForVectorDistFunc, @SqlType("integer") long k)
-    {
-        // prepare input vector
-        double[] inputVector;
-        if (trinoVector == null) {
-            return null;
-        }
-        inputVector = new double[trinoVector.getPositionCount()];
-        for (int i = 0; i < trinoVector.getPositionCount(); i++) {
-            inputVector[i] = DOUBLE.getDouble(trinoVector, i);
-        }
-
-        // prepare list of files to read
-        // todo how to go from (tableId, columnId) to the list of files belong to that column?
-        String[] listOfFiles = new String[2];
-        listOfFiles[0] = System.getenv("PIXELS_S3_TEST_BUCKET_PATH") + "exactNNS-test-file1.pxl";
-        listOfFiles[1] = System.getenv("PIXELS_S3_TEST_BUCKET_PATH") + "exactNNS-test-file2.pxl";
-
-        // prepare distance function
-        VectorDistFunc vectorDistFunc =  switch (strForVectorDistFunc.toStringUtf8()) {
-            case "euc" -> VectorDistFuncs::eucDist;
-            case "cos" -> VectorDistFuncs::cosSim;
-            case "dot" -> VectorDistFuncs::dotProd;
-            default -> null;
-        };
-
-        ExactNNS exactNNS = new ExactNNS(inputVector, listOfFiles, (int)k, vectorDistFunc, (int)columnId);
-        try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            return Slices.utf8Slice(objectMapper.writeValueAsString(exactNNS.getNearestNbrs()));
-        } catch(IOException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
 
     @ScalarFunction("eucDist")
     @Description("calculate the Euclidean distance between two vectors")
