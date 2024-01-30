@@ -1,6 +1,7 @@
 package io.pixelsdb.pixels.trino.vector.exactnns;
 
 import io.airlift.slice.Slice;
+import io.pixelsdb.pixels.trino.vector.VectorAggFuncUtil;
 import io.pixelsdb.pixels.trino.vector.VectorDistFunc;
 import io.pixelsdb.pixels.trino.vector.VectorDistFuncs;
 import io.trino.spi.block.Block;
@@ -43,10 +44,10 @@ public class SingleExactNNSState implements ExactNNSState {
                      int dimension,
                      Slice distFuncSlice,
                      int k) {
-        this.inputVec = ExactNNSUtil.blockToVec(inputVecBlock);
+        this.inputVec = VectorAggFuncUtil.blockToVec(inputVecBlock);
         this.dimension = dimension;
         this.k = k;
-        this.vectorDistFuncEnum = ExactNNSUtil.sliceToDistFunc(distFuncSlice);
+        this.vectorDistFuncEnum = VectorAggFuncUtil.sliceToDistFunc(distFuncSlice);
         vecDistDescComparator = new VecDistComparator(inputVec, vectorDistFuncEnum.getDistFunc());
         // let the heap store the k vecs that are closest to the input vector
         // let top of the heap be the vec with largest distance that we might eliminate

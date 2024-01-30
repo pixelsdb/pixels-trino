@@ -407,6 +407,7 @@ class PixelsPageSource implements ConnectorPageSource
                     blocks[fieldId] = new LazyBlock(rowBatchSize, new PixelsBlockLoader(
                             vector, type, typeCategory, rowBatchSize));
                 }
+                // update the current column in cached LSH index
             } catch (IOException e)
             {
                 closeWithSuppression(e);

@@ -30,6 +30,7 @@ import io.pixelsdb.pixels.common.turbo.InvokerFactory;
 import io.pixelsdb.pixels.common.turbo.Output;
 import io.pixelsdb.pixels.common.turbo.WorkerType;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
+import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
@@ -44,6 +45,7 @@ import io.pixelsdb.pixels.planner.plan.physical.output.JoinOutput;
 import io.pixelsdb.pixels.planner.plan.physical.output.ScanOutput;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
+import io.pixelsdb.pixels.trino.vector.lshnns.CachedLSHIndex;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 
@@ -112,6 +114,15 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 "connectorId is not for this connector");
         List<PixelsColumnHandle> pixelsColumns = columns.stream()
                 .map(PixelsColumnHandle.class::cast).collect(toList());
+        if (pixelsColumns.size()==1 && pixelsColumns.get(0).getTypeCategory()== TypeDescription.Category.VECTOR) {
+            CachedLSHIndex.setCurrColumn(pixelsColumns.get(0));
+            // todo maybe add logic for checking whether split is in the files to read
+            // a problem is we might need to use a prepare(inputVec) udf to pass in the input vector
+            // to do the hash and get which files are allowed... because otherwise
+            // if we directly call the agg, the files might have all been read?
+            // it all depends on whether trino reads all files and then call input() or
+            // read a file call input and read another and call input
+        }
 
         try
         {

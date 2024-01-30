@@ -1,4 +1,4 @@
-package io.pixelsdb.pixels.trino.vector.exactnns;
+package io.pixelsdb.pixels.trino.vector;
 
 import io.airlift.slice.Slice;
 import io.pixelsdb.pixels.trino.vector.VectorDistFuncs;
@@ -6,7 +6,7 @@ import io.trino.spi.block.Block;
 
 import static io.trino.spi.type.DoubleType.DOUBLE;
 
-public class ExactNNSUtil {
+public class VectorAggFuncUtil {
 
     public static double[] blockToVec(Block block) {
         double[] inputVector;

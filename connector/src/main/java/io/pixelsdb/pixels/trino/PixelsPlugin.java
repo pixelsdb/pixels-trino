@@ -25,6 +25,8 @@ import io.pixelsdb.pixels.trino.block.TimeArrayBlockEncoding;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlockEncoding;
 import io.pixelsdb.pixels.trino.vector.VectorUDF;
 import io.pixelsdb.pixels.trino.vector.exactnns.ExactNNSAggFunc;
+import io.pixelsdb.pixels.trino.vector.lshnns.build.BuildLSHIndexAggFunc;
+import io.pixelsdb.pixels.trino.vector.lshnns.search.LSHSearchAggFunc;
 import io.trino.spi.Plugin;
 import io.trino.spi.block.BlockEncoding;
 import io.trino.spi.connector.ConnectorFactory;
@@ -51,6 +53,8 @@ public class PixelsPlugin implements Plugin
         return ImmutableSet.<Class<?>>builder()
                 .add(VectorUDF.class)
                 .add(ExactNNSAggFunc.class)
+                .add(BuildLSHIndexAggFunc.class)
+                .add(LSHSearchAggFunc.class)
                 .build();
     }
 }

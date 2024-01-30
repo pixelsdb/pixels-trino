@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
+import io.pixelsdb.pixels.trino.vector.VectorAggFuncUtil;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockBuilder;
 import io.trino.spi.function.*;
@@ -42,7 +43,7 @@ public class ExactNNSAggFunc
         }
 
         // use the input row, i.e. a vector to update the priority queue in the state
-        state.updateNearestVecs(ExactNNSUtil.blockToVec(vecFromFile));
+        state.updateNearestVecs(VectorAggFuncUtil.blockToVec(vecFromFile));
     }
 
 
