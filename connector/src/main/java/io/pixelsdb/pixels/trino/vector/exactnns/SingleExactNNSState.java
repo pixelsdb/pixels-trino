@@ -201,7 +201,7 @@ public class SingleExactNNSState implements ExactNNSState {
      * A vector comparator that compare two vectors based on their distance to the input vector. If a vector's distance
      * to input vector is > or < or = another vector's distance to input vector, then it returns a value >0 or =0 or <0.
      */
-    static class VecDistComparator implements Comparator<double[]>
+    public static class VecDistComparator implements Comparator<double[]>
     {
         double[] inputVec;
         VectorDistFunc vectorDistFunc;

@@ -13,7 +13,6 @@ import io.trino.spi.function.*;
 import io.trino.spi.type.StandardTypes;
 
 import java.util.BitSet;
-import java.util.List;
 
 @AggregationFunction("lsh_search_multinode")
 @Description("Returns the aprroximately closest vectors of the input vector")

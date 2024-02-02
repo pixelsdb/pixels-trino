@@ -114,18 +114,23 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 "connectorId is not for this connector");
         List<PixelsColumnHandle> pixelsColumns = columns.stream()
                 .map(PixelsColumnHandle.class::cast).collect(toList());
-        if (pixelsColumns.size()==1 && pixelsColumns.get(0).getTypeCategory()== TypeDescription.Category.VECTOR) {
-            CachedLSHIndex.setCurrColumn(pixelsColumns.get(0));
-            // todo maybe add logic for checking whether split is in the files to read
-            // a problem is we might need to use a prepare(inputVec) udf to pass in the input vector
-            // to do the hash and get which files are allowed... because otherwise
-            // if we directly call the agg, the files might have all been read?
-            // it all depends on whether trino reads all files and then call input() or
-            // read a file call input and read another and call input
-        }
 
         try
         {
+            if (pixelsColumns.size()==1 && pixelsColumns.get(0).getTypeCategory()== TypeDescription.Category.VECTOR) {
+                CachedLSHIndex.setCurrColumn(pixelsColumns.get(0));
+                // todo maybe add logic for checking whether split is in the files to read
+                // a problem is we might need to use a prepare(inputVec) udf to pass in the input vector
+                // to do the hash and get which files are allowed... because otherwise
+                // if we directly call the agg, the files might have all been read?
+                // it all depends on whether trino reads all files and then call input() or
+                // read a file call input and read another and call input
+
+                // todo somehow return an empty ConnectorPageSource
+//                Storage storage = StorageFactory.Instance().getStorage(config.getOutputStorageScheme());
+//                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
+//                        pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
+            }
             if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
             {
                 // perform aggregation push down.
