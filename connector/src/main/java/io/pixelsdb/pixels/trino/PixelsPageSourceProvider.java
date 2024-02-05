@@ -117,7 +117,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
         try
         {
-            if (pixelsColumns.size()==1 && pixelsColumns.get(0).getTypeCategory()== TypeDescription.Category.VECTOR) {
+            if (pixelsColumns.size()==1 && pixelsColumns.get(0).getTypeCategory()==TypeDescription.Category.VECTOR) {
+                // update the current column under query
                 CachedLSHIndex.setCurrColumn(pixelsColumns.get(0));
                 // todo maybe add logic for checking whether split is in the files to read
                 // a problem is we might need to use a prepare(inputVec) udf to pass in the input vector

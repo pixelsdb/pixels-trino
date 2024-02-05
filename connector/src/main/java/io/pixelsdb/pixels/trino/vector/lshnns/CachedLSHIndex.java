@@ -54,6 +54,11 @@ public class CachedLSHIndex {
         colToBucketsDir.put(currColumn, tableS3Path);
     }
 
+    public static void updateColToBuckets(String tableS3Path, LSHFunc lshFunc) {
+        colToBucketsDir.put(currColumn, tableS3Path);
+        colToLSHFunc.put(currColumn, lshFunc);
+    }
+
     public static void updateColToLSHFunc(LSHFunc lshFunc) {
         // when executing an LSH build query, the currColumn will be updated earlier when trino calls pixels to create page source, which is at the bottom of the pixels-trino call stack
         colToLSHFunc.put(currColumn, lshFunc);

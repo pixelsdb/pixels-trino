@@ -57,7 +57,7 @@ public class LSHSearchUDF {
         BitSet inputVecHash = lshFunc.hash(inputVec);
 
         Comparator<double[]> comparator = new SingleExactNNSState.VecDistComparator(inputVec, vectorDistFuncEnum.getDistFunc());
-        PriorityQueue<double[]> nearestVecs = new PriorityQueue<>((int)k, comparator);
+        PriorityQueue<double[]> nearestVecs = new PriorityQueue<>((int)k, comparator.reversed());
 
         bfsIndexFiles(nearestVecs, inputVecHash, k, lshFunc, bucketsDir);
 
@@ -94,7 +94,7 @@ public class LSHSearchUDF {
         int distToInputVecHash = 0;
         int numFilesTriedToRead = 0;
         // stop bfs if we found k closest vecs, or we searched through all possible files
-        while (nearestVecs.size() < k && numFilesTriedToRead < Math.pow(2, lshFunc.getNumBits())) {
+        while (nearestVecs.size() < k && distToInputVecHash <= lshFunc.getNumBits()) {
             NbrBitSetsFinder nbrBitSetsFinder = new NbrBitSetsFinder(inputVecHash, distToInputVecHash, lshFunc.getNumBits());
             List<BitSet> nbrBitSets = nbrBitSetsFinder.getNeighbourBitSets();
             List<Future> futures = new ArrayList<>(nbrBitSets.size());
@@ -171,10 +171,12 @@ public class LSHSearchUDF {
 
     private synchronized static void updateNearestVecs(PriorityQueue<double[]> nearestVecs, VectorizedRowBatch rowBatch, int k) {
         VectorColumnVector vcv = (VectorColumnVector) rowBatch.cols[0];
-        for (double[] vec : vcv.vector) {
+        for (int i=0; i<rowBatch.size; i++) {
+            double[] vec = vcv.vector[i];
             if (nearestVecs.size() < k) {
                 nearestVecs.add(vec);
-            } else if (nearestVecs.comparator().compare(nearestVecs.peek(), vec) > 0) {
+                // reverse the comparator back to normal comparator. Recall that we use reversed comparator for pq to use it as max heap
+            } else if (nearestVecs.comparator().reversed().compare(nearestVecs.peek(), vec) > 0) {
                 // if the vec with largest dist in PQ has distance larger than vec, then we remove the top
                 // of PQ and insert vec
                 nearestVecs.poll();
