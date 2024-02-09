@@ -61,6 +61,7 @@ import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
+import io.pixelsdb.pixels.trino.vector.lshnns.CachedLSHIndex;
 import io.trino.spi.HostAddress;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
@@ -149,8 +150,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
         if (tableHandle.getTableType() == TableType.BASE)
         {
             List<PixelsSplit> pixelsSplits;
-            try
+            try // todo if lsh index exists for this column handle, we call another function to get scansplits where paths are in the LSH indexed dir
             {
+                List<PixelsColumnHandle> columnHandles = tableHandle.getColumns();
+                if (columnHandles.size()==1
+                        && columnHandles.get(0).getTypeCategory() == TypeDescription.Category.VECTOR) {
+                    CachedLSHIndex.setCurrColumn(columnHandles.get(0));
+
+                }
                 pixelsSplits = getScanSplits(transHandle, session, tableHandle);
             } catch (MetadataException e)
             {
@@ -804,7 +811,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
             else
             {
-                compactPaths = layout.getCompactPathUris();
+                compactPaths = layout.getCompactPathUris(); // todo somehow change the compact path to be the indexed path
             }
 
             long splitId = 0;

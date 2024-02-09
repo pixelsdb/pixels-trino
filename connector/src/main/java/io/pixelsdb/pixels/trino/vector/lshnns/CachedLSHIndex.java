@@ -1,74 +1,156 @@
 package io.pixelsdb.pixels.trino.vector.lshnns;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
+
+import org.apache.commons.math3.linear.RealMatrix;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 public class CachedLSHIndex {
+
+    public static final String s3Bucket = "tiannan-test";
+    public static final String s3Key = "LSHIndex/LSHIndex.json";
+
     // the column queried by current query
     static PixelsColumnHandle currColumn;
-    static String currTable;
 
-    // map each column to the directory on s3 which stores the indexed files
-    // in that dir maybe we can use file names to represent the hash value. if within 64 bits, then
-    // only one long value.
+    // map each LSH indexed column to the corresponding LSH buckets
+    private static volatile HashMap<PixelsColumnHandle, Buckets> colToBuckets;
 
-    // we can also store a mapping between hashkey to a list of files that have that hash, and we might also add files from hashes that are close to the hashkey. evntually we pass a scanset to the pixelsreader
+    static ObjectMapper objectMapper;
+    //static AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+    private static S3Client s3;
 
-    // we can first create a non-indexed table and then create an indexed table from the original table by doing create table (s3 path=...) and then call:
-    // select build_lsh(arr_col, numBits, indexed_table_path) from original table
+    // initialize the LSH index. If not already loaded, we load the LSH index from a file
+    static {
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(RealMatrix.class, new LSHFunc.RealMatrixSerializer());
+        module.addDeserializer(RealMatrix.class, new LSHFunc.RealMatrixDeserializer());
+        objectMapper = new ObjectMapper().registerModule(module);
 
-    // or maybe just use udf build_lsh(s3_file_dir)
-    // the bottom line is if we want to use agg func to auto distributedly read all files, we would
-    // need an indexed table with a dir storing all the bucketed files. And then maybe we can specify
-    // hamming distance to specify which buckets to include and do exact_nns_agg  with other files pruned
+        s3 = S3Client.builder()
+                .region(Region.US_EAST_2)
+                .build();
+        initLshIndexFomS3();
 
-    // alternatively can also just write bucketed files to a s3 dir and then simply use udf to do:
-    // select lsh_nns(schema.table.col, inputVec) and then use col and hash(inputVec) to find what files
-    // to read and read those files in a single machine.
+        // make sure that we write the lsh index to s3 file right before jvm is shut down
+        Runtime.getRuntime().addShutdownHook(
+                new Thread(()->writeColToBucketsToS3(s3Bucket, s3Key))
+        );
+    }
 
+    static void initLshIndexFomS3() {
+        if (colToBuckets != null) {
+            // already initialized
+            return;
+        }
+        // load the lsh index file from s3
+        byte[] bytes = getLSHIndexFromS3(s3Bucket, s3Key);
+        if (bytes==null) {
+            colToBuckets = new HashMap<>();
+            return;
+        }
+        try {
+            // deserialize JSON data from S3 object
+            colToBuckets = objectMapper.readValue(bytes, HashMap.class);
+        } catch (IOException e) {
+            //e.printStackTrace();
+            colToBuckets = new HashMap<>();
+        }
+    }
 
-    static HashMap<PixelsColumnHandle, String> colToBucketsDir = new HashMap<>();
-    static HashMap<PixelsColumnHandle, LSHFunc> colToLSHFunc = new HashMap<>();
+    static void writeColToBucketsToS3(String bucket, String key) {
+        if (colToBuckets==null) {
+            return;
+        }
+        try {
+            byte[] bytes = objectMapper.writeValueAsBytes(colToBuckets);
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder().bucket(bucket).key(key).build();
+            s3.putObject(putObjectRequest, RequestBody.fromBytes(bytes));
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static HashMap<PixelsColumnHandle, Buckets> getColToBuckets() {
+        return colToBuckets;
+    }
 
     public static PixelsColumnHandle getCurrColumn() {
         return currColumn;
-    }
-
-    public static String getCurrTable() {
-        return currTable;
     }
 
     public static void setCurrColumn(PixelsColumnHandle currColumn) {
         CachedLSHIndex.currColumn = currColumn;
     }
 
-    public static void setCurrTable(String currTable) {
-        CachedLSHIndex.currTable = currTable;
-    }
-
-    public static void updateColToBucketedData(String tableS3Path) {
-        // when executing an LSH build query, the currColumn will be updated earlier when trino calls pixels to create page source, which is at the bottom of the pixels-trino call stack
-        colToBucketsDir.put(currColumn, tableS3Path);
-    }
-
     public static void updateColToBuckets(String tableS3Path, LSHFunc lshFunc) {
-        colToBucketsDir.put(currColumn, tableS3Path);
-        colToLSHFunc.put(currColumn, lshFunc);
+        // when executing an LSH build query, the currColumn will be updated earlier in SplitManager
+        colToBuckets.put(currColumn, new Buckets(tableS3Path, lshFunc));
     }
 
-    public static void updateColToLSHFunc(LSHFunc lshFunc) {
-        // when executing an LSH build query, the currColumn will be updated earlier when trino calls pixels to create page source, which is at the bottom of the pixels-trino call stack
-        colToLSHFunc.put(currColumn, lshFunc);
+    static void updateColToBuckets(PixelsColumnHandle col, String tableS3Path, LSHFunc lshFunc) {
+        // when executing an LSH build query, the currColumn will be updated earlier in SplitManager
+        colToBuckets.put(col, new Buckets(tableS3Path, lshFunc));
     }
 
-    public static String getBucketsDir() {
-        return colToBucketsDir.get(currColumn);
+    public static byte[] getLSHIndexFromS3(String bucketName, String keyName) {
+        try {
+            GetObjectRequest objectRequest = GetObjectRequest
+                    .builder()
+                    .key(keyName)
+                    .bucket(bucketName)
+                    .build();
+            return s3.getObjectAsBytes(objectRequest).asByteArray();
+        } catch (S3Exception e) {
+            //e.printStackTrace();
+            return null;
+        }
     }
 
-    public static LSHFunc getLSHFunc() {
-        return colToLSHFunc.get(currColumn);
+
+    /**
+     * get the LSH buckets for currColumn. Buckets consist of the S3 path storing the buckets and the lsh function used
+     * for currColumn
+     * @return the LSH buckets for current column
+     */
+    public static Buckets getBuckets() {
+        return colToBuckets.get(currColumn);
+    }
+
+    public static class Buckets {
+        String tableS3Path;
+        LSHFunc lshFunc;
+
+        Buckets(String tableS3Path, LSHFunc lshFunc) {
+            this.tableS3Path = tableS3Path;
+            this.lshFunc = lshFunc;
+        }
+
+        public LSHFunc getLshFunc() {
+            return lshFunc;
+        }
+
+        public String getTableS3Path() {
+            return tableS3Path;
+        }
+
+        @Override
+        public String toString() {
+            return "Buckets{" +
+                    "tableS3Path='" + tableS3Path + '\'' +
+                    ", lshFunc=" + lshFunc +
+                    '}';
+        }
     }
 }

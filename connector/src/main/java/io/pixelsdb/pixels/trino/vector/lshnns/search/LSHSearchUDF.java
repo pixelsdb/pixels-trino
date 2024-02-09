@@ -47,11 +47,11 @@ public class LSHSearchUDF {
     {
         VectorDistFuncs.DistFuncEnum vectorDistFuncEnum = VectorAggFuncUtil.sliceToDistFunc(distFuncSlice);
 
-        String bucketsDir = CachedLSHIndex.getBucketsDir();
+        String bucketsDir = CachedLSHIndex.getBuckets().getTableS3Path();
         if (bucketsDir==null) {
             return null;
         }
-        LSHFunc lshFunc = CachedLSHIndex.getLSHFunc();
+        LSHFunc lshFunc = CachedLSHIndex.getBuckets().getLshFunc();
         assert(lshFunc != null); // if bucketsDir exists, then so should LshFunc
         double[] inputVec = VectorAggFuncUtil.blockToVec(inputVecBlock);
         BitSet inputVecHash = lshFunc.hash(inputVec);
@@ -88,7 +88,7 @@ public class LSHSearchUDF {
      * @param lshFunc
      * @param bucketsDir
      */
-    static void bfsIndexFiles(PriorityQueue<double[]> nearestVecs, BitSet inputVecHash, long k, LSHFunc lshFunc, String bucketsDir) {
+    public static void bfsIndexFiles(PriorityQueue<double[]> nearestVecs, BitSet inputVecHash, long k, LSHFunc lshFunc, String bucketsDir) {
         // bfs around the inputVec's hash until we found k nearestVecs
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         int distToInputVecHash = 0;
