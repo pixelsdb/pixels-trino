@@ -15,6 +15,7 @@ import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
 import io.pixelsdb.pixels.core.vector.VectorColumnVector;
 import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
+import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.pixelsdb.pixels.trino.vector.VectorAggFuncUtil;
 import io.pixelsdb.pixels.trino.vector.VectorDistFuncs;
 import io.pixelsdb.pixels.trino.vector.exactnns.SingleExactNNSState;
@@ -43,15 +44,18 @@ public class LSHSearchUDF {
     public static Slice lshSearch(
             @SqlNullable @SqlType("array(double)") Block inputVecBlock,
             @SqlNullable @SqlType(StandardTypes.VARCHAR) Slice distFuncSlice,
+            @SqlNullable @SqlType(StandardTypes.VARCHAR) Slice column,
             @SqlType("integer") long k)
     {
         VectorDistFuncs.DistFuncEnum vectorDistFuncEnum = VectorAggFuncUtil.sliceToDistFunc(distFuncSlice);
-
-        String bucketsDir = CachedLSHIndex.getBuckets().getTableS3Path();
-        if (bucketsDir==null) {
-            return null;
+        PixelsColumnHandle pixelsColumnHandle = VectorAggFuncUtil.sliceToColumn(column);
+        CachedLSHIndex cachedLSHIndex = CachedLSHIndex.getInstance();
+        cachedLSHIndex.setCurrColumn(pixelsColumnHandle);
+        CachedLSHIndex.Buckets buckets = CachedLSHIndex.getInstance().getBuckets();
+        if (buckets==null) {
+            throw new IllegalArgumentException("column" + pixelsColumnHandle + "doesn't exist in LSH index");
         }
-        LSHFunc lshFunc = CachedLSHIndex.getBuckets().getLshFunc();
+        LSHFunc lshFunc = buckets.getLshFunc();
         assert(lshFunc != null); // if bucketsDir exists, then so should LshFunc
         double[] inputVec = VectorAggFuncUtil.blockToVec(inputVecBlock);
         BitSet inputVecHash = lshFunc.hash(inputVec);
@@ -59,7 +63,7 @@ public class LSHSearchUDF {
         Comparator<double[]> comparator = new SingleExactNNSState.VecDistComparator(inputVec, vectorDistFuncEnum.getDistFunc());
         PriorityQueue<double[]> nearestVecs = new PriorityQueue<>((int)k, comparator.reversed());
 
-        bfsIndexFiles(nearestVecs, inputVecHash, k, lshFunc, bucketsDir);
+        bfsIndexFiles(nearestVecs, inputVecHash, k, lshFunc, buckets.getTableS3Path());
 
         // do a final sort and then output as json string
         int numVecs = nearestVecs.size();

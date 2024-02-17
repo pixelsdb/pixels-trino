@@ -150,14 +150,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         if (tableHandle.getTableType() == TableType.BASE)
         {
             List<PixelsSplit> pixelsSplits;
-            try // todo if lsh index exists for this column handle, we call another function to get scansplits where paths are in the LSH indexed dir
+            try
             {
-                List<PixelsColumnHandle> columnHandles = tableHandle.getColumns();
-                if (columnHandles.size()==1
-                        && columnHandles.get(0).getTypeCategory() == TypeDescription.Category.VECTOR) {
-                    CachedLSHIndex.setCurrColumn(columnHandles.get(0));
-
-                }
                 pixelsSplits = getScanSplits(transHandle, session, tableHandle);
             } catch (MetadataException e)
             {
@@ -811,7 +805,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
             else
             {
-                compactPaths = layout.getCompactPathUris(); // todo somehow change the compact path to be the indexed path
+                compactPaths = layout.getCompactPathUris();
             }
 
             long splitId = 0;

@@ -33,11 +33,11 @@ public class LSHSearchAggFunc {
     {
         // todo somehow pass information to pixels reader? Or change pixels reader to check
         // the cached index?
-        String bucketsDir = CachedLSHIndex.getBuckets().getTableS3Path();
+        String bucketsDir = CachedLSHIndex.getInstance().getBuckets().getTableS3Path();
         if (bucketsDir==null) {
             return;
         }
-        LSHFunc lshFunc = CachedLSHIndex.getBuckets().getLshFunc();
+        LSHFunc lshFunc = CachedLSHIndex.getInstance().getBuckets().getLshFunc();
         assert(lshFunc != null); // if bucketsDir exists, then so should LshFunc
         BitSet inputVecHash = null; // todo hash input func here
     }

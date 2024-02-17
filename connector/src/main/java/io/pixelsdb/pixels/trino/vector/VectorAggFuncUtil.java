@@ -1,8 +1,11 @@
 package io.pixelsdb.pixels.trino.vector;
 
 import io.airlift.slice.Slice;
+import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.pixelsdb.pixels.trino.vector.VectorDistFuncs;
 import io.trino.spi.block.Block;
+import io.trino.spi.type.ArrayType;
 
 import static io.trino.spi.type.DoubleType.DOUBLE;
 
@@ -28,5 +31,29 @@ public class VectorAggFuncUtil {
             case "dot" -> VectorDistFuncs.DistFuncEnum.DOT_PRODUCT;
             default -> null;
         };
+    }
+
+    public static PixelsColumnHandle sliceToColumn(Slice distFuncStr) {
+       String[] schemaTableCol = distFuncStr.toStringUtf8().split("\\.");
+       if (schemaTableCol.length != 3) {
+           throw new IllegalColumnException("column should be of form schema.table.column");
+       }
+       return PixelsColumnHandle.builder()
+        .setConnectorId("pixels")
+        .setSchemaName(schemaTableCol[0])
+        .setTableName(schemaTableCol[1])
+        .setColumnName(schemaTableCol[2])
+        .setColumnAlias(schemaTableCol[2])
+        .setColumnType(new ArrayType(DOUBLE))
+        .setTypeCategory(TypeDescription.Category.VECTOR)
+        .setLogicalOrdinal(0)
+        .setColumnComment("")
+               .build();
+    }
+
+    public static class IllegalColumnException extends IllegalArgumentException {
+        public IllegalColumnException(String msg) {
+            super(msg);
+        }
     }
 }

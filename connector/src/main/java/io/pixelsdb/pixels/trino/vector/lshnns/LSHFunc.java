@@ -1,6 +1,11 @@
 package io.pixelsdb.pixels.trino.vector.lshnns;
 
+import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.random.JDKRandomGenerator;
@@ -12,8 +17,13 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.BitSet;
+import java.util.Objects;
 
+
+@JsonSerialize(using = LSHFunc.LSHFuncSerializer.class)
+@JsonDeserialize(using = LSHFunc.LSHFuncDeserializer.class)
 public class LSHFunc {
 
     @JsonProperty
@@ -23,14 +33,22 @@ public class LSHFunc {
     @JsonProperty
     int numBits;
 
-    public LSHFunc(int dimension, int nBits, long seed) {
+    public LSHFunc() {}
+
+    public LSHFunc(int dimension, int numBits, long seed) {
         RandomGenerator randomGenerator = new JDKRandomGenerator();
         randomGenerator.setSeed(seed);
 
         // Create a random matrix
-        planeNorms = generateRandomMatrix(nBits, dimension, randomGenerator);
+        planeNorms = generateRandomMatrix(numBits, dimension, randomGenerator);
         this.dimension = dimension;
-        this.numBits = nBits;
+        this.numBits = numBits;
+    }
+
+    public LSHFunc(int dimension, int numBits, RealMatrix planeNorms) {
+        this.dimension = dimension;
+        this.numBits = numBits;
+        this.planeNorms = planeNorms;
     }
 
     // Utility method to generate a random matrix
@@ -78,39 +96,44 @@ public class LSHFunc {
     }
 
     /** serializer for the field RealMatrix planeNorms */
-    public static class RealMatrixSerializer extends StdSerializer<RealMatrix> {
-        public RealMatrixSerializer() {
-            this(null);
-        }
-
-        public RealMatrixSerializer(Class<RealMatrix> t) {
-            super(t);
-        }
+    public static class LSHFuncSerializer extends JsonSerializer<LSHFunc> {
 
         @Override
-        public void serialize(RealMatrix value, JsonGenerator gen, SerializerProvider provider) throws IOException {
-            // Convert RealMatrix to a 2D array or as a list of lists
-            gen.writeObject(value.getData());
+        public void serialize(LSHFunc value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+            gen.writeStartObject();
+            gen.writeFieldName("planeNorms");
+            gen.writeObject(value.planeNorms.getData());
+            gen.writeNumberField("dimension", value.getDimension());
+            gen.writeNumberField("numBits", value.getNumBits());
+            gen.writeEndObject();
         }
     }
 
-    /** deserializer for the field RealMatrix planeNorms */
-    public static class RealMatrixDeserializer extends StdDeserializer<RealMatrix> {
-        public RealMatrixDeserializer() {
-            this(null);
-        }
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        LSHFunc lshFunc = (LSHFunc) o;
+        return dimension == lshFunc.dimension && numBits == lshFunc.numBits; //&& planeNorms.equals(lshFunc.planeNorms);
+    }
 
-        public RealMatrixDeserializer(Class<?> vc) {
-            super(vc);
-        }
+    @Override
+    public int hashCode() {
+        return Objects.hash(planeNorms, dimension, numBits);
+    }
+
+    /** deserializer for the field RealMatrix planeNorms */
+    public static class LSHFuncDeserializer extends JsonDeserializer<LSHFunc> {
 
         @Override
-        public RealMatrix deserialize(com.fasterxml.jackson.core.JsonParser parser, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws IOException, com.fasterxml.jackson.core.JsonProcessingException {
-            double[][] arr = parseMatrixData(parser.readValueAsTree());
-            // Deserialize JSON into a RealMatrix object
-            // For example, you can deserialize it from a 2D array or from a list of lists
-            // Example: return new Array2DRowRealMatrix(p.readValueAs(double[][].class));
-            return new Array2DRowRealMatrix(arr);
+        public LSHFunc deserialize(com.fasterxml.jackson.core.JsonParser parser, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws IOException {
+
+            JsonNode node = parser.getCodec().readTree(parser);
+            JsonNode planeNormsNode = node.get("planeNorms");
+            double[][] matrixArr = parseMatrixData(planeNormsNode);
+            int dimension = node.get("dimension").asInt();
+            int numBits = node.get("numBits").asInt();
+            return new LSHFunc(dimension, numBits, new Array2DRowRealMatrix(matrixArr));
         }
 
         private double[][] parseMatrixData(JsonNode node) {

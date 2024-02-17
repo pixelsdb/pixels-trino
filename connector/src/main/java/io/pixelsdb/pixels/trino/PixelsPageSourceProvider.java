@@ -132,6 +132,12 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 ////                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
 ////                        pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
 //            }
+            List<PixelsColumnHandle> columnHandles = tableHandle.getColumns();
+            if (columnHandles.size()==1
+                    && columnHandles.get(0).getTypeCategory() == TypeDescription.Category.VECTOR) {
+                // update the LSH index in every node
+                CachedLSHIndex.getInstance().setCurrColumn(columnHandles.get(0));
+            }
             if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
             {
                 // perform aggregation push down.

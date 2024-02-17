@@ -21,11 +21,15 @@ package io.pixelsdb.pixels.trino;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ColumnMetadata;
 import io.trino.spi.type.Type;
+import org.apache.commons.math3.linear.Array2DRowRealMatrix;
+import org.apache.commons.math3.linear.RealMatrix;
 
+import java.io.IOException;
 import java.util.Objects;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
