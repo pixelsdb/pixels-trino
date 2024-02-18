@@ -55,7 +55,7 @@ public class CachedLSHIndexTest {
             byte[] bytes = objectMapper.writeValueAsBytes(map);
             HashMap<String, CachedLSHIndex.Buckets> map2 = objectMapper.readValue(bytes, new TypeReference<>() {});
             System.out.println("map2");
-            System.out.println(map2.get(CachedLSHIndex.getInstance().currColToStr()));
+            System.out.println(map2.get(CachedLSHIndex.getInstance().getCurrColAsStr()));
         } catch (IOException e) {
             e.printStackTrace();
         }

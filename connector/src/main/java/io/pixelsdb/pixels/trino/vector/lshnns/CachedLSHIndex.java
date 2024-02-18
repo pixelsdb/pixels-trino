@@ -121,16 +121,16 @@ public class CachedLSHIndex {
 
     public void updateColToBuckets(String tableS3Path, LSHFunc lshFunc) {
         // when executing an LSH build query, the currColumn will be updated earlier in SplitManager
-        colToBuckets.put(currColToStr(), new Buckets(tableS3Path, lshFunc));
+        colToBuckets.put(getCurrColAsStr(), new Buckets(tableS3Path, lshFunc));
     }
 
-    String currColToStr() {
+    public String getCurrColAsStr() {
         return currColumn.getSchemaName() + "." + currColumn.getTableName() + "." + currColumn.getColumnName();
     }
 
     public void updateColToBuckets(PixelsColumnHandle col, String tableS3Path, LSHFunc lshFunc) {
         // when executing an LSH build query, the currColumn will be updated earlier in SplitManager
-        colToBuckets.put(currColToStr(), new Buckets(tableS3Path, lshFunc));
+        colToBuckets.put(getCurrColAsStr(), new Buckets(tableS3Path, lshFunc));
     }
 
     public byte[] getLSHIndexFromS3(String bucketName, String keyName) {
@@ -152,7 +152,7 @@ public class CachedLSHIndex {
      * @return the LSH buckets for current column
      */
     public Buckets getBuckets() {
-        return colToBuckets.get(currColToStr());
+        return colToBuckets.get(getCurrColAsStr());
     }
 
     /**
