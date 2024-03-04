@@ -12,7 +12,7 @@ import io.trino.spi.type.StandardTypes;
 
 import java.util.Arrays;
 
-@AggregationFunction("exact_nns_agg")
+@AggregationFunction("exact_nns")
 @Description("Returns the closest vectors of the input vector")
 public class ExactNNSAggFunc
 {
@@ -22,24 +22,24 @@ public class ExactNNSAggFunc
     /**
      * update a state from a single row, i.e. a single vector
      * @param state the state that is used for aggregate many rows into one state
-     * @param inputVecBlock a block representing the input vector for which we want to find the k nearest neighnbours
+     * @param inputVecSlice a block representing the input vector for which we want to find the k nearest neighnbours
      * @param k we want the k nearest neighbours
      */
     @InputFunction
     public static void input(@AggregationState ExactNNSState state,
                              @SqlType("array(double)") Block vecFromFile,
-                             @SqlType("array(double)") Block inputVecBlock,
+                             @SqlType(StandardTypes.VARCHAR) Slice inputVecSlice,
                              @SqlType(StandardTypes.VARCHAR) Slice sliceForVectorDistFunc,
                              @SqlType("integer") long k)
     {
         // check input vector block
-        if (inputVecBlock==null || vecFromFile==null || k<=0) {
+        if (inputVecSlice==null || vecFromFile==null || k<=0) {
             return;
         }
 
         // initialize the state if this is an uninitialized state handling the first row
         if (state.getNearestVecs()==null) {
-            state.init(inputVecBlock, vecFromFile.getPositionCount(), sliceForVectorDistFunc, (int)k);
+            state.init(VectorAggFuncUtil.sliceToVec(inputVecSlice), vecFromFile.getPositionCount(), sliceForVectorDistFunc, (int)k);
         }
 
         // use the input row, i.e. a vector to update the priority queue in the state

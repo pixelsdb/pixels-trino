@@ -26,7 +26,7 @@ public interface ExactNNSState
 
     // todo maybe this should be in the constructor and be in the factory instead
     // but this will probably work as well
-    void init(Block inputVecBlock,
+    void init(double[] inputVec,
                      int dimension,
                      Slice distFuncSlice,
                      int k);

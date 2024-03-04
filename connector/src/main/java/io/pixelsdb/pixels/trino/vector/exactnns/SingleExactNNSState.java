@@ -40,11 +40,11 @@ public class SingleExactNNSState implements ExactNNSState {
     }
 
     @Override
-    public void init(Block inputVecBlock,
+    public void init(double[] inputVec,
                      int dimension,
                      Slice distFuncSlice,
                      int k) {
-        this.inputVec = VectorAggFuncUtil.blockToVec(inputVecBlock);
+        this.inputVec = inputVec;
         this.dimension = dimension;
         this.k = k;
         this.vectorDistFuncEnum = VectorAggFuncUtil.sliceToDistFunc(distFuncSlice);

@@ -15,7 +15,7 @@ import java.util.PriorityQueue;
 public class GroupExactNNSState implements ExactNNSState{
 
     @Override
-    public void init(Block inputVecBlock,
+    public void init(double[] inputVec,
                      int dimension,
                      Slice distFuncSlice,
                      int k) {

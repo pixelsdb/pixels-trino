@@ -1,5 +1,6 @@
 package io.pixelsdb.pixels.trino.vector;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.airlift.slice.Slice;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
@@ -22,6 +23,17 @@ public class VectorAggFuncUtil {
             inputVector[i] = DOUBLE.getDouble(block, i);
         }
         return inputVector;
+    }
+
+    public static double[] sliceToVec(Slice slice) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            double[] vec = objectMapper.readValue(slice.toStringUtf8(), double[].class);
+            return vec;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     public static VectorDistFuncs.DistFuncEnum sliceToDistFunc(Slice distFuncStr) {

@@ -37,12 +37,12 @@ public class LSHSearchUDF {
 
     private LSHSearchUDF() {}
 
-    @ScalarFunction("lsh_search_single_node")
+    @ScalarFunction("lsh_search")
     @Description("calculate the Euclidean distance between two vectors")
     @SqlType(StandardTypes.JSON)
     @SqlNullable
     public static Slice lshSearch(
-            @SqlNullable @SqlType("array(double)") Block inputVecBlock,
+            @SqlNullable @SqlType(StandardTypes.VARCHAR) Slice inputVecSlice,
             @SqlNullable @SqlType(StandardTypes.VARCHAR) Slice distFuncSlice,
             @SqlNullable @SqlType(StandardTypes.VARCHAR) Slice column,
             @SqlType("integer") long k)
@@ -57,7 +57,7 @@ public class LSHSearchUDF {
         }
         LSHFunc lshFunc = buckets.getLshFunc();
         assert(lshFunc != null); // if bucketsDir exists, then so should LshFunc
-        double[] inputVec = VectorAggFuncUtil.blockToVec(inputVecBlock);
+        double[] inputVec = VectorAggFuncUtil.sliceToVec(inputVecSlice);
         BitSet inputVecHash = lshFunc.hash(inputVec);
 
         Comparator<double[]> comparator = new SingleExactNNSState.VecDistComparator(inputVec, vectorDistFuncEnum.getDistFunc());
