@@ -1,5 +1,7 @@
 package io.pixelsdb.pixels.trino.vector.lshnns.lshbuild;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
@@ -66,13 +68,6 @@ public class BuildLSHIndexAggFunc
     public static void combine(@AggregationState LSHBuildState state, @AggregationState LSHBuildState otherState)
     {
         state.combineWithOtherState(otherState);
-
-        // if the state is accumulated to be too large, we write the buckets to s3 and clear the state.
-//        if (state.getEstimatedSize() >= MAX_STATE_SIZE) {
-//            writeBucketsToS3Dir(CachedLSHIndex.getInstance().getBuckets().getTableS3Path(), state.getBuckets(), state.getDimension(), CachedLSHIndex.getInstance().getCurrColumn().getColumnName());
-            state.clearBuckets();
-            otherState.clearBuckets();
-//        }
     }
 
     @OutputFunction(StandardTypes.JSON)
@@ -86,18 +81,16 @@ public class BuildLSHIndexAggFunc
         int dimension = state.getDimension();
         // todo write buckets to a cached index and updating table.column->index
         // maybe have two mappings one map col->cached_index; the other col->index_file
-//        writeBucketsToS3Dir(CachedLSHIndex.getInstance().getBuckets().getTableS3Path(), state.getBuckets(), state.getDimension(), CachedLSHIndex.getInstance().getCurrColumn().getColumnName());
-        String msg = "Successfully built LSH index.";
-        out.writeBytes(Slices.utf8Slice(msg), 0, msg.length());
-        out.closeEntry();
-//        try {
-//            ObjectMapper objectMapper = new ObjectMapper();
-//            String jsonResult = objectMapper.writeValueAsString(state.toString());
-//            out.writeBytes(Slices.utf8Slice(jsonResult), 0, jsonResult.length());
-//            out.closeEntry();
-//        } catch (JsonProcessingException e) {
-//            e.printStackTrace();
-//        }
+        writeBucketsToS3Dir(CachedLSHIndex.getInstance().getBuckets().getTableS3Path(), state.getBuckets(), state.getDimension(), CachedLSHIndex.getInstance().getCurrColumn().getColumnName());
+
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            String jsonResult = objectMapper.writeValueAsString(state.toString());
+            out.writeBytes(Slices.utf8Slice(jsonResult), 0, jsonResult.length());
+            out.closeEntry();
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
     }
 
     static void writeBucketsToS3Dir(String s3Dir, HashMap<BitSet, ArrayList<double[]>> buckets, int dimension, String colName) {
