@@ -6,7 +6,7 @@ import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.trino.vector.lshnns.CachedLSHIndex;
 import io.pixelsdb.pixels.trino.vector.lshnns.LSHFunc;
-import io.pixelsdb.pixels.trino.vector.lshnns.build.LSHBuildState;
+import io.pixelsdb.pixels.trino.vector.lshnns.lshbuild.LSHBuildState;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockBuilder;
 import io.trino.spi.function.*;
