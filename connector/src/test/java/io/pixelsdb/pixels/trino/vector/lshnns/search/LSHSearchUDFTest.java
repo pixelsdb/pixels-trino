@@ -1,14 +1,11 @@
 package io.pixelsdb.pixels.trino.vector.lshnns.search;
 
-import io.pixelsdb.pixels.trino.vector.VectorDistFunc;
 import io.pixelsdb.pixels.trino.vector.VectorDistFuncs;
 import io.pixelsdb.pixels.trino.vector.exactnns.SingleExactNNSState;
 import io.pixelsdb.pixels.trino.vector.lshnns.LSHFunc;
 import org.junit.Test;
 
 import java.util.*;
-
-import static org.junit.Assert.*;
 
 public class LSHSearchUDFTest {
 
@@ -17,8 +14,8 @@ public class LSHSearchUDFTest {
         int numBits = 4;
         BitSet bitSet = new BitSet(numBits);
         bitSet.set(1);
-        NbrBitSetsFinder nbrBitSetsFinder = new NbrBitSetsFinder(bitSet, 1, numBits);
-        List<BitSet> nbrBitSets = nbrBitSetsFinder.getNeighbourBitSets();
+        NbrHashKeyFinder nbrHashKeyFinder = new NbrHashKeyFinder(bitSet, 1, numBits);
+        List<BitSet> nbrBitSets = nbrHashKeyFinder.getNeighbourHashKeys();
         System.out.println(nbrBitSets);
     }
 
@@ -27,8 +24,8 @@ public class LSHSearchUDFTest {
         int numBits = 4;
         BitSet bitSet = new BitSet(numBits);
         bitSet.set(1);
-        NbrBitSetsFinder nbrBitSetsFinder = new NbrBitSetsFinder(bitSet, 0, numBits);
-        List<BitSet> nbrBitSets = nbrBitSetsFinder.getNeighbourBitSets();
+        NbrHashKeyFinder nbrHashKeyFinder = new NbrHashKeyFinder(bitSet, 0, numBits);
+        List<BitSet> nbrBitSets = nbrHashKeyFinder.getNeighbourHashKeys();
         System.out.println(nbrBitSets);
     }
 

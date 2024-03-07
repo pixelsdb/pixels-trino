@@ -26,6 +26,7 @@ import io.pixelsdb.pixels.trino.block.VarcharArrayBlockEncoding;
 import io.pixelsdb.pixels.trino.vector.VectorUDF;
 import io.pixelsdb.pixels.trino.vector.exactnns.ExactNNSAggFunc;
 import io.pixelsdb.pixels.trino.vector.lshnns.lshbuild.BuildLSHIndexAggFunc;
+import io.pixelsdb.pixels.trino.vector.lshnns.lshbuild.LSHLoadUDF;
 import io.pixelsdb.pixels.trino.vector.lshnns.search.LSHSearchUDF;
 import io.trino.spi.Plugin;
 import io.trino.spi.block.BlockEncoding;
@@ -55,6 +56,7 @@ public class PixelsPlugin implements Plugin
                 .add(ExactNNSAggFunc.class)
                 .add(BuildLSHIndexAggFunc.class)
                 .add(LSHSearchUDF.class)
+                .add(LSHLoadUDF.class)
                 .build();
     }
 }

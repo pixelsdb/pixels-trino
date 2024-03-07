@@ -122,6 +122,14 @@ public class LSHFunc {
         return Objects.hash(planeNorms, dimension, numBits);
     }
 
+    public static String hashKeyToString(BitSet bitSet) {
+        StringBuilder res = new StringBuilder();
+        for (long num : bitSet.toLongArray()) {
+            res.append(num).append("_");
+        }
+        return res.toString();
+    }
+
     /** deserializer for the field RealMatrix planeNorms */
     public static class LSHFuncDeserializer extends JsonDeserializer<LSHFunc> {
 

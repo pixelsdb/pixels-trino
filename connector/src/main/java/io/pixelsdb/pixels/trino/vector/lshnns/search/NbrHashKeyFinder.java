@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
-public class NbrBitSetsFinder {
+public class NbrHashKeyFinder {
 
     BitSet original;
     int requiredDist;
@@ -18,14 +18,14 @@ public class NbrBitSetsFinder {
      * @param original the bitset for which we want to find the neighbours of hamming distance
      * @param requiredDist
      */
-    public NbrBitSetsFinder(BitSet original, int requiredDist, int numBits) {
+    public NbrHashKeyFinder(BitSet original, int requiredDist, int numBits) {
         this.original = original;
         this.requiredDist = requiredDist;
         this.numBits = numBits;
         currBitSet = (BitSet) original.clone();
     }
 
-    public List<BitSet> getNeighbourBitSets() {
+    public List<BitSet> getNeighbourHashKeys() {
 
         generateHammingDistanceRecursive(0, 0);
 

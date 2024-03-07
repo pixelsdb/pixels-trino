@@ -93,6 +93,7 @@ public class BuildLSHIndexAggFunc
         }
     }
 
+    // todo merge with LSH loader
     static void writeBucketsToS3Dir(String s3Dir, HashMap<BitSet, ArrayList<double[]>> buckets, int dimension, String colName) {
 
         try {
@@ -103,7 +104,7 @@ public class BuildLSHIndexAggFunc
             for (Map.Entry<BitSet, ArrayList<double[]>> entry:buckets.entrySet()) {
                 BitSet hashKey = entry.getKey();
                 ArrayList<double[]> bucket = entry.getValue();
-                        String pixelsFile = s3Dir + "/" + hashKey + "/" + localId.getAndIncrement();
+                        String pixelsFile = s3Dir + "ordered/" + hashKey + localId.getAndIncrement();
                         PixelsWriter pixelsWriter =
                                 PixelsWriterImpl.newBuilder()
                                         .setSchema(schema)

@@ -21,7 +21,6 @@ import io.pixelsdb.pixels.trino.vector.VectorDistFuncs;
 import io.pixelsdb.pixels.trino.vector.exactnns.SingleExactNNSState;
 import io.pixelsdb.pixels.trino.vector.lshnns.CachedLSHIndex;
 import io.pixelsdb.pixels.trino.vector.lshnns.LSHFunc;
-import io.trino.spi.block.Block;
 import io.trino.spi.function.Description;
 import io.trino.spi.function.ScalarFunction;
 import io.trino.spi.function.SqlNullable;
@@ -96,16 +95,33 @@ public class LSHSearchUDF {
         // bfs around the inputVec's hash until we found k nearestVecs
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         int distToInputVecHash = 0;
-        int numFilesTriedToRead = 0;
+
+        // get all files in the dir
+        Map<String, List<String>> hashKeyStrToFiles = new HashMap<>();
+        List<String>  allFiles = S3FilesUtil.listBucketObjects(bucketsDir);
+        for (String f : allFiles) {
+            String hashKeyStr = S3FilesUtil.fileNameToHashKeyStr(f);
+            if (hashKeyStrToFiles.containsKey(hashKeyStr)) {
+                hashKeyStrToFiles.get(hashKeyStr).add(f);
+            } else {
+                ArrayList<String> files = new ArrayList<>();
+                files.add(f);
+                hashKeyStrToFiles.put(hashKeyStr, files);
+            }
+        }
+
         // stop bfs if we found k closest vecs, or we searched through all possible files
         while (nearestVecs.size() < k && distToInputVecHash <= lshFunc.getNumBits()) {
-            NbrBitSetsFinder nbrBitSetsFinder = new NbrBitSetsFinder(inputVecHash, distToInputVecHash, lshFunc.getNumBits());
-            List<BitSet> nbrBitSets = nbrBitSetsFinder.getNeighbourBitSets();
-            List<Future> futures = new ArrayList<>(nbrBitSets.size());
+            NbrHashKeyFinder nbrHashKeyFinder = new NbrHashKeyFinder(inputVecHash, distToInputVecHash, lshFunc.getNumBits());
+            List<BitSet> nbrHashKeys = nbrHashKeyFinder.getNeighbourHashKeys();
+            List<Future> futures = new ArrayList<>(nbrHashKeys.size());
             // each thread reads one file and update the pq
-            for (BitSet nbrBitSet : nbrBitSets) {
-                String fileToRead = bucketsDir + nbrBitSet;
-                futures.add(executorService.submit(()->readOneFileAndUpdatePQ(fileToRead, nearestVecs, (int)k)));
+            for (BitSet nbrBitSet : nbrHashKeys) {
+                List<String> filesToRead = hashKeyStrToFiles.get(LSHFunc.hashKeyToString(nbrBitSet));
+                for (String file : filesToRead) {
+                    futures.add(executorService.submit(()->readOneFileAndUpdatePQ(file, nearestVecs, (int)k)));
+                }
+
             }
             // wait till all threads are finished, then we increase the dist and search more files if less than k vecs are found
             for (Future f:futures) {
@@ -188,6 +204,5 @@ public class LSHSearchUDF {
             }
         }
     }
-
 
 }
