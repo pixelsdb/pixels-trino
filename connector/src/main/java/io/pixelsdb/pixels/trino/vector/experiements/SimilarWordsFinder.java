@@ -17,7 +17,7 @@ public class SimilarWordsFinder {
 
     public static void main(String[] args) {
         /* get words for resulting vectors */
-        Pair<String, Double>[] wordToDist = getWordsAndDistancesForVecs("/Users/sha/Desktop/EPFL/master-thesis/vecdb-experiment-results/exact-nns-Switzerland5.txt", VectorDistFuncs::eucDist);
+        Pair<String, Double>[] wordToDist = getWordsAndDistancesForVecs("/Users/sha/Desktop/EPFL/master-thesis/vecdb-experiment-results/exact-nns-,3.txt", VectorDistFuncs::eucDist);
         StringBuilder stringBuilder = new StringBuilder();
 //        stringBuilder.append("[");
 //        for (int i=0; i < wordToDist.size(); i++) {

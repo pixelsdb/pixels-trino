@@ -13,7 +13,6 @@ import io.pixelsdb.pixels.trino.vector.lshnns.CachedLSHIndex;
 import io.pixelsdb.pixels.trino.vector.lshnns.LSHFunc;
 
 import java.io.BufferedReader;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -27,7 +26,7 @@ public class LSHLoader {
     LSHFunc lshFunc=null;
     int numBits;
     String schemaTableCol;
-    String tableS3Path;
+    String tableS3PathOrdered;
     Map<BitSet, ArrayList<double[]>> buckets = new HashMap<>();
     public int writeBucketThreshold = 18874368; //18mb
     public int writeId = 0;
@@ -36,7 +35,8 @@ public class LSHLoader {
     public LSHLoader(String[] filesToLoad, String schemaTableCol, String tableS3Path, int numBits) {
         this.filesToLoad = filesToLoad;
         this.schemaTableCol = schemaTableCol;
-        this.tableS3Path = tableS3Path;
+        // to make the path treated as a trino table, need to put all data files into a "v-0-ordered" directory.
+        this.tableS3PathOrdered = tableS3Path + "v-0-ordered/";
         this.numBits = numBits;
     }
 
@@ -70,7 +70,7 @@ public class LSHLoader {
             double[] firstVec = lineToVec(br.readLine());
             if (lshFunc == null) {
                 this.lshFunc = new LSHFunc(firstVec.length, numBits, 42);
-                CachedLSHIndex.getInstance().updateColToBuckets(schemaTableCol, tableS3Path, lshFunc);
+                CachedLSHIndex.getInstance().updateColToBuckets(schemaTableCol, tableS3PathOrdered, lshFunc);
             }
             updateBuckets(firstVec);
 
@@ -107,7 +107,7 @@ public class LSHLoader {
     private void writeOneBucketToS3(BitSet hashKey, ArrayList<double[]> bucket) {
         totalNumRowsWrote += bucket.size();
         try {
-            String pixelsFile = tableS3Path + "v-0-ordered/" + LSHFunc.hashKeyToString(hashKey) + writeId;
+            String pixelsFile = tableS3PathOrdered + LSHFunc.hashKeyToString(hashKey) + writeId;
             writeId++;
             Storage storage = StorageFactory.Instance().getStorage("s3");
             TypeDescription schema = TypeDescription.fromString(String.format("struct<%s:vector(%s)>", schemaTableCol.split("\\.")[2], lshFunc.getDimension()));

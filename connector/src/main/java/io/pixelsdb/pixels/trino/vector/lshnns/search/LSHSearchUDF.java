@@ -117,9 +117,13 @@ public class LSHSearchUDF {
             List<Future> futures = new ArrayList<>(nbrHashKeys.size());
             // each thread reads one file and update the pq
             for (BitSet nbrBitSet : nbrHashKeys) {
+                // get the files we need to read. For some hash keys, we might don't have any file with that key.
                 List<String> filesToRead = hashKeyStrToFiles.get(LSHFunc.hashKeyToString(nbrBitSet));
-                for (String file : filesToRead) {
-                    futures.add(executorService.submit(()->readOneFileAndUpdatePQ(file, nearestVecs, (int)k)));
+                if (filesToRead != null) {
+                    for (String file : filesToRead) {
+                        // todo need to add the s3 path to file. The file here is just file name.
+                        futures.add(executorService.submit(() -> readOneFileAndUpdatePQ(bucketsDir + file, nearestVecs, (int) k)));
+                    }
                 }
 
             }
