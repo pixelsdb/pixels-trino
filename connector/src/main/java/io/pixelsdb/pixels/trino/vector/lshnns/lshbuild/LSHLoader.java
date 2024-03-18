@@ -107,7 +107,7 @@ public class LSHLoader {
     private void writeOneBucketToS3(BitSet hashKey, ArrayList<double[]> bucket) {
         totalNumRowsWrote += bucket.size();
         try {
-            String pixelsFile = tableS3PathOrdered + LSHFunc.hashKeyToString(hashKey) + writeId;
+            String pixelsFile = tableS3PathOrdered + LSHFunc.hashKeyToString(hashKey) + System.currentTimeMillis();
             writeId++;
             Storage storage = StorageFactory.Instance().getStorage("s3");
             TypeDescription schema = TypeDescription.fromString(String.format("struct<%s:vector(%s)>", schemaTableCol.split("\\.")[2], lshFunc.getDimension()));

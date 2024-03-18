@@ -97,18 +97,18 @@ public class LSHSearchUDF {
         int distToInputVecHash = 0;
 
         // get all files in the dir
-        Map<String, List<String>> hashKeyStrToFiles = new HashMap<>();
-        List<String>  allFiles = S3FilesUtil.listBucketObjects(bucketsDir);
-        for (String f : allFiles) {
-            String hashKeyStr = S3FilesUtil.fileNameToHashKeyStr(f);
-            if (hashKeyStrToFiles.containsKey(hashKeyStr)) {
-                hashKeyStrToFiles.get(hashKeyStr).add(f);
-            } else {
-                ArrayList<String> files = new ArrayList<>();
-                files.add(f);
-                hashKeyStrToFiles.put(hashKeyStr, files);
-            }
-        }
+//        Map<String, List<String>> hashKeyStrToFiles = new HashMap<>();
+//        List<String>  allFiles = S3FilesUtil.listBucketObjects(bucketsDir);
+//        for (String f : allFiles) {
+//            String hashKeyStr = S3FilesUtil.fileNameToHashKeyStr(f);
+//            if (hashKeyStrToFiles.containsKey(hashKeyStr)) {
+//                hashKeyStrToFiles.get(hashKeyStr).add(f);
+//            } else {
+//                ArrayList<String> files = new ArrayList<>();
+//                files.add(f);
+//                hashKeyStrToFiles.put(hashKeyStr, files);
+//            }
+//        }
 
         // stop bfs if we found k closest vecs, or we searched through all possible files
         while (nearestVecs.size() < k && distToInputVecHash <= lshFunc.getNumBits()) {
@@ -118,7 +118,7 @@ public class LSHSearchUDF {
             // each thread reads one file and update the pq
             for (BitSet nbrBitSet : nbrHashKeys) {
                 // get the files we need to read. For some hash keys, we might don't have any file with that key.
-                List<String> filesToRead = hashKeyStrToFiles.get(LSHFunc.hashKeyToString(nbrBitSet));
+                List<String> filesToRead = S3FilesUtil.listFilesWithHashKey(bucketsDir, LSHFunc.hashKeyToString(nbrBitSet));
                 if (filesToRead != null) {
                     for (String file : filesToRead) {
                         // todo need to add the s3 path to file. The file here is just file name.

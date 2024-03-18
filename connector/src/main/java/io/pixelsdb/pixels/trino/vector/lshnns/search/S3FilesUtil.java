@@ -45,6 +45,43 @@ public class S3FilesUtil {
         return files;
     }
 
+    /**
+     *
+     * @param s3Path
+     * @param hashKey the hashkey in string form. e.g. if 512 buckets, then "511_" should be a hash key
+     * @return
+     */
+    public static List<String> listFilesWithHashKey(String s3Path, String hashKey) {
+        Region region = Region.US_EAST_2;
+        S3Client s3 = S3Client.builder()
+                .region(region)
+                .build();
+        List<String> files = new ArrayList<>();
+        String[] bucketAndPrefix = s3PathToBucketNameAndPrefix(s3Path);
+        try {
+            ListObjectsRequest listObjects = ListObjectsRequest
+                    .builder()
+                    .bucket(bucketAndPrefix[0])
+                    .prefix(bucketAndPrefix[1] + hashKey)
+                    .build();
+
+            ListObjectsResponse res = s3.listObjects(listObjects);
+            for (S3Object s3obj : res.contents()) {
+                files.add(s3FilePathToFileName(s3obj.key()));
+            }
+//            for (S3Object myValue : objects) {
+//                System.out.print("\n The name of the key is " + myValue.key());
+//                System.out.print("\n The object is " + calKb(myValue.size()) + " KBs");
+//                System.out.print("\n The owner is " + myValue.owner());
+//            }
+        } catch (S3Exception e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+        }
+
+        s3.close();
+        return files;
+    }
+
     public static String fileNameToHashKeyStr(String fileName) {
         int end = fileName.lastIndexOf('_');
         return fileName.substring(0, end+1);
