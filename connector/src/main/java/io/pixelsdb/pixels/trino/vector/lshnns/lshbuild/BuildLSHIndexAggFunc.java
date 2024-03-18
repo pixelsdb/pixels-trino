@@ -14,6 +14,7 @@ import io.pixelsdb.pixels.core.vector.VectorColumnVector;
 import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
 import io.pixelsdb.pixels.trino.vector.VectorAggFuncUtil;
 import io.pixelsdb.pixels.trino.vector.lshnns.CachedLSHIndex;
+import io.pixelsdb.pixels.trino.vector.lshnns.LSHFunc;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockBuilder;
 import io.trino.spi.function.*;
@@ -33,9 +34,6 @@ public class BuildLSHIndexAggFunc
     private BuildLSHIndexAggFunc() {}
 
     public static final long MAX_STATE_SIZE = 204857600; // 200mb
-
-    // Each node write many states' buckets. To distinguish files with same hash, each file name contains a localId which shows it's written when writing localid-th buckets
-    public static AtomicInteger localId = new AtomicInteger(0);
 
     /**
      * update a state from a single row, i.e. a single vector
@@ -73,7 +71,6 @@ public class BuildLSHIndexAggFunc
     @OutputFunction(StandardTypes.JSON)
     public static void output(@AggregationState LSHBuildState state, BlockBuilder out)
     {
-        localId.set(0);
         if (state.getBuckets().size() == 0) {
             return;
         }
@@ -104,7 +101,7 @@ public class BuildLSHIndexAggFunc
             for (Map.Entry<BitSet, ArrayList<double[]>> entry:buckets.entrySet()) {
                 BitSet hashKey = entry.getKey();
                 ArrayList<double[]> bucket = entry.getValue();
-                        String pixelsFile = s3Dir + "ordered/" + hashKey + localId.getAndIncrement();
+                        String pixelsFile = s3Dir + LSHFunc.hashKeyToString(hashKey) + System.currentTimeMillis();
                         PixelsWriter pixelsWriter =
                                 PixelsWriterImpl.newBuilder()
                                         .setSchema(schema)

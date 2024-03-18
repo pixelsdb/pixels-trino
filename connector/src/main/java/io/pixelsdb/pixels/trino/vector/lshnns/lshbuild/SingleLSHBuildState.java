@@ -1,10 +1,21 @@
 package io.pixelsdb.pixels.trino.vector.lshnns.lshbuild;
 
+import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.common.physical.StorageFactory;
+import io.pixelsdb.pixels.core.PixelsWriter;
+import io.pixelsdb.pixels.core.PixelsWriterImpl;
+import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.encoding.EncodingLevel;
+import io.pixelsdb.pixels.core.exception.PixelsWriterException;
+import io.pixelsdb.pixels.core.vector.VectorColumnVector;
+import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
+import io.pixelsdb.pixels.trino.vector.lshnns.CachedLSHIndex;
 import io.pixelsdb.pixels.trino.vector.lshnns.LSHFunc;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockBuilder;
 import org.openjdk.jol.info.ClassLayout;
 
+import java.io.IOException;
 import java.util.*;
 
 import static io.trino.spi.type.BigintType.BIGINT;
@@ -17,6 +28,9 @@ public class SingleLSHBuildState implements LSHBuildState {
     int dimension;
     LSHFunc lshFunc;
     private static final int INSTANCE_SIZE = toIntExact(ClassLayout.parseClass(SingleLSHBuildState.class).instanceSize()) +  toIntExact(ClassLayout.parseClass(PriorityQueue.class).instanceSize());
+    String tableS3PathOrdered;
+//    public int writeBucketThreshold = 18874368; //18mb
+public int writeBucketThreshold = 1887436; //1.8mb
 
     public SingleLSHBuildState() {
 
@@ -26,6 +40,7 @@ public class SingleLSHBuildState implements LSHBuildState {
     public void init(int dimension, int numBits) {
         this.dimension = dimension;
         this.numBits = numBits;
+        this.tableS3PathOrdered = CachedLSHIndex.getInstance().getBuckets().getTableS3Path();
         // todo maybe for benchmark should set this to random?
         lshFunc = new LSHFunc(dimension, numBits, 42);
         // let the heap store the k vecs that are closest to the input vector
@@ -84,11 +99,59 @@ public class SingleLSHBuildState implements LSHBuildState {
     public void updateBuckets(double[] vec) {
         BitSet hashVal = lshFunc.hash(vec);
         if (buckets.containsKey(hashVal)) {
-            buckets.get(hashVal).add(vec);
+            ArrayList<double[]> bucket = buckets.get(hashVal);
+            bucket.add(vec);
+            if (bucket.size() * lshFunc.getDimension() * 8 > writeBucketThreshold) {
+                writeOneBucketToS3(hashVal, bucket);
+                bucket.clear();
+            }
         } else {
             ArrayList<double[]> arrayList = new ArrayList<>();
             arrayList.add(vec);
             buckets.put(hashVal, arrayList);
+        }
+    }
+
+    private void writeOneBucketToS3(BitSet hashKey, ArrayList<double[]> bucket) {
+        try {
+            String pixelsFile = tableS3PathOrdered + LSHFunc.hashKeyToString(hashKey) + System.currentTimeMillis();
+            Storage storage = StorageFactory.Instance().getStorage("s3");
+            TypeDescription schema = TypeDescription.fromString(String.format("struct<%s:vector(%s)>", CachedLSHIndex.getInstance().getCurrColumn().getColumnName(), lshFunc.getDimension()));
+            VectorizedRowBatch rowBatch = schema.createRowBatch();
+            VectorColumnVector v = (VectorColumnVector) rowBatch.cols[0];
+            PixelsWriter pixelsWriter =
+                    PixelsWriterImpl.newBuilder()
+                            .setSchema(schema)
+                            .setPixelStride(10000)
+                            .setRowGroupSize(64 * 1024 * 1024)
+                            .setStorage(storage)
+                            .setPath(pixelsFile)
+                            .setBlockSize(256 * 1024 * 1024)
+                            .setReplication((short) 3)
+                            .setBlockPadding(true)
+                            .setEncodingLevel(EncodingLevel.EL2)
+                            .setCompressionBlockSize(1)
+                            .build();
+            try {
+                for (double[] vec : bucket) {
+                    int row = rowBatch.size++;
+                    v.vector[row] = vec;
+                    v.isNull[row] = false;
+                    if (rowBatch.size == rowBatch.getMaxSize()) {
+                        pixelsWriter.addRowBatch(rowBatch);
+                        rowBatch.reset();
+                    }
+                }
+                if (rowBatch.size > 0) {
+                    pixelsWriter.addRowBatch(rowBatch);
+                    rowBatch.reset();
+                }
+                pixelsWriter.close();
+            } catch (IOException | PixelsWriterException e) {
+                e.printStackTrace();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
