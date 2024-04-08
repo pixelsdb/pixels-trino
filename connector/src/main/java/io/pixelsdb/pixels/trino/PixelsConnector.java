@@ -173,7 +173,7 @@ public class PixelsConnector implements Connector
         } else
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
-                    "The transaction handle is not an instance of PixelsTransactionHandle.");
+                    "the transaction handle is not an instance of PixelsTransactionHandle");
         }
     }
 
@@ -206,7 +206,7 @@ public class PixelsConnector implements Connector
         } else
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
-                    "The transaction handle is not an instance of PixelsTransactionHandle.");
+                    "the transaction handle is not an instance of PixelsTransactionHandle");
         }
     }
 
@@ -221,7 +221,7 @@ public class PixelsConnector implements Connector
         } catch (InterruptedException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
-                    "Failed to clean intermediate path for the query");
+                    "failed to clean intermediate path for the query");
         }
     }
 
