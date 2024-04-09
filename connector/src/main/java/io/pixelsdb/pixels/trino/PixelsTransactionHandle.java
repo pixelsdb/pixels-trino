@@ -26,9 +26,6 @@ import io.trino.spi.connector.ConnectorTransactionHandle;
 
 public class PixelsTransactionHandle implements ConnectorTransactionHandle
 {
-    public static final PixelsTransactionHandle Default = new PixelsTransactionHandle(
-            -1, -1, ExecutorType.PENDING);
-
     /**
      * transId is the transaction id of the query, which is a single-statement read-only transaction.
      */
