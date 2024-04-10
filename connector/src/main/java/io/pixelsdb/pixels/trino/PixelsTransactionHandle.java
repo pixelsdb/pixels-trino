@@ -36,6 +36,10 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
      */
     private final long timestamp;
     /**
+     * Whether the transaction is read only.
+     */
+    private final boolean readOnly;
+    /**
      * The type of executor to execute this query.
      */
     private ExecutorType executorType;
@@ -49,15 +53,18 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
      * Create a transaction handle.
      * @param transId the transaction id of the query, which is a single-statement read-only transaction.
      * @param timestamp the timestamp of a transaction.
+     * @param readOnly true if the transaction is read only.
      * @param executorType the type of executor to execute this query.
      */
     @JsonCreator
     public PixelsTransactionHandle(@JsonProperty("transId") long transId,
                                    @JsonProperty("timestamp") long timestamp,
+                                   @JsonProperty("readOnly") boolean readOnly,
                                    @JsonProperty("executorType") ExecutorType executorType)
     {
         this.transId = transId;
         this.timestamp = timestamp;
+        this.readOnly = readOnly;
         this.executorType = executorType;
         this.scanBytes = new AtomicDouble(0);
     }
@@ -72,6 +79,12 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     public long getTimestamp()
     {
         return this.timestamp;
+    }
+
+    @JsonProperty
+    public boolean isReadOnly()
+    {
+        return this.readOnly;
     }
 
     @JsonProperty
