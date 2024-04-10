@@ -366,8 +366,8 @@ class PixelsPageSource implements ConnectorPageSource
         }
 
         this.batchId++;
-        VectorizedRowBatch rowBatch;
-        int rowBatchSize;
+        VectorizedRowBatch rowBatch = null;
+        int rowBatchSize = 0;
 
         Block[] blocks = new Block[this.numColumnToRead];
 
