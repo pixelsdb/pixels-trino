@@ -138,7 +138,6 @@ public class PixelsEventListener implements EventListener
             try
             {
                 long inputBytes = queryCompletedEvent.getStatistics().getPhysicalInputBytes();
-                logger.info("+++++++++++++++++++++ scan size in listener: " + inputBytes);
                 this.transService.setTransProperty(externalTraceId.get(),
                         Constants.TRANS_CONTEXT_SCAN_BYTES_KEY, String.valueOf(inputBytes));
             } catch (TransException e)
