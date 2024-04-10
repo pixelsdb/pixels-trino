@@ -142,6 +142,8 @@ public class PixelsConnector implements Connector
             executorType = ExecutorType.PENDING;
         }
 
+        // readOnly in Trino is false if not explicitly set.
+        // Do not use it to identify whether a transaction is an analytic query.
         return new PixelsTransactionHandle(context.getTransId(), context.getTimestamp(), readOnly, executorType);
     }
 
@@ -153,12 +155,9 @@ public class PixelsConnector implements Connector
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             try
             {
-                if (handle.isReadOnly())
-                {
-                    // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
-                    this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
-                            String.valueOf(handle.getScanBytes()));
-                }
+                // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
+                this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
+                        String.valueOf(handle.getScanBytes()));
                 this.transService.commitTrans(handle.getTransId(), handle.getTimestamp());
             } catch (TransException e)
             {
