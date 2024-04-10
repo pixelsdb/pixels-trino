@@ -366,8 +366,8 @@ class PixelsPageSource implements ConnectorPageSource
         }
 
         this.batchId++;
-        VectorizedRowBatch rowBatch;
-        int rowBatchSize;
+        VectorizedRowBatch rowBatch = null;
+        int rowBatchSize = 0;
 
         Block[] blocks = new Block[this.numColumnToRead];
 
@@ -448,14 +448,14 @@ class PixelsPageSource implements ConnectorPageSource
             return;
         }
 
+        closed = true;
+
         closeReader();
 
         if (this.localSplitCounter != null)
         {
             this.localSplitCounter.decrementAndGet();
         }
-
-        closed = true;
     }
 
     /**
@@ -465,6 +465,11 @@ class PixelsPageSource implements ConnectorPageSource
     {
         try
         {
+            if (closed)
+            {
+                return;
+            }
+
             if (pixelsReader != null)
             {
                 if (recordReader != null)

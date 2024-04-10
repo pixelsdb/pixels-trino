@@ -408,7 +408,7 @@ public class PixelsMetadata implements ConnectorMetadata
         try
         {
             boolean res = this.metadataProxy.createSchema(schemaName);
-            if (res == false)
+            if (!res)
             {
                 throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Schema " + schemaName + " already exists.");
@@ -425,7 +425,7 @@ public class PixelsMetadata implements ConnectorMetadata
         try
         {
             boolean res = this.metadataProxy.dropSchema(schemaName);
-            if (res == false)
+            if (!res)
             {
                 throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Schema " + schemaName + " does not exist.");

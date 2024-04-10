@@ -21,7 +21,10 @@ package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.parser.ParserConfig;
 import io.airlift.log.Logger;
+import io.pixelsdb.pixels.common.exception.TransException;
+import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
+import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.DateUtil;
 import io.pixelsdb.pixels.trino.exception.ListenerException;
 import io.trino.spi.TrinoException;
@@ -31,6 +34,7 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 import static io.pixelsdb.pixels.trino.exception.ListenerErrorCode.PIXELS_EVENT_LISTENER_ERROR;
 
@@ -46,16 +50,14 @@ public class PixelsEventListener implements EventListener
     private final String userPrefix;
     private final String schema;
     private final String queryType;
+    private final TransService transService;
     private static BufferedWriter LogWriter = null;
     private static final double GCThreshold;
 
     static
     {
         ParserConfig.getGlobalInstance().setAutoTypeSupport(true);
-        /**
-         * Issue #87:
-         * Get the gc threshold here.
-         */
+        // PIXELS-87: get the gc threshold here.
         String thresholdStr = ConfigFactory.Instance().getProperty("experimental.gc.threshold");
         GCThreshold = Double.parseDouble(thresholdStr);
         logger.info("Using experimental.gc.threshold (" + GCThreshold + ")...");
@@ -73,16 +75,37 @@ public class PixelsEventListener implements EventListener
         this.queryType = queryType;
         try
         {
-            if (this.enabled && LogWriter == null)
+            if (enabled)
             {
-                LogWriter = new BufferedWriter(new FileWriter(
-                                this.logDir + "pixels_trino_query" +
-                                        DateUtil.getCurTime() + ".log", true));
-                LogWriter.write("\"query id\",\"user\",\"wall(ms)\",\"rs waiting(ms)\",\"queued(ms)\"," +
-                        "\"planning(ms)\",\"execution(ms)\",\"read throughput(MB)\",\"local gc time(ms)\"," +
-                        "\"full gc tasks\",\"avg full gc time(s)\"");
-                LogWriter.newLine();
-                LogWriter.flush();
+                if (LogWriter == null)
+                {
+                    LogWriter = new BufferedWriter(new FileWriter(
+                            this.logDir + "pixels_trino_query" +
+                                    DateUtil.getCurTime() + ".log", true));
+                    LogWriter.write("\"query id\",\"user\",\"wall(ms)\",\"rs waiting(ms)\",\"queued(ms)\"," +
+                            "\"planning(ms)\",\"execution(ms)\",\"read throughput(MB)\",\"local gc time(ms)\"," +
+                            "\"full gc tasks\",\"avg full gc time(s)\"");
+                    LogWriter.newLine();
+                    LogWriter.flush();
+                }
+
+                // PIXELS-506: create the transaction service to report accurate scan bytes.
+                transService = new TransService(
+                        ConfigFactory.Instance().getProperty("trans.server.host"),
+                        Integer.parseInt(ConfigFactory.Instance().getProperty("trans.server.port")));
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    try
+                    {
+                        transService.shutdown();
+                    } catch (InterruptedException e)
+                    {
+                        logger.error("failed to shutdown transaction service");
+                    }
+                }));
+            }
+            else
+            {
+                transService = null;
             }
         } catch (IOException e)
         {
@@ -104,11 +127,31 @@ public class PixelsEventListener implements EventListener
             return;
         }
 
+        final String queryId = queryCompletedEvent.getMetadata().getQueryId();
+        final String user = queryCompletedEvent.getContext().getUser();
+        final String schema = queryCompletedEvent.getContext().getSchema().get();
+        final String query = queryCompletedEvent.getMetadata().getQuery();
+        final Optional<String> externalTraceId = queryCompletedEvent.getContext().getTraceToken();
+        // PIXELS-506: we only set scan bytes for analytic queries if the external trace id presents.
+        if (query.toLowerCase().contains("select") && externalTraceId.isPresent())
+        {
+            try
+            {
+                long inputBytes = queryCompletedEvent.getStatistics().getPhysicalInputBytes();
+                this.transService.setTransProperty(externalTraceId.get(),
+                        Constants.TRANS_CONTEXT_SCAN_BYTES_KEY, String.valueOf(inputBytes));
+            } catch (TransException e)
+            {
+                logger.error("can not set scan bytes for the query in pixels event listener");
+                logger.info("query id: " + queryId + ", user: " + user);
+            }
+        }
+
         double free = Runtime.getRuntime().freeMemory();
         double total = Runtime.getRuntime().totalMemory();
 
         /**
-         * Issue #87:
+         * PIXELS-87:
          * Do explicit gc here, instead of in PixelsReaderImpl.close().
          */
         long gcms = -1;
@@ -121,30 +164,27 @@ public class PixelsEventListener implements EventListener
             long start = System.currentTimeMillis();
             Runtime.getRuntime().gc();
             gcms = (System.currentTimeMillis() - start);
-            logger.info("GC time after query: " + gcms + " ms.");
+            logger.info("GC time after query: " + gcms + " ms");
         }
 
         /**
-         * Issue #132:
+         * PIXELS-132:
          * TODO: add cpu and memory statistics to the output.
          * TODO: make use of resource estimates.
          */
-        String queryId = queryCompletedEvent.getMetadata().getQueryId();
-        String user = queryCompletedEvent.getContext().getUser();
+
         if (queryCompletedEvent.getContext().getSchema().isEmpty())
         {
-            logger.error("can not write log in pixels event listener.");
+            logger.error("can not write log in pixels event listener");
             logger.info("query id: " + queryId + ", user: " + user);
             return;
         }
-        String schema = queryCompletedEvent.getContext().getSchema().get();
         if (schema.equalsIgnoreCase(this.schema))
         {
             if (this.userPrefix.equals("none") || user.startsWith(this.userPrefix))
             {
                 try
                 {
-                    String query = queryCompletedEvent.getMetadata().getQuery();
                     if (query.toLowerCase().contains(this.queryType.toLowerCase()))
                     {
                         QueryStatistics stats = queryCompletedEvent.getStatistics();
@@ -187,7 +227,7 @@ public class PixelsEventListener implements EventListener
                     }
                 } catch (IOException e)
                 {
-                    logger.error("can not write log in pixels event listener.");
+                    logger.error("can not write log in pixels event listener");
                     logger.info("query id: " + queryId + ", user: " + user);
                 }
             }
