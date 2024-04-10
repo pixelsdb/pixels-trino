@@ -43,7 +43,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
      * The accumulative data size in bytes scanned by this transaction (query).
      * This field is not serialized and is only used to calculate the scan size in the coordinator.
      */
-    private AtomicDouble scanSize;
+    private final AtomicDouble scanBytes;
 
     /**
      * Create a transaction handle.
@@ -59,7 +59,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
         this.transId = transId;
         this.timestamp = timestamp;
         this.executorType = executorType;
-        this.scanSize = new AtomicDouble(0);
+        this.scanBytes = new AtomicDouble(0);
     }
 
     @JsonProperty
@@ -85,13 +85,13 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
         this.executorType = executorType;
     }
 
-    public void addScanSize(double columnSize)
+    public void addScanBytes(double columnSize)
     {
-        this.scanSize.addAndGet(columnSize);
+        this.scanBytes.addAndGet(columnSize);
     }
 
-    public double getScanSize()
+    public double getScanBytes()
     {
-        return this.scanSize.get();
+        return this.scanBytes.get();
     }
 }

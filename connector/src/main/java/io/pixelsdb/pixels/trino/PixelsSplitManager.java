@@ -204,6 +204,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 prevStages.join();
                 logger.debug("invoke " + joinOperator.getName());
 
+                // PIXELS-506: add the scan size of the sub-plan.
+                transHandle.addScanBytes(planner.getScanSize());
+
                 Thread outputCollector = new Thread(() -> {
                     try
                     {
@@ -260,6 +263,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 CompletableFuture<Void> prevStages = aggrOperator.executePrev();
                 prevStages.join();
                 logger.debug("invoke " + aggrOperator.getName());
+
+                // PIXELS-506: add the scan size of the sub-plan.
+                transHandle.addScanBytes(planner.getScanSize());
 
                 Thread outputCollector = new Thread(() -> {
                     try
@@ -691,6 +697,17 @@ public class PixelsSplitManager implements ConnectorSplitManager
             table = metadataProxy.getTable(transHandle.getTransId(), schemaName, tableName);
             storage = StorageFactory.Instance().getStorage(table.getStorageScheme());
             layouts = metadataProxy.getDataLayouts(schemaName, tableName);
+            // PIXELS-506: add the column size of the base table to the scan size of this query.
+            List<Column> columns = metadataProxy.getColumnStatistics(transHandle.getTransId(), schemaName, tableName);
+            Map<String, Column> nameToColumnMap = new HashMap<>(columns.size());
+            for (Column column : columns)
+            {
+                nameToColumnMap.put(column.getName(), column);
+            }
+            for (PixelsColumnHandle desiredColumn : desiredColumns)
+            {
+                transHandle.addScanBytes(nameToColumnMap.get(desiredColumn.getColumnName()).getSize());
+            }
         }
         catch (MetadataException e)
         {
