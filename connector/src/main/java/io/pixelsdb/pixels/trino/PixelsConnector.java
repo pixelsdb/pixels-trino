@@ -158,6 +158,7 @@ public class PixelsConnector implements Connector
                 // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
                 this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
                         String.valueOf(handle.getScanBytes()));
+                logger.info("----------------scan bytes in connector: " + handle.getScanBytes() + "trans is read only: " + handle.isReadOnly());
                 this.transService.commitTrans(handle.getTransId(), handle.getTimestamp());
             } catch (TransException e)
             {
