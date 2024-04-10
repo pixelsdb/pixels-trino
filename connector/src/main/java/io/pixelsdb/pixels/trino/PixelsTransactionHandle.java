@@ -21,6 +21,7 @@ package io.pixelsdb.pixels.trino;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.util.concurrent.AtomicDouble;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.trino.spi.connector.ConnectorTransactionHandle;
 
@@ -38,6 +39,11 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
      * The type of executor to execute this query.
      */
     private ExecutorType executorType;
+    /**
+     * The accumulative data size in bytes scanned by this transaction (query).
+     * This field is not serialized and is only used to calculate the scan size in the coordinator.
+     */
+    private AtomicDouble scanSize;
 
     /**
      * Create a transaction handle.
@@ -53,6 +59,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
         this.transId = transId;
         this.timestamp = timestamp;
         this.executorType = executorType;
+        this.scanSize = new AtomicDouble(0);
     }
 
     @JsonProperty
@@ -76,5 +83,15 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     public void setExecutorType(ExecutorType executorType)
     {
         this.executorType = executorType;
+    }
+
+    public void addScanSize(double columnSize)
+    {
+        this.scanSize.addAndGet(columnSize);
+    }
+
+    public double getScanSize()
+    {
+        return this.scanSize.get();
     }
 }
