@@ -42,7 +42,7 @@ import java.io.IOException;
  **/
 public class PixelsTrinoConfig
 {
-    private Logger logger = Logger.get(PixelsTrinoConfig.class);
+    private final Logger logger = Logger.get(PixelsTrinoConfig.class);
     private ConfigFactory configFactory = null;
 
     private static int BatchSize = 1000;
@@ -54,7 +54,6 @@ public class PixelsTrinoConfig
 
     public enum CloudFunctionSwitch { ON, OFF, AUTO, SESSION }
 
-    private String pixelsConfig = null;
     private CloudFunctionSwitch cloudFunctionSwitch = CloudFunctionSwitch.AUTO;
     private boolean cleanIntermediateResult = true;
     private int localScanConcurrency = -1;
@@ -70,82 +69,56 @@ public class PixelsTrinoConfig
     private Storage.Scheme outputStorageScheme = null;
     private String outputFolder = null;
 
-    @Config("pixels.config")
-    public PixelsTrinoConfig setPixelsConfig (String pixelsConfig)
-    {
-        this.pixelsConfig = pixelsConfig;
-
-        // reload configuration
-        if (this.configFactory == null)
-        {
-            if (pixelsConfig == null || pixelsConfig.isEmpty())
-            {
-                String pixelsHome = ConfigFactory.Instance().getProperty("pixels.home");
-                if (pixelsHome == null)
-                {
-                    logger.info("using pixels.properties in jar.");
-                } else
-                {
-                    logger.info("using pixels.properties under default pixels.home: " + pixelsHome);
-                }
-            } else
-            {
-                try
-                {
-                    ConfigFactory.Instance().loadProperties(pixelsConfig);
-                    logger.info("using pixels.properties specified by the connector: " + pixelsConfig);
-
-                } catch (IOException e)
-                {
-                    logger.error(e,"can not load pixels.properties: " + pixelsConfig +
-                            ", configuration reloading is skipped.");
-                    throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR, e);
-                }
-            }
-
-            this.configFactory = ConfigFactory.Instance();
-            try
-            {
-                int batchSize = Integer.parseInt(this.configFactory.getProperty("row.batch.size"));
-                if (batchSize > 0)
-                {
-                    BatchSize = batchSize;
-                    logger.info("using pixels row.batch.size: " + BatchSize);
-                }
-            } catch (NumberFormatException e)
-            {
-                throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR, e);
-            }
-            try
-            {
-                /**
-                 * PIXELS-108:
-                 * We reload the storage here, because in other classes like
-                 * PixelsSplitManager, when we try to create storage instance
-                 * by StorageFactory.Instance().getStorage(), Presto does not
-                 * load the dependencies (e.g. hadoop-hdfs-xxx.jar) of the storage
-                 * implementation (e.g. io.pixelsdb.pixels.common.physical.storage.HDFS).
-                 *
-                 * I currently don't know the reason (08.27.2021).
-                 */
-                if (StorageFactory.Instance().isEnabled(Storage.Scheme.hdfs))
-                {
-                    // PIXELS-385: only reload HDFS if it is enabled.
-                    StorageFactory.Instance().reload(Storage.Scheme.hdfs);
-                }
-            } catch (IOException e)
-            {
-                throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
-            }
-        }
-
-        return this;
-    }
-
     @Config("cloud.function.switch")
     public PixelsTrinoConfig setCloudFunctionSwitch(String cloudFunctionSwitch)
     {
         this.cloudFunctionSwitch = CloudFunctionSwitch.valueOf(cloudFunctionSwitch.toUpperCase());
+
+        // Issue #87: remove pixels.config and move configuration reloading to here.
+        String pixelsHome = ConfigFactory.Instance().getProperty("pixels.home");
+        if (pixelsHome == null)
+        {
+            logger.info("using pixels.properties in jar.");
+        } else
+        {
+            logger.info("using pixels.properties in pixels.home: " + pixelsHome);
+        }
+
+        this.configFactory = ConfigFactory.Instance();
+        try
+        {
+            int batchSize = Integer.parseInt(this.configFactory.getProperty("row.batch.size"));
+            if (batchSize > 0)
+            {
+                BatchSize = batchSize;
+                logger.info("using pixels row.batch.size: " + BatchSize);
+            }
+        } catch (NumberFormatException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR, e);
+        }
+        try
+        {
+            /**
+             * PIXELS-108:
+             * We reload the storage here, because in other classes like
+             * PixelsSplitManager, when we try to create storage instance
+             * by StorageFactory.Instance().getStorage(), Presto does not
+             * load the dependencies (e.g. hadoop-hdfs-xxx.jar) of the storage
+             * implementation (e.g. io.pixelsdb.pixels.common.physical.storage.HDFS).
+             *
+             * I currently don't know the reason (08.27.2021).
+             */
+            if (StorageFactory.Instance().isEnabled(Storage.Scheme.hdfs))
+            {
+                // PIXELS-385: only reload HDFS if it is enabled.
+                StorageFactory.Instance().reload(Storage.Scheme.hdfs);
+            }
+        } catch (IOException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
+        }
+
         if (this.cloudFunctionSwitch == CloudFunctionSwitch.ON ||
                 this.cloudFunctionSwitch == CloudFunctionSwitch.AUTO ||
                 this.cloudFunctionSwitch == CloudFunctionSwitch.SESSION)
@@ -191,12 +164,6 @@ public class PixelsTrinoConfig
     {
         this.localScanConcurrency = concurrency;
         return this;
-    }
-
-    @NotNull
-    public String getPixelsConfig ()
-    {
-        return this.pixelsConfig;
     }
 
     @NotNull
