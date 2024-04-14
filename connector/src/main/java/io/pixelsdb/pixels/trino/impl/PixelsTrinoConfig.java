@@ -74,52 +74,49 @@ public class PixelsTrinoConfig
     {
         this.cloudFunctionSwitch = CloudFunctionSwitch.valueOf(cloudFunctionSwitch.toUpperCase());
 
-        // reload configuration
-        if (this.configFactory == null)
+        // Issue #87: remove pixels.config and move configuration reloading to here.
+        String pixelsHome = ConfigFactory.Instance().getProperty("pixels.home");
+        if (pixelsHome == null)
         {
-            String pixelsHome = ConfigFactory.Instance().getProperty("pixels.home");
-            if (pixelsHome == null)
-            {
-                logger.info("using pixels.properties in jar.");
-            } else
-            {
-                logger.info("using pixels.properties in pixels.home: " + pixelsHome);
-            }
+            logger.info("using pixels.properties in jar.");
+        } else
+        {
+            logger.info("using pixels.properties in pixels.home: " + pixelsHome);
+        }
 
-            this.configFactory = ConfigFactory.Instance();
-            try
+        this.configFactory = ConfigFactory.Instance();
+        try
+        {
+            int batchSize = Integer.parseInt(this.configFactory.getProperty("row.batch.size"));
+            if (batchSize > 0)
             {
-                int batchSize = Integer.parseInt(this.configFactory.getProperty("row.batch.size"));
-                if (batchSize > 0)
-                {
-                    BatchSize = batchSize;
-                    logger.info("using pixels row.batch.size: " + BatchSize);
-                }
-            } catch (NumberFormatException e)
-            {
-                throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR, e);
+                BatchSize = batchSize;
+                logger.info("using pixels row.batch.size: " + BatchSize);
             }
-            try
+        } catch (NumberFormatException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR, e);
+        }
+        try
+        {
+            /**
+             * PIXELS-108:
+             * We reload the storage here, because in other classes like
+             * PixelsSplitManager, when we try to create storage instance
+             * by StorageFactory.Instance().getStorage(), Presto does not
+             * load the dependencies (e.g. hadoop-hdfs-xxx.jar) of the storage
+             * implementation (e.g. io.pixelsdb.pixels.common.physical.storage.HDFS).
+             *
+             * I currently don't know the reason (08.27.2021).
+             */
+            if (StorageFactory.Instance().isEnabled(Storage.Scheme.hdfs))
             {
-                /**
-                 * PIXELS-108:
-                 * We reload the storage here, because in other classes like
-                 * PixelsSplitManager, when we try to create storage instance
-                 * by StorageFactory.Instance().getStorage(), Presto does not
-                 * load the dependencies (e.g. hadoop-hdfs-xxx.jar) of the storage
-                 * implementation (e.g. io.pixelsdb.pixels.common.physical.storage.HDFS).
-                 *
-                 * I currently don't know the reason (08.27.2021).
-                 */
-                if (StorageFactory.Instance().isEnabled(Storage.Scheme.hdfs))
-                {
-                    // PIXELS-385: only reload HDFS if it is enabled.
-                    StorageFactory.Instance().reload(Storage.Scheme.hdfs);
-                }
-            } catch (IOException e)
-            {
-                throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
+                // PIXELS-385: only reload HDFS if it is enabled.
+                StorageFactory.Instance().reload(Storage.Scheme.hdfs);
             }
+        } catch (IOException e)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
         }
 
         if (this.cloudFunctionSwitch == CloudFunctionSwitch.ON ||
