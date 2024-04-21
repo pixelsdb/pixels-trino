@@ -19,11 +19,14 @@
  */
 package io.pixelsdb.pixels.trino;
 
+import com.alibaba.fastjson.JSON;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
+import io.pixelsdb.pixels.common.state.StateWatcher;
+import io.pixelsdb.pixels.common.turbo.SimpleOutput;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.PixelsReader;
 import io.pixelsdb.pixels.core.PixelsReaderImpl;
@@ -34,7 +37,6 @@ import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
 import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
-import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
@@ -56,6 +58,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.google.common.base.Preconditions.checkState;
+import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -100,14 +103,14 @@ class PixelsPageSource implements ConnectorPageSource
         this.includeCols =  new String[columns.size()];
         for (int i = 0; i < includeCols.length; ++i)
         {
-            if (split.getTableType() == Table.TableType.BASE)
-            {
-                includeCols[i] = columns.get(i).getColumnName();
-            }
-            else
+            if (split.getFromCfOutput())
             {
                 // Use the synthetic column name to access the join or aggregation result.
                 includeCols[i] = columns.get(i).getSynthColumnName();
+            }
+            else
+            {
+                includeCols[i] = columns.get(i).getColumnName();
             }
         }
         this.numColumnToRead = columnHandles.size();
@@ -127,19 +130,39 @@ class PixelsPageSource implements ConnectorPageSource
 
         if (lambdaOutput == null)
         {
-            if (split.getConstraint().getDomains().isPresent())
+            if (this.split.getFromCfOutput())
             {
-                TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
-                    split.getSchemaName(), split.getTableName(),
-                    includeCols, split.getConstraint());
-                this.filter = Optional.of(scanFilter);
+                this.filter = Optional.empty();
+                this.blocked = new CompletableFuture<>();
+                String stateKey = CF_OUTPUT_STATE_KEY_PREFIX + "_" + split.getTransId() + "_" + split.getSplitId();
+                StateWatcher stateWatcher = new StateWatcher(stateKey);
+                stateWatcher.onStateUpdateOrExist((key, value) -> {
+                    this.blocked.complete(null);
+                    SimpleOutput simpleOutput = requireNonNull(
+                            JSON.parseObject(value, SimpleOutput.class), "output is null");
+                    if (!simpleOutput.isSuccessful())
+                    {
+                        throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_EXECUTION_CF_ERROR,
+                                "request id: " + simpleOutput.getRequestId() +
+                                        ", error message: " + simpleOutput.getErrorMessage());
+                    }
+                });
             }
             else
             {
-                this.filter = Optional.empty();
+                if (split.getConstraint().getDomains().isPresent())
+                {
+                    TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
+                            split.getSchemaName(), split.getTableName(),
+                            includeCols, split.getConstraint());
+                    this.filter = Optional.of(scanFilter);
+                } else
+                {
+                    this.filter = Optional.empty();
+                }
+                readFirstPath();
+                this.blocked = NOT_BLOCKED;
             }
-            readFirstPath();
-            this.blocked = NOT_BLOCKED;
         }
         else
         {

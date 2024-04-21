@@ -35,6 +35,7 @@ import io.pixelsdb.pixels.common.metadata.domain.*;
 import io.pixelsdb.pixels.common.physical.Location;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
+import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -73,10 +74,10 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -183,6 +184,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
                 columnHandle -> (PixelsColumnHandle) columnHandle);
         long splitId = 0;
+        String stateKeyPrefix = CF_OUTPUT_STATE_KEY_PREFIX + "_" + transHandle.getTransId() + "_";
         if (tableHandle.getTableType() == TableType.JOINED)
         {
             // The table type is joined, means lambda has been enabled.
@@ -200,23 +202,31 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 // Ensure multi-pipeline join is supported.
                 JoinOperator joinOperator = (JoinOperator) planner.getRootOperator();
                 // logger.debug("join operator: " + JSON.toJSONString(joinOperator));
-                CompletableFuture<Void> prevStages = joinOperator.executePrev();
-                prevStages.join();
-                logger.debug("invoke " + joinOperator.getName());
+                joinOperator.execute().thenAccept(joinOutputs -> {
+                    for (int i = 0; i < joinOutputs.length; ++i)
+                    {
+                        int finalI = i;
+                        joinOutputs[i].thenAccept(joinOutput -> {
+                            // PIXELS-506: set the state for the output of a join task executed in cloud function.
+                            StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
+                            stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
+                        });
+                    }
 
-                // PIXELS-506: add the scan size of the sub-plan.
-                transHandle.addScanBytes(planner.getScanSize());
-
-                Thread outputCollector = new Thread(() -> {
                     try
                     {
+
+                        /* PIXELS-506: as execute() is called instead of executePrev(), we can get the complete
+                         * outputCollection that contains the full costs by calling collectOutputs().
+                         */
                         JoinOperator.JoinOutputCollection outputCollection = joinOperator.collectOutputs();
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.info("join outputs: " + json);
-                        logger.info("total billed GB-ms: " + outputCollection.getTotalGBMs());
-                        logger.info("total read requests: " + outputCollection.getTotalNumReadRequests());
-                        logger.info("total write requests: " + outputCollection.getTotalNumWriteRequests());
+                        // PIXELS-506 TODO: calculate the cost cents using a general cost model.
+                        transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
+                        transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
+                        transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the join plan using pixels-lambda");
@@ -224,11 +234,15 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 "failed to execute the join plan using pixels-lambda");
                     }
                 });
-                outputCollector.start();
+                logger.debug("invoke " + joinOperator.getName());
+
+                // PIXELS-506: add the scan size of the sub-plan.
+                transHandle.addScanBytes(planner.getScanSize());
 
                 // Build the splits of the join result.
                 ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
-                for (JoinInput joinInput : joinOperator.getJoinInputs())
+                List<JoinInput> joinInputs = joinOperator.getJoinInputs();
+                for (JoinInput joinInput : joinInputs)
                 {
                     PixelsSplit split = new PixelsSplit(
                             transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
@@ -236,8 +250,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
                             false, false, Arrays.asList(address), columnOrder,
-                            cacheOrder, emptyConstraint, TableType.JOINED, joinOperator.getJoinAlgo(),
-                            JSON.toJSONString(joinInput), null);
+                            cacheOrder, emptyConstraint, true);
                     splitsBuilder.add(split);
                 }
                 return new PixelsSplitSource(splitsBuilder.build());
@@ -260,23 +273,30 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         Optional.of(this.metadataProxy.getMetadataService()));
                 AggregationOperator aggrOperator = (AggregationOperator) planner.getRootOperator();
                 // logger.debug("aggregation operator: " + JSON.toJSONString(aggrOperator));
-                CompletableFuture<Void> prevStages = aggrOperator.executePrev();
-                prevStages.join();
-                logger.debug("invoke " + aggrOperator.getName());
+                aggrOperator.execute().thenAccept(aggrOutputs -> {
+                    for (int i = 0; i < aggrOutputs.length; ++i)
+                    {
+                        int finalI = i;
+                        aggrOutputs[i].thenAccept(joinOutput -> {
+                            // PIXELS-506: set the state for the output of a join task executed in cloud function.
+                            StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
+                            stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
+                        });
+                    }
 
-                // PIXELS-506: add the scan size of the sub-plan.
-                transHandle.addScanBytes(planner.getScanSize());
-
-                Thread outputCollector = new Thread(() -> {
                     try
                     {
+                        /* PIXELS-506: as execute() is called instead of executePrev(), we can get the complete
+                         * outputCollection that contains the full costs by calling collectOutputs().
+                         */
                         Operator.OutputCollection outputCollection = aggrOperator.collectOutputs();
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.info("aggregation outputs: " + json);
-                        logger.info("total billed GB-ms: " + outputCollection.getTotalGBMs());
-                        logger.info("total read requests: " + outputCollection.getTotalNumReadRequests());
-                        logger.info("total write requests: " + outputCollection.getTotalNumWriteRequests());
+                        // PIXELS-506 TODO: calculate the cost cents using a general cost model.
+                        transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
+                        transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
+                        transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the aggregation plan using pixels-lambda");
@@ -284,7 +304,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 "failed to execute the aggregation plan using pixels-lambda");
                     }
                 });
-                outputCollector.start();
+                logger.debug("invoke " + aggrOperator.getName());
+
+                // PIXELS-506: add the scan size of the sub-plan.
+                transHandle.addScanBytes(planner.getScanSize());
 
                 // Build the split of the aggregation result.
                 List<AggregationInput> aggrInputs = aggrOperator.getFinalAggrInputs();
@@ -295,8 +318,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
                             config.getOutputStorageScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
                             ImmutableList.of(0), ImmutableList.of(-1), false, false,
-                            Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, TableType.AGGREGATED,
-                            null, null, JSON.toJSONString(aggrInput));
+                            Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, true);
                     splitsBuilder.add(split);
                 }
                 return new PixelsSplitSource(splitsBuilder.build());
@@ -889,7 +911,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
                                             ordered.getColumnOrder(), new ArrayList<>(0),
-                                            constraint, TableType.BASE, null, null, null);
+                                            constraint, false);
                                     // log.debug("Split in orderPaths: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -927,8 +949,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 table.getStorageScheme().name(), Arrays.asList(path),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, ordered.getColumnOrder(),
-                                                cacheColumnChunkOrders, constraint, TableType.BASE,
-                                                null, null, null);
+                                                cacheColumnChunkOrders, constraint, false);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPaths" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -989,7 +1010,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
                                     ordered.getColumnOrder(), new ArrayList<>(0),
-                                    constraint, TableType.BASE, null, null, null);
+                                    constraint, false);
                             // logger.debug("Split in orderPaths: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -1014,7 +1035,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         ordered.getColumnOrder(), new ArrayList<>(0),
-                                        constraint, TableType.BASE, null, null, null);
+                                        constraint, false);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }

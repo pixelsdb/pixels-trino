@@ -23,8 +23,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
-import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
-import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.pixelsdb.pixels.planner.plan.physical.output.NonPartitionOutput;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
@@ -59,10 +57,7 @@ public class PixelsSplit implements ConnectorSplit
     private List<String> columnOrder;
     private List<String> cacheOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
-    private final Table.TableType tableType;
-    private final JoinAlgorithm joinAlgo;
-    private final String joinInput;
-    private final String aggrInput;
+    private final boolean fromCfOutput;
 
     @JsonCreator
     public PixelsSplit(
@@ -81,10 +76,7 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("tableType") Table.TableType tableType,
-            @JsonProperty("joinAlgo") JoinAlgorithm joinAlgo,
-            @JsonProperty("joinInput") String joinInput,
-            @JsonProperty("aggrInput") String aggrInput) {
+            @JsonProperty("fromCfOutput") boolean fromCfOutput) {
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
@@ -106,18 +98,7 @@ public class PixelsSplit implements ConnectorSplit
         this.columnOrder = requireNonNull(columnOrder, "order is null");
         this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
-        this.tableType = requireNonNull(tableType, "tableType is null");
-        if (tableType == Table.TableType.JOINED)
-        {
-            this.joinAlgo = requireNonNull(joinAlgo, "joinAlgorithm is null");
-            this.joinInput = requireNonNull(joinInput, "joinInput is null");
-        }
-        else
-        {
-            this.joinAlgo = null;
-            this.joinInput = null;
-        }
-        this.aggrInput = aggrInput;
+        this.fromCfOutput = fromCfOutput;
     }
 
     /**
@@ -276,27 +257,9 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
-    public Table.TableType getTableType()
+    public boolean getFromCfOutput()
     {
-        return tableType;
-    }
-
-    @JsonProperty
-    public JoinAlgorithm getJoinAlgo()
-    {
-        return joinAlgo;
-    }
-
-    @JsonProperty
-    public String getJoinInput()
-    {
-        return joinInput;
-    }
-
-    @JsonProperty
-    public String getAggrInput()
-    {
-        return aggrInput;
+        return fromCfOutput;
     }
 
     @Override

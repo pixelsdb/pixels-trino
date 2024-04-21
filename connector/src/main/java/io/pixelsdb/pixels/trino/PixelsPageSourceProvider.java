@@ -27,20 +27,14 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.InvokerFactory;
-import io.pixelsdb.pixels.common.turbo.Output;
 import io.pixelsdb.pixels.common.turbo.WorkerType;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.utils.Pair;
-import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
-import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.pixelsdb.pixels.planner.plan.physical.domain.InputSplit;
-import io.pixelsdb.pixels.planner.plan.physical.domain.MultiOutputInfo;
 import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
 import io.pixelsdb.pixels.planner.plan.physical.domain.ScanTableInfo;
-import io.pixelsdb.pixels.planner.plan.physical.input.*;
-import io.pixelsdb.pixels.planner.plan.physical.output.AggregationOutput;
-import io.pixelsdb.pixels.planner.plan.physical.output.JoinOutput;
+import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
 import io.pixelsdb.pixels.planner.plan.physical.output.ScanOutput;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -115,23 +109,13 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
         try
         {
-            if (pixelsSplit.getTableType() == Table.TableType.AGGREGATED)
+            if (pixelsSplit.getFromCfOutput())
             {
-                // perform aggregation push down.
-                Storage storage = StorageFactory.Instance().getStorage(config.getOutputStorageScheme());
+                Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
                 IntermediateFileCleaner.Instance().registerStorage(storage);
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
-                        pixelsFooterCache, getLambdaAggrOutput(pixelsSplit), null);
-            }
-            if (pixelsSplit.getTableType() == Table.TableType.JOINED)
-            {
-                // perform join push down.
-                Storage storage = StorageFactory.Instance().getStorage(config.getOutputStorageScheme());
-                IntermediateFileCleaner.Instance().registerStorage(storage);
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile,
-                        pixelsFooterCache, getLambdaJoinOutput(pixelsSplit), null);
-            }
-            if (pixelsSplit.getTableType() == Table.TableType.BASE)
+                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage,
+                        cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter);
+            } else
             {
                 // perform scan push down.
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
@@ -166,120 +150,10 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                             cacheFile, indexFile, pixelsFooterCache, null, this.localSplitCounter);
                 }
             }
-            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, new UnsupportedOperationException(
-                    "table type '" + pixelsSplit.getTableType() + "' is not supported for building page source"));
         } catch (IOException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
         }
-    }
-
-    private CompletableFuture<?> getLambdaAggrOutput(PixelsSplit inputSplit)
-    {
-        String aggrInputJson = inputSplit.getAggrInput();
-        AggregationInput aggrInput = JSON.parseObject(aggrInputJson, AggregationInput.class);
-        OutputInfo output = aggrInput.getOutput();
-        output.setStorageInfo(config.getOutputStorageInfo());
-        output.setPath(config.getOutputFolderForQuery(inputSplit.getTransId()) +
-                output.getPath().substring(output.getPath().indexOf(inputSplit.getSchemaName())));
-        CompletableFuture<Output> aggrOutputFuture;
-
-        if (computeFinalAggrInServer)
-        {
-            // TODO: execute the final aggregation locally.
-            aggrOutputFuture = null;
-        }
-        else
-        {
-            aggrOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.AGGREGATION).invoke(aggrInput);
-        }
-
-        return aggrOutputFuture.whenComplete(((aggrOutput, err) ->
-        {
-            if (err != null)
-            {
-                throw new RuntimeException("error in lambda invoke.", err);
-            }
-            try
-            {
-                inputSplit.permute(config.getOutputStorageScheme(), (AggregationOutput) aggrOutput);
-                logger.info("final aggr output: " + JSON.toJSONString(aggrOutput));
-            }
-            catch (Exception e)
-            {
-                throw new RuntimeException("error in lambda output read.", e);
-            }
-        }));
-    }
-
-    private CompletableFuture<?> getLambdaJoinOutput(PixelsSplit inputSplit)
-    {
-        String joinInputJson = inputSplit.getJoinInput();
-        JoinInput joinInput;
-        if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
-        {
-            joinInput = JSON.parseObject(joinInputJson, BroadcastChainJoinInput.class);
-        }
-        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST)
-        {
-            joinInput = JSON.parseObject(joinInputJson, BroadcastJoinInput.class);
-        }
-        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED_CHAIN)
-        {
-            joinInput = JSON.parseObject(joinInputJson, PartitionedChainJoinInput.class);
-        }
-        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED)
-        {
-            joinInput = JSON.parseObject(joinInputJson, PartitionedJoinInput.class);
-        }
-        else
-        {
-            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, "join algorithm '" +
-                    inputSplit.getJoinAlgo() + "' is not supported");
-        }
-        MultiOutputInfo output = joinInput.getOutput();
-        output.setStorageInfo(config.getOutputStorageInfo());
-        output.setPath(config.getOutputFolderForQuery(inputSplit.getTransId(),
-                inputSplit.getSchemaName() + "/" + inputSplit.getTableName()));
-        CompletableFuture<Output> joinOutputFuture;
-        // logger.debug("join input: " + JSON.toJSONString(joinInput));
-        if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST_CHAIN)
-        {
-            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.BROADCAST_CHAIN_JOIN).invoke(joinInput);
-        }
-        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.BROADCAST)
-        {
-            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.BROADCAST_JOIN).invoke(joinInput);
-        }
-        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED_CHAIN)
-        {
-            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.PARTITIONED_CHAIN_JOIN).invoke(joinInput);
-        }
-        else if (inputSplit.getJoinAlgo() == JoinAlgorithm.PARTITIONED)
-        {
-            joinOutputFuture = InvokerFactory.Instance().getInvoker(WorkerType.PARTITIONED_JOIN).invoke(joinInput);
-        }
-        else
-        {
-            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, "join algorithm '" +
-                    inputSplit.getJoinAlgo() + "' is not supported");
-        }
-        return joinOutputFuture.whenComplete(((joinOutput, err) ->
-        {
-            if (err != null)
-            {
-                throw new RuntimeException("error in lambda invoke.", err);
-            }
-            try
-            {
-                inputSplit.permute(config.getOutputStorageScheme(), (JoinOutput) joinOutput);
-                logger.info("final join output: " + JSON.toJSONString(joinOutput));
-            }
-            catch (Exception e)
-            {
-                throw new RuntimeException("error in lambda output read.", e);
-            }
-        }));
     }
 
     private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit, String[] columnsToRead, boolean[] projection)
