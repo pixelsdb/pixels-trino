@@ -36,6 +36,9 @@ import io.pixelsdb.pixels.common.physical.Location;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
+import io.pixelsdb.pixels.common.turbo.ExecutorType;
+import io.pixelsdb.pixels.common.turbo.InvokerFactory;
+import io.pixelsdb.pixels.common.turbo.WorkerType;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -55,8 +58,12 @@ import io.pixelsdb.pixels.planner.plan.physical.JoinOperator;
 import io.pixelsdb.pixels.planner.plan.physical.Operator;
 import io.pixelsdb.pixels.planner.plan.physical.domain.InputInfo;
 import io.pixelsdb.pixels.planner.plan.physical.domain.InputSplit;
+import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
+import io.pixelsdb.pixels.planner.plan.physical.domain.ScanTableInfo;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
+import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
+import io.pixelsdb.pixels.planner.plan.physical.output.ScanOutput;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -74,6 +81,7 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -153,6 +161,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
             try
             {
                 pixelsSplits = getScanSplits(transHandle, session, tableHandle);
+                if (transHandle.getExecutorType() == ExecutorType.CF)
+                {
+
+                }
             } catch (MetadataException e)
             {
                 logger.error(e, "failed to get scan splits");
@@ -331,6 +343,47 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type is not supported");
         }
+    }
+
+    private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit, String[] columnsToRead, boolean[] projection)
+    {
+        checkArgument(Storage.Scheme.from(inputSplit.getStorageScheme()).equals(config.getInputStorageScheme()), String.format(
+                "the storage scheme of table '%s.%s' is not consistent with the input storage scheme for Pixels Turbo",
+                inputSplit.getSchemaName(), inputSplit.getTableName()));
+        ScanInput scanInput = new ScanInput();
+        scanInput.setTransId(inputSplit.getTransId());
+        scanInput.setOperatorName("scan_" + inputSplit.getTableName());
+        ScanTableInfo tableInfo = new ScanTableInfo();
+        tableInfo.setTableName(inputSplit.getTableName());
+        tableInfo.setColumnsToRead(columnsToRead);
+        Pair<Integer, InputSplit> inputSplitPair = getInputSplit(inputSplit);
+        tableInfo.setInputSplits(Arrays.asList(inputSplitPair.getRight()));
+        TableScanFilter filter = createTableScanFilter(inputSplit.getSchemaName(),
+                inputSplit.getTableName(), columnsToRead, inputSplit.getConstraint());
+        tableInfo.setFilter(JSON.toJSONString(filter));
+        tableInfo.setBase(true);
+        tableInfo.setStorageInfo(config.getInputStorageInfo());
+        scanInput.setTableInfo(tableInfo);
+        scanInput.setScanProjection(projection);
+        String folder = config.getOutputFolderForQuery(inputSplit.getTransId()) + inputSplit.getSplitId() + "/";
+        OutputInfo outputInfo = new OutputInfo(folder, config.getOutputStorageInfo(), true);
+        scanInput.setOutput(outputInfo);
+
+        return InvokerFactory.Instance().getInvoker(WorkerType.SCAN)
+                .invoke(scanInput).whenComplete(((scanOutput, err) -> {
+                    if (err != null)
+                    {
+                        throw new RuntimeException("error in lambda invoke.", err);
+                    }
+                    try
+                    {
+                        inputSplit.permute(config.getOutputStorageScheme(), (ScanOutput) scanOutput);
+                    }
+                    catch (Exception e)
+                    {
+                        throw new RuntimeException("error in lambda output read.", e);
+                    }
+                }));
     }
 
     /**
