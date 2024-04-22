@@ -163,7 +163,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 if (transHandle.getExecutorType() == ExecutorType.CF
                         /**
                          * Issue #57:
-                         * If the number of columns to read is 0, the spits should not be processed by Lambda.
+                         * If the number of columns to read is 0, the spits should not be processed by serverless workers.
                          * It usually means that the query is like select count(*) from table.
                          * Such queries can be served on the metadata headers that are cached locally, without touching the data.
                          */
@@ -223,7 +223,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         String stateKeyPrefix = CF_OUTPUT_STATE_KEY_PREFIX + "_" + transHandle.getTransId() + "_";
         if (tableHandle.getTableType() == TableType.JOINED)
         {
-            // The table type is joined, means lambda has been enabled.
+            // The table type is joined, means cloud function has been enabled.
             JoinedTable root = parseJoinPlan(transHandle.getTransId(), tableHandle);
             // logger.debug("join plan: " + JSON.toJSONString(root));
 

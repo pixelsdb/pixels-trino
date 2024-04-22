@@ -449,7 +449,7 @@ public class PixelsMetadata implements ConnectorMetadata
     {
         if (transHandle.getExecutorType() != ExecutorType.CF)
         {
-            // Issue #60: Trino's filters are currently more efficient, so pushdown should only be used for Lambda.
+            // Issue #60: Trino's filters are currently more efficient, so pushdown should only be used for pixels-turbo.
             return Optional.empty();
         }
 

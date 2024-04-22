@@ -135,6 +135,7 @@ class PixelsPageSource implements ConnectorPageSource
                         JSON.parseObject(value, SimpleOutput.class), "output is null");
                 if (!simpleOutput.isSuccessful())
                 {
+                    this.blocked.cancel(true);
                     throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_EXECUTION_CF_ERROR,
                             "cloud function request " + simpleOutput.getRequestId() +
                                     " returns error. transaction id: " + split.getTransId() +
@@ -146,13 +147,6 @@ class PixelsPageSource implements ConnectorPageSource
                     logger.debug("cloud function request " + simpleOutput.getRequestId() + " is successful");
                 }
             });
-            if (this.blocked.isDone() && !this.blocked.isCancelled() &&
-                    !this.blocked.isCompletedExceptionally() &&
-                    !this.closed && this.recordReader == null)
-            {
-                // this.blocked is complete normally before reaching here.
-                readFirstPath();
-            }
         }
         else
         {
@@ -350,12 +344,9 @@ class PixelsPageSource implements ConnectorPageSource
         {
             return null;
         }
-        if (this.blocked.isCancelled() || this.blocked.isCompletedExceptionally())
+        if (this.blocked.isCancelled())
         {
             this.close();
-            throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
-                    "lambda request is done exceptionally: " +
-                            this.blocked.isCompletedExceptionally());
         }
 
         if (this.closed)

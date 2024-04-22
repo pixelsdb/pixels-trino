@@ -79,7 +79,7 @@ public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
         if (((PixelsTransactionHandle) transaction).getExecutorType() == ExecutorType.CF)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_CONFIG_ERROR,
-                    "PixelsRecordSet does not support lambda coprocessor.");
+                    "PixelsRecordSet does not support pixels-turbo coprocessor");
         }
         List<PixelsColumnHandle> pixelsColumns = getIncludeColumns(columns.stream()
                 .map(PixelsColumnHandle.class::cast).collect(toList()), (PixelsTableHandle) table);
