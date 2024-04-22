@@ -63,7 +63,6 @@ import io.pixelsdb.pixels.planner.plan.physical.domain.ScanTableInfo;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
-import io.pixelsdb.pixels.planner.plan.physical.output.ScanOutput;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -81,7 +80,6 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -161,9 +159,35 @@ public class PixelsSplitManager implements ConnectorSplitManager
             try
             {
                 pixelsSplits = getScanSplits(transHandle, session, tableHandle);
-                if (transHandle.getExecutorType() == ExecutorType.CF)
+                List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(tableHandle);
+                if (transHandle.getExecutorType() == ExecutorType.CF
+                        /**
+                         * Issue #57:
+                         * If the number of columns to read is 0, the spits should not be processed by Lambda.
+                         * It usually means that the query is like select count(*) from table.
+                         * Such queries can be served on the metadata headers that are cached locally, without touching the data.
+                         */
+                        && !withFilterColumns.isEmpty())
                 {
-
+                    for (PixelsSplit inputSplit : pixelsSplits)
+                    {
+                        ScanInput scanInput = getScanInput(inputSplit, tableHandle.getColumns(), withFilterColumns);
+                        InvokerFactory.Instance().getInvoker(WorkerType.SCAN)
+                                .invoke(scanInput).whenComplete(((scanOutput, err) -> {
+                                    if (err != null)
+                                    {
+                                        logger.error(err, "failed to execute table scan using pixels-turbo");
+                                        throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                                                "failed to execute table scan using pixels-turbo");
+                                    }
+                                    logger.debug("scan output: " + scanOutput);
+                                    transHandle.addCostCents(1.66667e-6 * scanOutput.getGBMs());
+                                    transHandle.addCostCents(4e-5 * scanOutput.getNumReadRequests());
+                                    transHandle.addCostCents(5e-4 * scanOutput.getNumWriteRequests());
+                                }));
+                        inputSplit.updateForServerlessOutput(
+                                config.getOutputStorageScheme(), ScanInput.generateOutputPaths(scanInput));
+                    }
                 }
             } catch (MetadataException e)
             {
@@ -234,16 +258,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         JoinOperator.JoinOutputCollection outputCollection = joinOperator.collectOutputs();
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
-                        logger.info("join outputs: " + json);
+                        logger.debug("join outputs: " + json);
                         // PIXELS-506 TODO: calculate the cost cents using a general cost model.
                         transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
                         transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
                         transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
-                        logger.error(e, "failed to execute the join plan using pixels-lambda");
+                        logger.error(e, "failed to execute the join plan using pixels-turbo");
                         throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
-                                "failed to execute the join plan using pixels-lambda");
+                                "failed to execute the join plan using pixels-turbo");
                     }
                 });
                 logger.debug("invoke " + joinOperator.getName());
@@ -304,16 +328,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         Operator.OutputCollection outputCollection = aggrOperator.collectOutputs();
                         SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
                         String json = JSON.toJSONString(outputCollection, features);
-                        logger.info("aggregation outputs: " + json);
+                        logger.debug("aggregation outputs: " + json);
                         // PIXELS-506 TODO: calculate the cost cents using a general cost model.
                         transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
                         transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
                         transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
-                        logger.error(e, "failed to execute the aggregation plan using pixels-lambda");
+                        logger.error(e, "failed to execute the aggregation plan using pixels-turbo");
                         throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
-                                "failed to execute the aggregation plan using pixels-lambda");
+                                "failed to execute the aggregation plan using pixels-turbo");
                     }
                 });
                 logger.debug("invoke " + aggrOperator.getName());
@@ -345,11 +369,20 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
     }
 
-    private CompletableFuture<?> getLambdaScanOutput(PixelsSplit inputSplit, String[] columnsToRead, boolean[] projection)
+    private ScanInput getScanInput(PixelsSplit inputSplit, List<PixelsColumnHandle> tableColumns,
+                                                     List<PixelsColumnHandle> withFilterColumns)
     {
         checkArgument(Storage.Scheme.from(inputSplit.getStorageScheme()).equals(config.getInputStorageScheme()), String.format(
                 "the storage scheme of table '%s.%s' is not consistent with the input storage scheme for Pixels Turbo",
                 inputSplit.getSchemaName(), inputSplit.getTableName()));
+        String[] columnsToRead = new String[withFilterColumns.size()];
+        boolean[] projection = new boolean[withFilterColumns.size()];
+        int projectionSize = tableColumns.size();
+        for (int i = 0; i < columnsToRead.length; ++i)
+        {
+            columnsToRead[i] = withFilterColumns.get(i).getColumnName();
+            projection[i] = i < projectionSize;
+        }
         ScanInput scanInput = new ScanInput();
         scanInput.setTransId(inputSplit.getTransId());
         scanInput.setOperatorName("scan_" + inputSplit.getTableName());
@@ -368,22 +401,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         String folder = config.getOutputFolderForQuery(inputSplit.getTransId()) + inputSplit.getSplitId() + "/";
         OutputInfo outputInfo = new OutputInfo(folder, config.getOutputStorageInfo(), true);
         scanInput.setOutput(outputInfo);
-
-        return InvokerFactory.Instance().getInvoker(WorkerType.SCAN)
-                .invoke(scanInput).whenComplete(((scanOutput, err) -> {
-                    if (err != null)
-                    {
-                        throw new RuntimeException("error in lambda invoke.", err);
-                    }
-                    try
-                    {
-                        inputSplit.permute(config.getOutputStorageScheme(), (ScanOutput) scanOutput);
-                    }
-                    catch (Exception e)
-                    {
-                        throw new RuntimeException("error in lambda output read.", e);
-                    }
-                }));
+        return scanInput;
     }
 
     /**

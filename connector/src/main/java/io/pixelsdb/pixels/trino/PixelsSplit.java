@@ -23,7 +23,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
-import io.pixelsdb.pixels.planner.plan.physical.output.NonPartitionOutput;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
@@ -57,7 +56,7 @@ public class PixelsSplit implements ConnectorSplit
     private List<String> columnOrder;
     private List<String> cacheOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
-    private final boolean fromCfOutput;
+    private boolean fromServerlessOutput;
 
     @JsonCreator
     public PixelsSplit(
@@ -76,7 +75,7 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("fromCfOutput") boolean fromCfOutput) {
+            @JsonProperty("fromServerlessOutput") boolean fromServerlessOutput) {
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
@@ -98,26 +97,24 @@ public class PixelsSplit implements ConnectorSplit
         this.columnOrder = requireNonNull(columnOrder, "order is null");
         this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
-        this.fromCfOutput = fromCfOutput;
+        this.fromServerlessOutput = fromServerlessOutput;
     }
 
     /**
-     * Permute the original file information with the information of the
-     * intermediate files produced by serverless.
+     * Update this splits for the immediate output of a serverless worker.
      * @param scheme the storage scheme of intermediate files
-     * @param lambdaOutput the output of serverless
+     * @param outputPaths the output of the serverless worker
      */
-    public void permute(Storage.Scheme scheme, NonPartitionOutput lambdaOutput)
+    public void updateForServerlessOutput(Storage.Scheme scheme, String[] outputPaths)
     {
         requireNonNull(scheme, "scheme is null");
-        requireNonNull(lambdaOutput, "scanOutput is null");
-        requireNonNull(lambdaOutput.getOutputs(), "scanOutput.outputs is null");
-        requireNonNull(lambdaOutput.getRowGroupNums(), "scanOutput.rowGroupNums is null");
+        requireNonNull(outputPaths, "outputPaths is null");
         this.storageScheme = scheme.name();
-        this.paths = lambdaOutput.getOutputs();
-        this.rgStarts = Collections.nCopies(lambdaOutput.getOutputs().size(), 0);
-        this.rgLengths = lambdaOutput.getRowGroupNums();
+        this.paths = ImmutableList.copyOf(outputPaths);
+        this.rgStarts = Collections.nCopies(outputPaths.length, 0);
+        this.rgLengths = Collections.nCopies(outputPaths.length, -1);
         this.cached = false;
+        this.fromServerlessOutput = true;
         if (!this.columnOrder.isEmpty())
             this.columnOrder = ImmutableList.of();
         if (!this.cacheOrder.isEmpty())
@@ -257,9 +254,9 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
-    public boolean getFromCfOutput()
+    public boolean getFromServerlessOutput()
     {
-        return fromCfOutput;
+        return fromServerlessOutput;
     }
 
     @Override

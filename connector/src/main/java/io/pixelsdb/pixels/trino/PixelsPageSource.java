@@ -55,7 +55,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
@@ -79,7 +78,6 @@ class PixelsPageSource implements ConnectorPageSource
     private PixelsRecordReader recordReader;
     private final PixelsCacheReader cacheReader;
     private final PixelsFooterCache footerCache;
-    private final AtomicInteger localSplitCounter;
     private final CompletableFuture<?> blocked;
     private final int numColumnToRead;
     private final Optional<TableScanFilter> filter;
@@ -94,8 +92,7 @@ class PixelsPageSource implements ConnectorPageSource
 
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles,
                             Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
-                            PixelsFooterCache pixelsFooterCache, CompletableFuture<?> lambdaOutput,
-                            AtomicInteger localSplitCounter)
+                            PixelsFooterCache pixelsFooterCache)
     {
         this.split = split;
         this.storage = storage;
@@ -103,7 +100,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.includeCols =  new String[columns.size()];
         for (int i = 0; i < includeCols.length; ++i)
         {
-            if (split.getFromCfOutput())
+            if (split.getFromServerlessOutput())
             {
                 // Use the synthetic column name to access the join or aggregation result.
                 includeCols[i] = columns.get(i).getSynthColumnName();
@@ -115,7 +112,6 @@ class PixelsPageSource implements ConnectorPageSource
         }
         this.numColumnToRead = columnHandles.size();
         this.footerCache = pixelsFooterCache;
-        this.localSplitCounter = localSplitCounter;
         this.batchId = 0;
         this.closed = false;
         this.BatchSize = PixelsTrinoConfig.getBatchSize();
@@ -128,68 +124,28 @@ class PixelsPageSource implements ConnectorPageSource
                 .setIndexFile(indexFile)
                 .build();
 
-        if (lambdaOutput == null)
+        if (this.split.getFromServerlessOutput())
         {
-            if (this.split.getFromCfOutput())
-            {
-                this.filter = Optional.empty();
-                this.blocked = new CompletableFuture<>();
-                String stateKey = CF_OUTPUT_STATE_KEY_PREFIX + "_" + split.getTransId() + "_" + split.getSplitId();
-                StateWatcher stateWatcher = new StateWatcher(stateKey);
-                stateWatcher.onStateUpdateOrExist((key, value) -> {
-                    this.blocked.complete(null);
-                    SimpleOutput simpleOutput = requireNonNull(
-                            JSON.parseObject(value, SimpleOutput.class), "output is null");
-                    if (!simpleOutput.isSuccessful())
-                    {
-                        throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_EXECUTION_CF_ERROR,
-                                "cloud function request " + simpleOutput.getRequestId() +
-                                        " returns error. transaction id: " + split.getTransId() +
-                                        ", error message: " + simpleOutput.getErrorMessage());
-                    } else
-                    {
-                        logger.debug("cloud function request " + simpleOutput.getRequestId() + " is successful");
-                    }
-                });
-            }
-            else
-            {
-                if (split.getConstraint().getDomains().isPresent())
+            this.filter = Optional.empty();
+            this.blocked = new CompletableFuture<>();
+            String stateKey = CF_OUTPUT_STATE_KEY_PREFIX + "_" + split.getTransId() + "_" + split.getSplitId();
+            StateWatcher stateWatcher = new StateWatcher(stateKey);
+            stateWatcher.onStateUpdateOrExist((key, value) -> {
+                SimpleOutput simpleOutput = requireNonNull(
+                        JSON.parseObject(value, SimpleOutput.class), "output is null");
+                if (!simpleOutput.isSuccessful())
                 {
-                    TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
-                            split.getSchemaName(), split.getTableName(),
-                            includeCols, split.getConstraint());
-                    this.filter = Optional.of(scanFilter);
+                    throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_EXECUTION_CF_ERROR,
+                            "cloud function request " + simpleOutput.getRequestId() +
+                                    " returns error. transaction id: " + split.getTransId() +
+                                    ", error message: " + simpleOutput.getErrorMessage());
                 } else
                 {
-                    this.filter = Optional.empty();
-                }
-                readFirstPath();
-                this.blocked = NOT_BLOCKED;
-            }
-        }
-        else
-        {
-            /* If lambda (cloud function) is used, all filters have been pushed down,
-             * no need to do filtering here.
-             */
-            this.filter = Optional.empty();
-            this.blocked = lambdaOutput.whenComplete(((ret, err) -> {
-                if (err != null)
-                {
-                    logger.error(err);
-                    throw new RuntimeException(err);
-                }
-                try
-                {
                     readFirstPath();
+                    this.blocked.complete(null);
+                    logger.debug("cloud function request " + simpleOutput.getRequestId() + " is successful");
                 }
-                catch (Exception e)
-                {
-                    logger.error(e, "error in lambda output read.");
-                    throw new RuntimeException(e);
-                }
-            }));
+            });
             if (this.blocked.isDone() && !this.blocked.isCancelled() &&
                     !this.blocked.isCompletedExceptionally() &&
                     !this.closed && this.recordReader == null)
@@ -197,6 +153,21 @@ class PixelsPageSource implements ConnectorPageSource
                 // this.blocked is complete normally before reaching here.
                 readFirstPath();
             }
+        }
+        else
+        {
+            if (split.getConstraint().getDomains().isPresent())
+            {
+                TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
+                        split.getSchemaName(), split.getTableName(),
+                        includeCols, split.getConstraint());
+                this.filter = Optional.of(scanFilter);
+            } else
+            {
+                this.filter = Optional.empty();
+            }
+            readFirstPath();
+            this.blocked = NOT_BLOCKED;
         }
     }
 
@@ -478,11 +449,6 @@ class PixelsPageSource implements ConnectorPageSource
         closed = true;
 
         closeReader();
-
-        if (this.localSplitCounter != null)
-        {
-            this.localSplitCounter.decrementAndGet();
-        }
     }
 
     /**
