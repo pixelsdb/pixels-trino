@@ -195,6 +195,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             stateKeyPrefix + inputSplit.getSplitId());
                                     stateManager.setState(JSON.toJSONString(scanOutput.toSimpleOutput()));
                                 }));
+                        logger.info("scan input: " + JSON.toJSONString(scanInput));
                         inputSplit.updateForServerlessOutput(
                                 config.getOutputStorageScheme(), ScanInput.generateOutputPaths(scanInput));
                     }
