@@ -143,8 +143,12 @@ class PixelsPageSource implements ConnectorPageSource
                     if (!simpleOutput.isSuccessful())
                     {
                         throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_EXECUTION_CF_ERROR,
-                                "request id: " + simpleOutput.getRequestId() +
+                                "cloud function request " + simpleOutput.getRequestId() +
+                                        " returns error. transaction id: " + split.getTransId() +
                                         ", error message: " + simpleOutput.getErrorMessage());
+                    } else
+                    {
+                        logger.debug("cloud function request " + simpleOutput.getRequestId() + " is successful");
                     }
                 });
             }
