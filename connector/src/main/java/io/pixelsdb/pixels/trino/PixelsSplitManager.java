@@ -253,6 +253,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         int finalI = i;
                         joinOutputs[i].thenAccept(joinOutput -> {
                             // PIXELS-506: set the state for the output of a join task executed in cloud function.
+                            logger.info("------------------------------------------------------------------");
                             StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
                             stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
                         });
