@@ -57,7 +57,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static com.google.common.base.Preconditions.checkState;
-import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -128,7 +127,7 @@ class PixelsPageSource implements ConnectorPageSource
         {
             this.filter = Optional.empty();
             this.blocked = new CompletableFuture<>();
-            String stateKey = CF_OUTPUT_STATE_KEY_PREFIX + "_" + split.getTransId() + "_" + split.getSplitId();
+            String stateKey = PixelsSplitManager.getOutputStateKeyPrefix(split.getTransId()) + split.getSplitId();
             StateWatcher stateWatcher = new StateWatcher(stateKey);
             stateWatcher.onStateUpdateOrExist((key, value) -> {
                 SimpleOutput simpleOutput = requireNonNull(

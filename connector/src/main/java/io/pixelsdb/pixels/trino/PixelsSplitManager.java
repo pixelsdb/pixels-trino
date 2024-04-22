@@ -144,6 +144,11 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return builder.build();
     }
 
+    public static String getOutputStateKeyPrefix(long transId)
+    {
+        return CF_OUTPUT_STATE_KEY_PREFIX + "_" + transId + "_";
+    }
+
     @Override
     public ConnectorSplitSource getSplits(ConnectorTransactionHandle trans,
                                           ConnectorSession session,
@@ -153,6 +158,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
+        String stateKeyPrefix = getOutputStateKeyPrefix(transHandle.getTransId());
         if (tableHandle.getTableType() == TableType.BASE)
         {
             List<PixelsSplit> pixelsSplits;
@@ -184,6 +190,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     transHandle.addCostCents(1.66667e-6 * scanOutput.getGBMs());
                                     transHandle.addCostCents(4e-5 * scanOutput.getNumReadRequests());
                                     transHandle.addCostCents(5e-4 * scanOutput.getNumWriteRequests());
+                                    // PIXELS-506: set the state for the output of a scan task executed in cloud function.
+                                    StateManager stateManager = new StateManager(
+                                            stateKeyPrefix + inputSplit.getSplitId());
+                                    stateManager.setState(JSON.toJSONString(scanOutput.toSimpleOutput()));
                                 }));
                         inputSplit.updateForServerlessOutput(
                                 config.getOutputStorageScheme(), ScanInput.generateOutputPaths(scanInput));
@@ -220,7 +230,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
                 columnHandle -> (PixelsColumnHandle) columnHandle);
         long splitId = 0;
-        String stateKeyPrefix = CF_OUTPUT_STATE_KEY_PREFIX + "_" + transHandle.getTransId() + "_";
         if (tableHandle.getTableType() == TableType.JOINED)
         {
             // The table type is joined, means cloud function has been enabled.
@@ -314,7 +323,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     {
                         int finalI = i;
                         aggrOutputs[i].thenAccept(joinOutput -> {
-                            // PIXELS-506: set the state for the output of a join task executed in cloud function.
+                            // PIXELS-506: set the state for the output of a aggregation task executed in cloud function.
                             StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
                             stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
                         });
