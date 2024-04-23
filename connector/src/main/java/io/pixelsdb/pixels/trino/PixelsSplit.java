@@ -57,6 +57,7 @@ public class PixelsSplit implements ConnectorSplit
     private List<String> cacheOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
     private boolean fromServerlessOutput;
+    private final boolean readSynthColumns;
 
     @JsonCreator
     public PixelsSplit(
@@ -75,7 +76,8 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("fromServerlessOutput") boolean fromServerlessOutput) {
+            @JsonProperty("fromServerlessOutput") boolean fromServerlessOutput,
+            @JsonProperty("readSynthColumns") boolean readSynthColumns) {
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
@@ -98,6 +100,7 @@ public class PixelsSplit implements ConnectorSplit
         this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
         this.fromServerlessOutput = fromServerlessOutput;
+        this.readSynthColumns = readSynthColumns;
     }
 
     /**
@@ -257,6 +260,12 @@ public class PixelsSplit implements ConnectorSplit
     public boolean getFromServerlessOutput()
     {
         return fromServerlessOutput;
+    }
+
+    @JsonProperty
+    public boolean getReadSynthColumns()
+    {
+        return readSynthColumns;
     }
 
     @Override

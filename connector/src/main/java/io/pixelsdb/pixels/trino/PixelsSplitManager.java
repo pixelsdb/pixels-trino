@@ -291,7 +291,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
                             false, false, Arrays.asList(address), columnOrder,
-                            cacheOrder, emptyConstraint, true);
+                            cacheOrder, emptyConstraint, true, true);
                     splitsBuilder.add(split);
                 }
                 return new PixelsSplitSource(splitsBuilder.build());
@@ -358,8 +358,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     PixelsSplit split = new PixelsSplit(
                             transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
                             config.getOutputStorageScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
-                            ImmutableList.of(0), ImmutableList.of(-1), false, false,
-                            Arrays.asList(address), columnOrder, cacheOrder, emptyConstraint, true);
+                            ImmutableList.of(0), ImmutableList.of(-1), false, false, Arrays.asList(address),
+                            columnOrder, cacheOrder, emptyConstraint, true, true);
                     splitsBuilder.add(split);
                 }
                 return new PixelsSplitSource(splitsBuilder.build());
@@ -987,7 +987,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             Collections.nCopies(paths.size(), 1),
                                             false, storage.hasLocality(), orderedAddresses,
                                             ordered.getColumnOrder(), new ArrayList<>(0),
-                                            constraint, false);
+                                            constraint, false, false);
                                     // log.debug("Split in orderPaths: " + pixelsSplit.toString());
                                     pixelsSplits.add(pixelsSplit);
                                 }
@@ -1025,7 +1025,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                                 table.getStorageScheme().name(), Arrays.asList(path),
                                                 Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                                 true, ensureLocality, compactAddresses, ordered.getColumnOrder(),
-                                                cacheColumnChunkOrders, constraint, false);
+                                                cacheColumnChunkOrders, constraint, false, false);
                                         pixelsSplits.add(pixelsSplit);
                                         // log.debug("Split in compactPaths" + pixelsSplit.toString());
                                         curFileRGIdx += splitSize;
@@ -1086,7 +1086,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     Collections.nCopies(paths.size(), 1),
                                     false, storage.hasLocality(), orderedAddresses,
                                     ordered.getColumnOrder(), new ArrayList<>(0),
-                                    constraint, false);
+                                    constraint, false, false);
                             // logger.debug("Split in orderPaths: " + pixelsSplit.toString());
                             pixelsSplits.add(pixelsSplit);
                         }
@@ -1111,7 +1111,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         ordered.getColumnOrder(), new ArrayList<>(0),
-                                        constraint, false);
+                                        constraint, false, false);
                                 pixelsSplits.add(pixelsSplit);
                                 curFileRGIdx += splitSize;
                             }

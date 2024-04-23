@@ -99,7 +99,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.includeCols =  new String[columns.size()];
         for (int i = 0; i < includeCols.length; ++i)
         {
-            if (split.getFromServerlessOutput())
+            if (split.getReadSynthColumns())
             {
                 // Use the synthetic column name to access the join or aggregation result.
                 includeCols[i] = columns.get(i).getSynthColumnName();
