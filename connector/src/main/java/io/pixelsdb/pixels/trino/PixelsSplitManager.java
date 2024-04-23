@@ -403,7 +403,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         tableInfo.setStorageInfo(config.getInputStorageInfo());
         scanInput.setTableInfo(tableInfo);
         scanInput.setScanProjection(projection);
-        String folder = config.getOutputFolderForQuery(inputSplit.getTransId()) + inputSplit.getSplitId() + "/";
+        String folder = config.getOutputFolderForQuery(inputSplit.getTransId(), inputSplit.getSplitId() + "/");
         OutputInfo outputInfo = new OutputInfo(folder, config.getOutputStorageInfo(), true);
         scanInput.setOutput(outputInfo);
         return scanInput;
