@@ -105,14 +105,14 @@ public class PixelsSplit implements ConnectorSplit
      * @param scheme the storage scheme of intermediate files
      * @param outputPaths the output of the serverless worker
      */
-    public void updateForServerlessOutput(Storage.Scheme scheme, String[] outputPaths)
+    public void updateForServerlessOutput(Storage.Scheme scheme, List<String> outputPaths)
     {
         requireNonNull(scheme, "scheme is null");
         requireNonNull(outputPaths, "outputPaths is null");
         this.storageScheme = scheme.name();
-        this.paths = ImmutableList.copyOf(outputPaths);
-        this.rgStarts = Collections.nCopies(outputPaths.length, 0);
-        this.rgLengths = Collections.nCopies(outputPaths.length, -1);
+        this.paths = outputPaths;
+        this.rgStarts = Collections.nCopies(outputPaths.size(), 0);
+        this.rgLengths = Collections.nCopies(outputPaths.size(), -1);
         this.cached = false;
         this.fromServerlessOutput = true;
         if (!this.columnOrder.isEmpty())

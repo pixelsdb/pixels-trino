@@ -56,10 +56,7 @@ import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
 import io.pixelsdb.pixels.planner.plan.physical.AggregationOperator;
 import io.pixelsdb.pixels.planner.plan.physical.JoinOperator;
 import io.pixelsdb.pixels.planner.plan.physical.Operator;
-import io.pixelsdb.pixels.planner.plan.physical.domain.InputInfo;
-import io.pixelsdb.pixels.planner.plan.physical.domain.InputSplit;
-import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
-import io.pixelsdb.pixels.planner.plan.physical.domain.ScanTableInfo;
+import io.pixelsdb.pixels.planner.plan.physical.domain.*;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
@@ -293,7 +290,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 {
                     PixelsSplit split = new PixelsSplit(
                             transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
-                            config.getOutputStorageScheme().name(), joinInput.getOutput().getFileNames(),
+                            config.getOutputStorageScheme().name(), MultiOutputInfo.generateOutputPaths(joinInput.getOutput()),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
                             false, false, Arrays.asList(address), columnOrder,
@@ -325,7 +322,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     {
                         int finalI = i;
                         aggrOutputs[i].thenAccept(joinOutput -> {
-                            // PIXELS-506: set the state for the output of a aggregation task executed in cloud function.
+                            // PIXELS-506: set the state for the output of an aggregation task executed in cloud function.
                             StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
                             stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
                         });
