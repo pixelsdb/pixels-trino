@@ -192,7 +192,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             stateKeyPrefix + inputSplit.getSplitId());
                                     stateManager.setState(JSON.toJSONString(scanOutput.toSimpleOutput()));
                                 }));
-                        logger.info("scan input: " + JSON.toJSONString(scanInput));
                         inputSplit.updateForServerlessOutput(
                                 config.getOutputStorageScheme(), ScanInput.generateOutputPaths(scanInput));
                     }
@@ -251,7 +250,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         int finalI = i;
                         joinOutputs[i].thenAccept(joinOutput -> {
                             // PIXELS-506: set the state for the output of a join task executed in cloud function.
-                            logger.info("------------------------------------------------------------------");
                             StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
                             stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
                         });
@@ -259,7 +257,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
                     try
                     {
-
                         /* PIXELS-506: as execute() is called instead of executePrev(), we can get the complete
                          * outputCollection that contains the full costs by calling collectOutputs().
                          */
