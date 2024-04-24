@@ -241,6 +241,7 @@ public class PixelsConnector implements Connector
             if (config.isCleanIntermediateResult())
             {
                 IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(transId));
+                IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(transId));
             }
         } catch (InterruptedException e)
         {

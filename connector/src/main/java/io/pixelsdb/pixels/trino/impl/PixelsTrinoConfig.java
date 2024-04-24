@@ -26,6 +26,7 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.turbo.InvokerFactory;
 import io.pixelsdb.pixels.common.turbo.MetricsCollector;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
+import io.pixelsdb.pixels.planner.PixelsPlanner;
 import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfo;
 import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfoBuilder;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
@@ -235,6 +236,16 @@ public class PixelsTrinoConfig
          * as a folder in S3-like storage.
          */
         return this.outputFolder + transId + "/" + post + "/";
+    }
+
+    public String getIntermediateFolderForQuery(long transId)
+    {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use intermediate storage when cloud function is turned off"));
+        }
+        return PixelsPlanner.getIntermediateFolderForTrans(transId);
     }
 
     /**
