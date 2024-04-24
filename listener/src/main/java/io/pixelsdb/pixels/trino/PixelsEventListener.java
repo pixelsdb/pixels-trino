@@ -140,6 +140,19 @@ public class PixelsEventListener implements EventListener
                 long inputBytes = queryCompletedEvent.getStatistics().getPhysicalInputBytes();
                 this.transService.setTransProperty(externalTraceId.get(),
                         Constants.TRANS_CONTEXT_SCAN_BYTES_KEY, String.valueOf(inputBytes));
+
+                final long cpuTimeSeconds = queryCompletedEvent.getStatistics().getCpuTime().toSeconds();
+                double memoryGBSeconds = 0;
+                if (queryCompletedEvent.getStatistics().getExecutionTime().isPresent())
+                {
+                    memoryGBSeconds = queryCompletedEvent.getStatistics().getPeakUserMemoryBytes() *
+                            queryCompletedEvent.getStatistics().getExecutionTime().get().toSeconds() / 1e9;
+                }
+                double vmCostCents = Math.max(cpuTimeSeconds * 1.3e-3, memoryGBSeconds * 3.2e-4);
+                double cfCostCents = Double.parseDouble(transService.getTransContext(externalTraceId.get())
+                        .getProperties().getProperty(Constants.TRANS_CONTEXT_COST_CENTS_KEY));
+                this.transService.setTransProperty(externalTraceId.get(),
+                        Constants.TRANS_CONTEXT_COST_CENTS_KEY, String.valueOf(vmCostCents + cfCostCents));
             } catch (TransException e)
             {
                 logger.error("can not set scan bytes for the query in pixels event listener");
