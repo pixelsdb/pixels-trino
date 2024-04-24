@@ -23,6 +23,7 @@ import io.airlift.bootstrap.LifeCycleManager;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.QueryScheduleException;
 import io.pixelsdb.pixels.common.exception.TransException;
+import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
@@ -42,6 +43,7 @@ import javax.inject.Inject;
 import java.util.List;
 import java.util.Optional;
 
+import static io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.getOutputStateKeyPrefix;
 import static java.util.Objects.requireNonNull;
 
 public class PixelsConnector implements Connector
@@ -155,13 +157,7 @@ public class PixelsConnector implements Connector
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             try
             {
-                // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
-                this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
-                        String.valueOf(handle.getScanBytes()));
-                // PIXELS-506: cost cents in the transaction handel is the amount of money spent on cf workers,
-                // vm costs will be added later in the listener.
-                this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_COST_CENTS_KEY,
-                        String.valueOf(handle.getCostCents()));
+                this.toDoBeforeTransTermination(handle);
                 // commit the transaction
                 this.transService.commitTrans(handle.getTransId(), handle.getTimestamp());
             } catch (TransException e)
@@ -191,18 +187,11 @@ public class PixelsConnector implements Connector
     @Override
     public void rollback(ConnectorTransactionHandle transactionHandle)
     {
-        if (transactionHandle instanceof PixelsTransactionHandle)
+        if (transactionHandle instanceof PixelsTransactionHandle handle)
         {
-            PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             try
             {
-                // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
-                this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
-                        String.valueOf(handle.getScanBytes()));
-                // PIXELS-506: cost cents in the transaction handel is the amount of money spent on cf workers,
-                // vm costs will be added later in the listener.
-                this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_COST_CENTS_KEY,
-                        String.valueOf(handle.getCostCents()));
+                this.toDoBeforeTransTermination(handle);
                 // rollback the transaction
                 this.transService.rollbackTrans(handle.getTransId());
             } catch (TransException e)
@@ -226,6 +215,22 @@ public class PixelsConnector implements Connector
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_HANDLE_TYPE_ERROR,
                     "the transaction handle is not an instance of PixelsTransactionHandle");
+        }
+    }
+
+    private void toDoBeforeTransTermination(PixelsTransactionHandle transHandle) throws TransException
+    {
+        // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
+        this.transService.setTransProperty(transHandle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
+                String.valueOf(transHandle.getScanBytes()));
+        // PIXELS-506: cost cents in the transaction handle is the amount of money spent on cf workers,
+        // vm costs will be added later in the listener.
+        this.transService.setTransProperty(transHandle.getTransId(), Constants.TRANS_CONTEXT_COST_CENTS_KEY,
+                String.valueOf(transHandle.getCostCents()));
+        if (transHandle.getExecutorType() == ExecutorType.CF)
+        {
+            // PIXELS-506: delete the states of serverless query execution.
+            StateManager.deleteAllStatesByPrefix(getOutputStateKeyPrefix(transHandle.getTransId()));
         }
     }
 

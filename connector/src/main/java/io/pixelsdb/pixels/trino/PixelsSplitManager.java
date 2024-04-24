@@ -80,7 +80,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
+import static io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.getOutputStateKeyPrefix;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -139,11 +139,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
         }
         return builder.build();
-    }
-
-    public static String getOutputStateKeyPrefix(long transId)
-    {
-        return CF_OUTPUT_STATE_KEY_PREFIX + "_" + transId + "_";
     }
 
     @Override

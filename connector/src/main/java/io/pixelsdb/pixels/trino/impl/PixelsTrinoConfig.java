@@ -34,6 +34,8 @@ import io.trino.spi.TrinoException;
 import javax.validation.constraints.NotNull;
 import java.io.IOException;
 
+import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
+
 /**
  * The configuration read from etc/catalog/pixels.properties.
  *
@@ -243,5 +245,10 @@ public class PixelsTrinoConfig
     public ConfigFactory getConfigFactory()
     {
         return this.configFactory;
+    }
+
+    public static String getOutputStateKeyPrefix(long transId)
+    {
+        return CF_OUTPUT_STATE_KEY_PREFIX + "_" + transId + "_";
     }
 }
