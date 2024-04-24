@@ -48,6 +48,10 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
      * This field is not serialized and is only used to calculate the scan size in the coordinator.
      */
     private final AtomicDouble scanBytes;
+    /**
+     * The cost spent on executing this transaction (query) if the query is executed in the cloud.
+     */
+    private final AtomicDouble costCents;
 
     /**
      * Create a transaction handle.
@@ -67,6 +71,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
         this.readOnly = readOnly;
         this.executorType = executorType;
         this.scanBytes = new AtomicDouble(0);
+        this.costCents = new AtomicDouble(0);
     }
 
     @JsonProperty
@@ -106,5 +111,15 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     public double getScanBytes()
     {
         return this.scanBytes.get();
+    }
+
+    public void addCostCents(double costCents)
+    {
+        this.costCents.addAndGet(costCents);
+    }
+
+    public double getCostCents()
+    {
+        return this.costCents.get();
     }
 }

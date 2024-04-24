@@ -26,6 +26,7 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.turbo.InvokerFactory;
 import io.pixelsdb.pixels.common.turbo.MetricsCollector;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
+import io.pixelsdb.pixels.planner.PixelsPlanner;
 import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfo;
 import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfoBuilder;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
@@ -33,6 +34,8 @@ import io.trino.spi.TrinoException;
 
 import javax.validation.constraints.NotNull;
 import java.io.IOException;
+
+import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
 
 /**
  * The configuration read from etc/catalog/pixels.properties.
@@ -56,7 +59,6 @@ public class PixelsTrinoConfig
 
     private CloudFunctionSwitch cloudFunctionSwitch = CloudFunctionSwitch.AUTO;
     private boolean cleanIntermediateResult = true;
-    private int localScanConcurrency = -1;
     /**
      * The storage info of the inputs of Pixels Turbo.
      */
@@ -159,22 +161,10 @@ public class PixelsTrinoConfig
         return this;
     }
 
-    @Config("local.scan.concurrency")
-    public PixelsTrinoConfig setLocalScanConcurrency(int concurrency)
-    {
-        this.localScanConcurrency = concurrency;
-        return this;
-    }
-
     @NotNull
     public PixelsTrinoConfig.CloudFunctionSwitch getCloudFunctionSwitch()
     {
         return cloudFunctionSwitch;
-    }
-
-    public int getLocalScanConcurrency()
-    {
-        return localScanConcurrency;
     }
 
     public boolean isCleanIntermediateResult()
@@ -245,7 +235,17 @@ public class PixelsTrinoConfig
         /* Must end with '/', otherwise it will not be considered
          * as a folder in S3-like storage.
          */
-        return this.outputFolder + transId + "/" +post + "/";
+        return this.outputFolder + transId + "/" + post + "/";
+    }
+
+    public String getIntermediateFolderForQuery(long transId)
+    {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use intermediate storage when cloud function is turned off"));
+        }
+        return PixelsPlanner.getIntermediateFolderForTrans(transId);
     }
 
     /**
@@ -256,5 +256,10 @@ public class PixelsTrinoConfig
     public ConfigFactory getConfigFactory()
     {
         return this.configFactory;
+    }
+
+    public static String getOutputStateKeyPrefix(long transId)
+    {
+        return CF_OUTPUT_STATE_KEY_PREFIX + "_" + transId + "_";
     }
 }

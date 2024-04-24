@@ -23,9 +23,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.pixelsdb.pixels.common.physical.Storage;
-import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
-import io.pixelsdb.pixels.planner.plan.logical.Table;
-import io.pixelsdb.pixels.planner.plan.physical.output.NonPartitionOutput;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
@@ -59,10 +56,8 @@ public class PixelsSplit implements ConnectorSplit
     private List<String> columnOrder;
     private List<String> cacheOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
-    private final Table.TableType tableType;
-    private final JoinAlgorithm joinAlgo;
-    private final String joinInput;
-    private final String aggrInput;
+    private boolean fromServerlessOutput;
+    private final boolean readSynthColumns;
 
     @JsonCreator
     public PixelsSplit(
@@ -81,10 +76,8 @@ public class PixelsSplit implements ConnectorSplit
             @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("tableType") Table.TableType tableType,
-            @JsonProperty("joinAlgo") JoinAlgorithm joinAlgo,
-            @JsonProperty("joinInput") String joinInput,
-            @JsonProperty("aggrInput") String aggrInput) {
+            @JsonProperty("fromServerlessOutput") boolean fromServerlessOutput,
+            @JsonProperty("readSynthColumns") boolean readSynthColumns) {
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
@@ -106,37 +99,25 @@ public class PixelsSplit implements ConnectorSplit
         this.columnOrder = requireNonNull(columnOrder, "order is null");
         this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
-        this.tableType = requireNonNull(tableType, "tableType is null");
-        if (tableType == Table.TableType.JOINED)
-        {
-            this.joinAlgo = requireNonNull(joinAlgo, "joinAlgorithm is null");
-            this.joinInput = requireNonNull(joinInput, "joinInput is null");
-        }
-        else
-        {
-            this.joinAlgo = null;
-            this.joinInput = null;
-        }
-        this.aggrInput = aggrInput;
+        this.fromServerlessOutput = fromServerlessOutput;
+        this.readSynthColumns = readSynthColumns;
     }
 
     /**
-     * Permute the original file information with the information of the
-     * intermediate files produced by serverless.
+     * Update this splits for the immediate output of a serverless worker.
      * @param scheme the storage scheme of intermediate files
-     * @param lambdaOutput the output of serverless
+     * @param outputPaths the output of the serverless worker
      */
-    public void permute(Storage.Scheme scheme, NonPartitionOutput lambdaOutput)
+    public void updateForServerlessOutput(Storage.Scheme scheme, List<String> outputPaths)
     {
         requireNonNull(scheme, "scheme is null");
-        requireNonNull(lambdaOutput, "scanOutput is null");
-        requireNonNull(lambdaOutput.getOutputs(), "scanOutput.outputs is null");
-        requireNonNull(lambdaOutput.getRowGroupNums(), "scanOutput.rowGroupNums is null");
+        requireNonNull(outputPaths, "outputPaths is null");
         this.storageScheme = scheme.name();
-        this.paths = lambdaOutput.getOutputs();
-        this.rgStarts = Collections.nCopies(lambdaOutput.getOutputs().size(), 0);
-        this.rgLengths = lambdaOutput.getRowGroupNums();
+        this.paths = outputPaths;
+        this.rgStarts = Collections.nCopies(outputPaths.size(), 0);
+        this.rgLengths = Collections.nCopies(outputPaths.size(), -1);
         this.cached = false;
+        this.fromServerlessOutput = true;
         if (!this.columnOrder.isEmpty())
             this.columnOrder = ImmutableList.of();
         if (!this.cacheOrder.isEmpty())
@@ -276,27 +257,15 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     @JsonProperty
-    public Table.TableType getTableType()
+    public boolean getFromServerlessOutput()
     {
-        return tableType;
+        return fromServerlessOutput;
     }
 
     @JsonProperty
-    public JoinAlgorithm getJoinAlgo()
+    public boolean getReadSynthColumns()
     {
-        return joinAlgo;
-    }
-
-    @JsonProperty
-    public String getJoinInput()
-    {
-        return joinInput;
-    }
-
-    @JsonProperty
-    public String getAggrInput()
-    {
-        return aggrInput;
+        return readSynthColumns;
     }
 
     @Override

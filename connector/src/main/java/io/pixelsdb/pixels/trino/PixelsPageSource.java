@@ -19,11 +19,14 @@
  */
 package io.pixelsdb.pixels.trino;
 
+import com.alibaba.fastjson.JSON;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
+import io.pixelsdb.pixels.common.state.StateWatcher;
+import io.pixelsdb.pixels.common.turbo.SimpleOutput;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.core.PixelsReader;
 import io.pixelsdb.pixels.core.PixelsReaderImpl;
@@ -34,7 +37,6 @@ import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
 import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.*;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
-import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
@@ -53,7 +55,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
@@ -76,7 +77,6 @@ class PixelsPageSource implements ConnectorPageSource
     private PixelsRecordReader recordReader;
     private final PixelsCacheReader cacheReader;
     private final PixelsFooterCache footerCache;
-    private final AtomicInteger localSplitCounter;
     private final CompletableFuture<?> blocked;
     private final int numColumnToRead;
     private final Optional<TableScanFilter> filter;
@@ -91,8 +91,7 @@ class PixelsPageSource implements ConnectorPageSource
 
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles,
                             Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
-                            PixelsFooterCache pixelsFooterCache, CompletableFuture<?> lambdaOutput,
-                            AtomicInteger localSplitCounter)
+                            PixelsFooterCache pixelsFooterCache)
     {
         this.split = split;
         this.storage = storage;
@@ -100,19 +99,18 @@ class PixelsPageSource implements ConnectorPageSource
         this.includeCols =  new String[columns.size()];
         for (int i = 0; i < includeCols.length; ++i)
         {
-            if (split.getTableType() == Table.TableType.BASE)
-            {
-                includeCols[i] = columns.get(i).getColumnName();
-            }
-            else
+            if (split.getReadSynthColumns())
             {
                 // Use the synthetic column name to access the join or aggregation result.
                 includeCols[i] = columns.get(i).getSynthColumnName();
             }
+            else
+            {
+                includeCols[i] = columns.get(i).getColumnName();
+            }
         }
         this.numColumnToRead = columnHandles.size();
         this.footerCache = pixelsFooterCache;
-        this.localSplitCounter = localSplitCounter;
         this.batchId = 0;
         this.closed = false;
         this.BatchSize = PixelsTrinoConfig.getBatchSize();
@@ -125,51 +123,44 @@ class PixelsPageSource implements ConnectorPageSource
                 .setIndexFile(indexFile)
                 .build();
 
-        if (lambdaOutput == null)
+        if (this.split.getFromServerlessOutput())
+        {
+            this.filter = Optional.empty();
+            this.blocked = new CompletableFuture<>();
+            String stateKey = PixelsTrinoConfig.getOutputStateKeyPrefix(split.getTransId()) + split.getSplitId();
+            StateWatcher stateWatcher = new StateWatcher(stateKey);
+            stateWatcher.onStateUpdateOrExist((key, value) -> {
+                SimpleOutput simpleOutput = requireNonNull(
+                        JSON.parseObject(value, SimpleOutput.class), "output is null");
+                if (!simpleOutput.isSuccessful())
+                {
+                    this.blocked.cancel(true);
+                    throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_EXECUTION_CF_ERROR,
+                            "cloud function request " + simpleOutput.getRequestId() +
+                                    " returns error. transaction id: " + split.getTransId() +
+                                    ", error message: " + simpleOutput.getErrorMessage());
+                } else
+                {
+                    readFirstPath();
+                    this.blocked.complete(null);
+                    logger.debug("cloud function request " + simpleOutput.getRequestId() + " is successful");
+                }
+            });
+        }
+        else
         {
             if (split.getConstraint().getDomains().isPresent())
             {
                 TableScanFilter scanFilter = PixelsSplitManager.createTableScanFilter(
-                    split.getSchemaName(), split.getTableName(),
-                    includeCols, split.getConstraint());
+                        split.getSchemaName(), split.getTableName(),
+                        includeCols, split.getConstraint());
                 this.filter = Optional.of(scanFilter);
-            }
-            else
+            } else
             {
                 this.filter = Optional.empty();
             }
             readFirstPath();
             this.blocked = NOT_BLOCKED;
-        }
-        else
-        {
-            /* If lambda (cloud function) is used, all filters have been pushed down,
-             * no need to do filtering here.
-             */
-            this.filter = Optional.empty();
-            this.blocked = lambdaOutput.whenComplete(((ret, err) -> {
-                if (err != null)
-                {
-                    logger.error(err);
-                    throw new RuntimeException(err);
-                }
-                try
-                {
-                    readFirstPath();
-                }
-                catch (Exception e)
-                {
-                    logger.error(e, "error in lambda output read.");
-                    throw new RuntimeException(e);
-                }
-            }));
-            if (this.blocked.isDone() && !this.blocked.isCancelled() &&
-                    !this.blocked.isCompletedExceptionally() &&
-                    !this.closed && this.recordReader == null)
-            {
-                // this.blocked is complete normally before reaching here.
-                readFirstPath();
-            }
         }
     }
 
@@ -352,12 +343,9 @@ class PixelsPageSource implements ConnectorPageSource
         {
             return null;
         }
-        if (this.blocked.isCancelled() || this.blocked.isCompletedExceptionally())
+        if (this.blocked.isCancelled())
         {
             this.close();
-            throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
-                    "lambda request is done exceptionally: " +
-                            this.blocked.isCompletedExceptionally());
         }
 
         if (this.closed)
@@ -451,11 +439,6 @@ class PixelsPageSource implements ConnectorPageSource
         closed = true;
 
         closeReader();
-
-        if (this.localSplitCounter != null)
-        {
-            this.localSplitCounter.decrementAndGet();
-        }
     }
 
     /**

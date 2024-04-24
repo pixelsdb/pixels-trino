@@ -23,11 +23,11 @@ import io.airlift.bootstrap.LifeCycleManager;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.QueryScheduleException;
 import io.pixelsdb.pixels.common.exception.TransException;
+import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.QueryScheduleService;
-import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -42,6 +42,7 @@ import javax.inject.Inject;
 import java.util.List;
 import java.util.Optional;
 
+import static io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.getOutputStateKeyPrefix;
 import static java.util.Objects.requireNonNull;
 
 public class PixelsConnector implements Connector
@@ -155,9 +156,8 @@ public class PixelsConnector implements Connector
             PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             try
             {
-                // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
-                this.transService.setTransProperty(handle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
-                        String.valueOf(handle.getScanBytes()));
+                this.toDoBeforeTransTermination(handle);
+                // commit the transaction
                 this.transService.commitTrans(handle.getTransId(), handle.getTimestamp());
             } catch (TransException e)
             {
@@ -186,18 +186,19 @@ public class PixelsConnector implements Connector
     @Override
     public void rollback(ConnectorTransactionHandle transactionHandle)
     {
-        if (transactionHandle instanceof PixelsTransactionHandle)
+        if (transactionHandle instanceof PixelsTransactionHandle handle)
         {
-            PixelsTransactionHandle handle = (PixelsTransactionHandle) transactionHandle;
             try
             {
+                this.toDoBeforeTransTermination(handle);
+                // rollback the transaction
                 this.transService.rollbackTrans(handle.getTransId());
             } catch (TransException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
             }
 
-            // finish the query after commit rollback
+            // finish the query after rollback transaction
             if (config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.AUTO ||
                     config.getCloudFunctionSwitch() == PixelsTrinoConfig.CloudFunctionSwitch.SESSION)
             {
@@ -216,12 +217,28 @@ public class PixelsConnector implements Connector
         }
     }
 
+    private void toDoBeforeTransTermination(PixelsTransactionHandle transHandle) throws TransException
+    {
+        /* PIXELS-506: update the scan bytes and the cost cents in transaction context, they will be
+         * used for the calculation of billed cents. Cost cents in the transaction handle is the
+         * amount of money spent on cf workers, vm costs will be added later in the listener.
+         */
+        this.transService.updateQueryCosts(transHandle.getTransId(),
+                transHandle.getScanBytes(), transHandle.getCostCents());
+        if (transHandle.getExecutorType() == ExecutorType.CF)
+        {
+            // PIXELS-506: delete the states of serverless query execution.
+            StateManager.deleteAllStatesByPrefix(getOutputStateKeyPrefix(transHandle.getTransId()));
+        }
+    }
+
     private void cleanIntermediatePathForQuery(long transId)
     {
         try
         {
             if (config.isCleanIntermediateResult())
             {
+                IntermediateFileCleaner.Instance().asyncDelete(config.getIntermediateFolderForQuery(transId));
                 IntermediateFileCleaner.Instance().asyncDelete(config.getOutputFolderForQuery(transId));
             }
         } catch (InterruptedException e)
