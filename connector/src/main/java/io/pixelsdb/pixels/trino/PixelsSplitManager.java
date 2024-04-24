@@ -231,7 +231,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             // The table type is joined, means cloud function has been enabled.
             JoinedTable root = parseJoinPlan(transHandle.getTransId(), tableHandle);
-            // logger.debug("join plan: " + JSON.toJSONString(root));
 
             try
             {
@@ -241,8 +240,27 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 PixelsPlanner planner = new PixelsPlanner(
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
                         Optional.of(this.metadataProxy.getMetadataService()));
-                // Ensure multi-pipeline join is supported.
+
                 JoinOperator joinOperator = (JoinOperator) planner.getRootOperator();
+                List<JoinInput> joinInputs = joinOperator.getJoinInputs();
+                // Build the splits of the join result.
+                ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                for (JoinInput joinInput : joinInputs)
+                {
+                    MultiOutputInfo output = joinInput.getOutput();
+                    output.setStorageInfo(config.getOutputStorageInfo());
+                    output.setPath(config.getOutputFolderForQuery(transHandle.getTransId(),
+                            tableHandle.getSchemaName() + "/" + tableHandle.getTableName()));
+                    joinInput.setOutput(output);
+                    PixelsSplit split = new PixelsSplit(
+                            transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
+                            config.getOutputStorageScheme().name(), MultiOutputInfo.generateOutputPaths(output),
+                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
+                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
+                            false, false, Arrays.asList(address), columnOrder,
+                            cacheOrder, emptyConstraint, true, true);
+                    splitsBuilder.add(split);
+                }
                 // logger.debug("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.execute().thenAccept(joinOutputs -> {
                     for (int i = 0; i < joinOutputs.length; ++i)
@@ -280,20 +298,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 // PIXELS-506: add the scan size of the sub-plan.
                 transHandle.addScanBytes(planner.getScanSize());
 
-                // Build the splits of the join result.
-                ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
-                List<JoinInput> joinInputs = joinOperator.getJoinInputs();
-                for (JoinInput joinInput : joinInputs)
-                {
-                    PixelsSplit split = new PixelsSplit(
-                            transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
-                            config.getOutputStorageScheme().name(), MultiOutputInfo.generateOutputPaths(joinInput.getOutput()),
-                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
-                            Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
-                            false, false, Arrays.asList(address), columnOrder,
-                            cacheOrder, emptyConstraint, true, true);
-                    splitsBuilder.add(split);
-                }
                 return new PixelsSplitSource(splitsBuilder.build());
             } catch (IOException | MetadataException e)
             {
@@ -303,7 +307,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         else if (tableHandle.getTableType() == TableType.AGGREGATED)
         {
             AggregatedTable root = parseAggregatePlan(transHandle.getTransId(), tableHandle);
-            // logger.debug("aggregation plan: " + JSON.toJSONString(root));
+
             try
             {
                 boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
@@ -313,6 +317,24 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
                         Optional.of(this.metadataProxy.getMetadataService()));
                 AggregationOperator aggrOperator = (AggregationOperator) planner.getRootOperator();
+                List<AggregationInput> aggrInputs = aggrOperator.getFinalAggrInputs();
+                // Build the split of the aggregation result.
+                ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                for (AggregationInput aggrInput : aggrInputs)
+                {
+                    OutputInfo output = aggrInput.getOutput();
+                    output.setStorageInfo(config.getOutputStorageInfo());
+                    output.setPath(config.getOutputFolderForQuery(transHandle.getTransId(),
+                            output.getPath().substring(output.getPath().indexOf(tableHandle.getSchemaName()))));
+                    aggrInput.setOutput(output);
+                    PixelsSplit split = new PixelsSplit(
+                            transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
+                            config.getOutputStorageScheme().name(), ImmutableList.of(output.getPath()), ImmutableList.of(0),
+                            ImmutableList.of(-1), false, false, Arrays.asList(address), columnOrder,
+                            cacheOrder, emptyConstraint, true, true);
+                    splitsBuilder.add(split);
+                }
+
                 // logger.debug("aggregation operator: " + JSON.toJSONString(aggrOperator));
                 aggrOperator.execute().thenAccept(aggrOutputs -> {
                     for (int i = 0; i < aggrOutputs.length; ++i)
@@ -350,18 +372,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 // PIXELS-506: add the scan size of the sub-plan.
                 transHandle.addScanBytes(planner.getScanSize());
 
-                // Build the split of the aggregation result.
-                List<AggregationInput> aggrInputs = aggrOperator.getFinalAggrInputs();
-                ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
-                for (AggregationInput aggrInput : aggrInputs)
-                {
-                    PixelsSplit split = new PixelsSplit(
-                            transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
-                            config.getOutputStorageScheme().name(), ImmutableList.of(aggrInput.getOutput().getPath()),
-                            ImmutableList.of(0), ImmutableList.of(-1), false, false, Arrays.asList(address),
-                            columnOrder, cacheOrder, emptyConstraint, true, true);
-                    splitsBuilder.add(split);
-                }
                 return new PixelsSplitSource(splitsBuilder.build());
             } catch (IOException | MetadataException e)
             {
