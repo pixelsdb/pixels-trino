@@ -28,7 +28,6 @@ import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.QueryScheduleService;
-import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -220,13 +219,12 @@ public class PixelsConnector implements Connector
 
     private void toDoBeforeTransTermination(PixelsTransactionHandle transHandle) throws TransException
     {
-        // PIXELS-506: set scan bytes in transaction context, it will be used for the calculation of billed cents.
-        this.transService.setTransProperty(transHandle.getTransId(), Constants.TRANS_CONTEXT_SCAN_BYTES_KEY,
-                String.valueOf(transHandle.getScanBytes()));
-        // PIXELS-506: cost cents in the transaction handle is the amount of money spent on cf workers,
-        // vm costs will be added later in the listener.
-        this.transService.setTransProperty(transHandle.getTransId(), Constants.TRANS_CONTEXT_COST_CENTS_KEY,
-                String.valueOf(transHandle.getCostCents()));
+        /* PIXELS-506: update the scan bytes and the cost cents in transaction context, they will be
+         * used for the calculation of billed cents. Cost cents in the transaction handle is the
+         * amount of money spent on cf workers, vm costs will be added later in the listener.
+         */
+        this.transService.updateQueryCosts(transHandle.getTransId(),
+                transHandle.getScanBytes(), transHandle.getCostCents());
         if (transHandle.getExecutorType() == ExecutorType.CF)
         {
             // PIXELS-506: delete the states of serverless query execution.
