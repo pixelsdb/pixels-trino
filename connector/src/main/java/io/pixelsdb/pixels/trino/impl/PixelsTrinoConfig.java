@@ -212,6 +212,12 @@ public class PixelsTrinoConfig
         return outputStorageScheme;
     }
 
+    /**
+     * Get the output folder path for a transaction (query). It will end with
+     * a slash '/', hence there is no need to add a slash manually.
+     * @param transId the transaction id of the query
+     * @return the output folder, it has a slash '/' at the end
+     */
     public String getOutputFolderForQuery(long transId)
     {
         if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
@@ -225,6 +231,13 @@ public class PixelsTrinoConfig
         return this.outputFolder + transId + "/";
     }
 
+    /**
+     * Get the output folder path for a transaction (query). It will end with
+     * a slash '/', hence there is no need to add a slash manually.
+     * @param transId the transaction id of the query
+     * @param post the postfix to be appended to the end of the folder path
+     * @return the output folder, it has a slash '/' at the end
+     */
     public String getOutputFolderForQuery(long transId, String post)
     {
         if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
@@ -235,9 +248,19 @@ public class PixelsTrinoConfig
         /* Must end with '/', otherwise it will not be considered
          * as a folder in S3-like storage.
          */
-        return this.outputFolder + transId + "/" + post + "/";
+        if (!post.endsWith("/"))
+        {
+            post += "/";
+        }
+        return this.outputFolder + transId + (post.startsWith("/") ? "" : "/") + post;
     }
 
+    /**
+     * Get the intermediate folder for a transaction (query). It will end with
+     * a slash '/', hence there is no need to add a slash manually.
+     * @param transId the transaction id of the query
+     * @return the output folder, it has a slash '/' at the end
+     */
     public String getIntermediateFolderForQuery(long transId)
     {
         if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
@@ -250,7 +273,7 @@ public class PixelsTrinoConfig
 
     /**
      * Injected class should get ConfigFactory instance by this method instead of ConfigFactory.Instance().
-     * @return
+     * @return the configuration factory instance
      */
     @NotNull
     public ConfigFactory getConfigFactory()
