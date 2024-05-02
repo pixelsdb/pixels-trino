@@ -123,7 +123,7 @@ class PixelsPageSource implements ConnectorPageSource
                 .setIndexFile(indexFile)
                 .build();
 
-        if (this.split.getFromServerlessOutput())
+        if (split.getFromServerlessOutput())
         {
             this.filter = Optional.empty();
             this.blocked = new CompletableFuture<>();
@@ -141,6 +141,8 @@ class PixelsPageSource implements ConnectorPageSource
                                     ", error message: " + simpleOutput.getErrorMessage());
                 } else
                 {
+                    // PIXELS-643： trim the output paths for the last few scan workers.
+                    split.trimForServerlessOutput(simpleOutput.getNumOutputs());
                     readFirstPath();
                     this.blocked.complete(null);
                     logger.debug("cloud function request " + simpleOutput.getRequestId() + " is successful");

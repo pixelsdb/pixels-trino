@@ -37,8 +37,6 @@ import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
-import io.pixelsdb.pixels.common.turbo.InvokerFactory;
-import io.pixelsdb.pixels.common.turbo.WorkerType;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -56,6 +54,7 @@ import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
 import io.pixelsdb.pixels.planner.plan.physical.AggregationOperator;
 import io.pixelsdb.pixels.planner.plan.physical.JoinOperator;
 import io.pixelsdb.pixels.planner.plan.physical.Operator;
+import io.pixelsdb.pixels.planner.plan.physical.ScanOperator;
 import io.pixelsdb.pixels.planner.plan.physical.domain.*;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
@@ -151,12 +150,25 @@ public class PixelsSplitManager implements ConnectorSplitManager
         PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
         String stateKeyPrefix = getOutputStateKeyPrefix(transHandle.getTransId());
+        List<String> columnOrder = ImmutableList.of();
+        List<String> cacheOrder = ImmutableList.of();
+        // The address is not used to dispatch Pixels splits, so we use set it the localhost.
+        HostAddress address = HostAddress.fromString("localhost:8080");
+        TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
+                columnHandle -> (PixelsColumnHandle) columnHandle);
+        long splitId = 0;
+        /*
+         * Start building splits.
+         *
+         * Do not directly use the column names returned by root.getColumnNames().
+         * Because Trino assumes the join result remains the same column order as
+         * tableHandle.getColumns(), but root.getColumnNames() might not follow this order.
+         */
         if (tableHandle.getTableType() == TableType.BASE)
         {
             List<PixelsSplit> pixelsSplits;
             try
             {
-                pixelsSplits = getScanSplits(transHandle, session, tableHandle);
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(tableHandle);
                 if (transHandle.getExecutorType() == ExecutorType.CF
                         /**
@@ -167,62 +179,85 @@ public class PixelsSplitManager implements ConnectorSplitManager
                          */
                         && !withFilterColumns.isEmpty())
                 {
-                    for (PixelsSplit inputSplit : pixelsSplits)
+                    boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
+                    boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
+                    BaseTable root = this.parseBaseTable(tableHandle);
+                    PixelsPlanner planner = new PixelsPlanner(
+                            transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
+                            Optional.of(this.metadataProxy.getMetadataService()));
+
+                    ScanOperator scanOperator = (ScanOperator) planner.getRootOperator();
+                    List<ScanInput> scanInputs = scanOperator.getScanInputs();
+                    // Build the splits of the scan result.
+                    ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
+                    for (ScanInput scanInput : scanInputs)
                     {
-                        ScanInput scanInput = getScanInput(inputSplit, tableHandle.getColumns(), withFilterColumns);
-                        InvokerFactory.Instance().getInvoker(WorkerType.SCAN)
-                                .invoke(scanInput).whenComplete(((scanOutput, err) -> {
-                                    if (err != null)
-                                    {
-                                        logger.error(err, "failed to execute table scan using pixels-turbo");
-                                        throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
-                                                "failed to execute table scan using pixels-turbo");
-                                    }
-                                    logger.debug("scan output: " + scanOutput);
-                                    transHandle.addCostCents(1.66667e-6 * scanOutput.getGBMs());
-                                    transHandle.addCostCents(4e-5 * scanOutput.getNumReadRequests());
-                                    transHandle.addCostCents(5e-4 * scanOutput.getNumWriteRequests());
-                                    // PIXELS-506: set the state for the output of a scan task executed in cloud function.
-                                    StateManager stateManager = new StateManager(
-                                            stateKeyPrefix + inputSplit.getSplitId());
-                                    stateManager.setState(JSON.toJSONString(scanOutput.toSimpleOutput()));
-                                }));
-                        inputSplit.updateForServerlessOutput(
-                                config.getOutputStorageScheme(), ScanInput.generateOutputPaths(scanInput));
+                        String folder = config.getOutputFolderForQuery(scanInput.getTransId(),
+                                tableHandle.getSchemaName() + "/" + tableHandle.getTableName() + "/" + splitId);
+                        OutputInfo outputInfo = new OutputInfo(folder, config.getOutputStorageInfo(), true);
+                        scanInput.setOutput(outputInfo);
+                        List<String> outputPaths = ScanInput.generateOutputPaths(scanInput);
+                        PixelsSplit split = new PixelsSplit(transHandle.getTransId(), splitId++, connectorId,
+                                root.getSchemaName(), root.getTableName(), config.getOutputStorageScheme().name(), outputPaths,
+                                Collections.nCopies(outputPaths.size(), 0), Collections.nCopies(outputPaths.size(), -1),
+                                false, false, Arrays.asList(address), columnOrder, cacheOrder,
+                                // we do not use synthetic columns for scan operator
+                                emptyConstraint, true, false);
+                        splitsBuilder.add(split);
                     }
+                    // logger.debug("scan operator: " + JSON.toJSONString(scanOperator));
+                    scanOperator.execute().thenAccept(scanOutputs -> {
+                        for (int i = 0; i < scanOutputs.length; ++i)
+                        {
+                            int finalI = i;
+                            scanOutputs[i].thenAccept(scanOutput -> {
+                                // PIXELS-506: set the state for the output of a scan task executed in cloud function.
+                                StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
+                                stateManager.setState(JSON.toJSONString(scanOutput.toSimpleOutput()));
+                            });
+                        }
+
+                        try
+                        {
+                            /* PIXELS-506: as execute() is called instead of executePrev(), we can get the complete
+                             * outputCollection that contains the full costs by calling collectOutputs().
+                             */
+                            ScanOperator.ScanOutputCollection outputCollection = scanOperator.collectOutputs();
+                            SerializerFeature[] features = new SerializerFeature[]{SerializerFeature.WriteClassName};
+                            String json = JSON.toJSONString(outputCollection, features);
+                            logger.debug("scan outputs: " + json);
+                            // PIXELS-506 TODO: calculate the cost cents using a general cost model.
+                            transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
+                            transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
+                            transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
+                        } catch (Exception e)
+                        {
+                            logger.error(e, "failed to execute the scan operator using pixels-turbo");
+                            throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                                    "failed to execute the scan operator using pixels-turbo");
+                        }
+                    });
+                    logger.debug("invoke " + scanOperator.getName());
+
+                    // PIXELS-506: add the scan size of the sub-plan.
+                    transHandle.addScanBytes(planner.getScanSize());
+
+                    pixelsSplits = splitsBuilder.build();
+                } else
+                {
+                    pixelsSplits = getScanSplits(transHandle, session, tableHandle);
+                    Collections.shuffle(pixelsSplits);
                 }
-            } catch (MetadataException e)
+            } catch (MetadataException | IOException e)
             {
                 logger.error(e, "failed to get scan splits");
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "failed to get scan splits", e);
             }
-            Collections.shuffle(pixelsSplits);
+
             return new PixelsSplitSource(pixelsSplits);
         }
-
-        /*
-         * Start building Join or Aggregation splits.
-         *
-         * Do not directly use the column names from the root joined table like this:
-         * String[] includeCols = root.getColumnNames();
-         * Because Trino assumes the join result remains the same column order as
-         * tableHandle.getColumns(), but root.getColumnNames() might not follow this order.
-         */
-        String[] includeCols = new String[tableHandle.getColumns().size()];
-        for (int i = 0; i < tableHandle.getColumns().size(); ++i)
-        {
-            // Use the synthetic column name to access the join result.
-            includeCols[i] = tableHandle.getColumns().get(i).getSynthColumnName();
-        }
-        List<String> columnOrder = ImmutableList.of();
-        List<String> cacheOrder = ImmutableList.of();
-        // The address is not used to dispatch Pixels splits, so we use set it the localhost.
-        HostAddress address = HostAddress.fromString("localhost:8080");
-        TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
-                columnHandle -> (PixelsColumnHandle) columnHandle);
-        long splitId = 0;
-        if (tableHandle.getTableType() == TableType.JOINED)
+        else if (tableHandle.getTableType() == TableType.JOINED)
         {
             // The table type is joined, means cloud function has been enabled.
             JoinedTable root = parseJoinPlan(transHandle.getTransId(), tableHandle);
@@ -335,10 +370,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     for (int i = 0; i < aggrOutputs.length; ++i)
                     {
                         int finalI = i;
-                        aggrOutputs[i].thenAccept(joinOutput -> {
+                        aggrOutputs[i].thenAccept(aggrOutput -> {
                             // PIXELS-506: set the state for the output of an aggregation task executed in cloud function.
                             StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
-                            stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
+                            stateManager.setState(JSON.toJSONString(aggrOutput.toSimpleOutput()));
                         });
                     }
 
@@ -377,41 +412,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type is not supported");
         }
-    }
-
-    private ScanInput getScanInput(PixelsSplit inputSplit, List<PixelsColumnHandle> tableColumns,
-                                                     List<PixelsColumnHandle> withFilterColumns)
-    {
-        checkArgument(Storage.Scheme.from(inputSplit.getStorageScheme()).equals(config.getInputStorageScheme()), String.format(
-                "the storage scheme of table '%s.%s' is not consistent with the input storage scheme for Pixels Turbo",
-                inputSplit.getSchemaName(), inputSplit.getTableName()));
-        String[] columnsToRead = new String[withFilterColumns.size()];
-        boolean[] projection = new boolean[withFilterColumns.size()];
-        int projectionSize = tableColumns.size();
-        for (int i = 0; i < columnsToRead.length; ++i)
-        {
-            columnsToRead[i] = withFilterColumns.get(i).getColumnName();
-            projection[i] = i < projectionSize;
-        }
-        ScanInput scanInput = new ScanInput();
-        scanInput.setTransId(inputSplit.getTransId());
-        scanInput.setOperatorName("scan_" + inputSplit.getTableName());
-        ScanTableInfo tableInfo = new ScanTableInfo();
-        tableInfo.setTableName(inputSplit.getTableName());
-        tableInfo.setColumnsToRead(columnsToRead);
-        Pair<Integer, InputSplit> inputSplitPair = getInputSplit(inputSplit);
-        tableInfo.setInputSplits(Arrays.asList(inputSplitPair.getRight()));
-        TableScanFilter filter = createTableScanFilter(inputSplit.getSchemaName(),
-                inputSplit.getTableName(), columnsToRead, inputSplit.getConstraint());
-        tableInfo.setFilter(JSON.toJSONString(filter));
-        tableInfo.setBase(true);
-        tableInfo.setStorageInfo(config.getInputStorageInfo());
-        scanInput.setTableInfo(tableInfo);
-        scanInput.setScanProjection(projection);
-        String folder = config.getOutputFolderForQuery(inputSplit.getTransId(), inputSplit.getSplitId() + "/");
-        OutputInfo outputInfo = new OutputInfo(folder, config.getOutputStorageInfo(), true);
-        scanInput.setOutput(outputInfo);
-        return scanInput;
     }
 
     /**

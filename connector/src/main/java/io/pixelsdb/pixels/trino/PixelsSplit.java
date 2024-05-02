@@ -22,12 +22,10 @@ package io.pixelsdb.pixels.trino;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
-import io.pixelsdb.pixels.common.physical.Storage;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -104,24 +102,19 @@ public class PixelsSplit implements ConnectorSplit
     }
 
     /**
-     * Update this splits for the immediate output of a serverless worker.
-     * @param scheme the storage scheme of intermediate files
-     * @param outputPaths the output of the serverless worker
+     * Trim the paths in this split for the output of a serverless worker. The paths in a split is generated before
+     * the execution of the query, so we can not ensure the actual number of files written by each serverless worker.
+     * The serverless worker may write fewer files than expected (this is possible for scan workers). But it will
+     * always use the first n paths in the split for the output files, thus we can simply trim the paths in the split
+     * by the number of files written by the serverless worker.
+     * @param numOutputs the number of output paths (files) that are actually written by the serverless worker
      */
-    public void updateForServerlessOutput(Storage.Scheme scheme, List<String> outputPaths)
+    public void trimForServerlessOutput(int numOutputs)
     {
-        requireNonNull(scheme, "scheme is null");
-        requireNonNull(outputPaths, "outputPaths is null");
-        this.storageScheme = scheme.name();
-        this.paths = outputPaths;
-        this.rgStarts = Collections.nCopies(outputPaths.size(), 0);
-        this.rgLengths = Collections.nCopies(outputPaths.size(), -1);
-        this.cached = false;
-        this.fromServerlessOutput = true;
-        if (!this.columnOrder.isEmpty())
-            this.columnOrder = ImmutableList.of();
-        if (!this.cacheOrder.isEmpty())
-            this.cacheOrder = ImmutableList.of();
+        checkArgument(numOutputs >= 0, "numOutputs is negative");
+        this.paths = this.paths.subList(0, numOutputs);
+        this.rgStarts = this.rgStarts.subList(0, numOutputs);
+        this.rgLengths = this.rgLengths.subList(0, numOutputs);
     }
 
     @JsonProperty
