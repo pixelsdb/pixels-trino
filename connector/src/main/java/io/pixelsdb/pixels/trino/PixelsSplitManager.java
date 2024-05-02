@@ -370,10 +370,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     for (int i = 0; i < aggrOutputs.length; ++i)
                     {
                         int finalI = i;
-                        aggrOutputs[i].thenAccept(joinOutput -> {
+                        aggrOutputs[i].thenAccept(aggrOutput -> {
                             // PIXELS-506: set the state for the output of an aggregation task executed in cloud function.
                             StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
-                            stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
+                            stateManager.setState(JSON.toJSONString(aggrOutput.toSimpleOutput()));
                         });
                     }
 
