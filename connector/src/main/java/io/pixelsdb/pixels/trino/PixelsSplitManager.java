@@ -246,6 +246,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 } else
                 {
                     pixelsSplits = getScanSplits(transHandle, session, tableHandle);
+                    Collections.shuffle(pixelsSplits);
                 }
             } catch (MetadataException | IOException e)
             {
@@ -253,7 +254,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "failed to get scan splits", e);
             }
-            Collections.shuffle(pixelsSplits);
+
             return new PixelsSplitSource(pixelsSplits);
         }
         else if (tableHandle.getTableType() == TableType.JOINED)
