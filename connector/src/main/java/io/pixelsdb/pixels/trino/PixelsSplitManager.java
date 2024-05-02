@@ -201,7 +201,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 root.getSchemaName(), root.getTableName(), config.getOutputStorageScheme().name(), outputPaths,
                                 Collections.nCopies(outputPaths.size(), 0), Collections.nCopies(outputPaths.size(), -1),
                                 false, false, Arrays.asList(address), columnOrder, cacheOrder,
-                                emptyConstraint, true, true);
+                                // we do not use synthetic columns for scan operator
+                                emptyConstraint, true, false);
                         splitsBuilder.add(split);
                     }
                     // logger.debug("scan operator: " + JSON.toJSONString(scanOperator));
