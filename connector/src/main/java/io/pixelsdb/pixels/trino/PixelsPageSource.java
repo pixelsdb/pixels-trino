@@ -127,7 +127,8 @@ class PixelsPageSource implements ConnectorPageSource
         {
             this.filter = Optional.empty();
             this.blocked = new CompletableFuture<>();
-            String stateKey = PixelsTrinoConfig.getOutputStateKeyPrefix(split.getTransId()) + split.getSplitId();
+            String stateKey = PixelsTrinoConfig.getOutputStateKeyPrefix(
+                    split.getTransId(), Optional.of(split.getSchemaTableName())) + split.getSplitId();
             StateWatcher stateWatcher = new StateWatcher(stateKey);
             stateWatcher.onStateUpdateOrExist((key, value) -> {
                 SimpleOutput simpleOutput = requireNonNull(

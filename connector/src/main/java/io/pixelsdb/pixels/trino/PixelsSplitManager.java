@@ -149,7 +149,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
-        String stateKeyPrefix = getOutputStateKeyPrefix(transHandle.getTransId());
+        String stateKeyPrefix = getOutputStateKeyPrefix(transHandle.getTransId(), Optional.of(tableHandle.getSchemaTableName()));
         List<String> columnOrder = ImmutableList.of();
         List<String> cacheOrder = ImmutableList.of();
         // The address is not used to dispatch Pixels splits, so we use set it the localhost.
