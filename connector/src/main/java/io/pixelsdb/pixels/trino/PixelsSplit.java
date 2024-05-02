@@ -24,6 +24,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.ConnectorSplit;
+import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.predicate.TupleDomain;
 
 import java.util.List;
@@ -224,6 +225,11 @@ public class PixelsSplit implements ConnectorSplit
     public int getRgLength()
     {
         return this.rgLengths.get(pathIndex);
+    }
+
+    public SchemaTableName getSchemaTableName()
+    {
+        return new SchemaTableName(this.schemaName, this.tableName);
     }
 
     @JsonProperty

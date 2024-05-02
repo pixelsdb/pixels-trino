@@ -31,9 +31,11 @@ import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfo;
 import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfoBuilder;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
+import io.trino.spi.connector.SchemaTableName;
 
 import javax.validation.constraints.NotNull;
 import java.io.IOException;
+import java.util.Optional;
 
 import static io.pixelsdb.pixels.common.utils.Constants.CF_OUTPUT_STATE_KEY_PREFIX;
 
@@ -281,8 +283,19 @@ public class PixelsTrinoConfig
         return this.configFactory;
     }
 
-    public static String getOutputStateKeyPrefix(long transId)
+    /**
+     * Generate the prefix of the output state key for a serverless worker.
+     * @param transId the transaction id of the query
+     * @param schemaTableName the 'schema.table' of the root table of the sub-plan executed in serverless workers
+     * @return
+     */
+    public static String getOutputStateKeyPrefix(long transId, Optional<SchemaTableName> schemaTableName)
     {
-        return CF_OUTPUT_STATE_KEY_PREFIX + "_" + transId + "_";
+        String prefix = CF_OUTPUT_STATE_KEY_PREFIX + "_" + transId + "_";
+        if (schemaTableName.isPresent())
+        {
+            prefix += schemaTableName.get() + "_";
+        }
+        return prefix;
     }
 }

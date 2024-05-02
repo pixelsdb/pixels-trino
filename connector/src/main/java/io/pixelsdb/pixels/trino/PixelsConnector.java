@@ -228,7 +228,8 @@ public class PixelsConnector implements Connector
         if (transHandle.getExecutorType() == ExecutorType.CF)
         {
             // PIXELS-506: delete the states of serverless query execution.
-            StateManager.deleteAllStatesByPrefix(getOutputStateKeyPrefix(transHandle.getTransId()));
+            StateManager.deleteAllStatesByPrefix(
+                    getOutputStateKeyPrefix(transHandle.getTransId(), Optional.empty()));
         }
     }
 
