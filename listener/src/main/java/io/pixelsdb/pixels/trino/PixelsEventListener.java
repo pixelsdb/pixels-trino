@@ -28,6 +28,7 @@ import io.pixelsdb.pixels.common.utils.DateUtil;
 import io.pixelsdb.pixels.trino.exception.ListenerException;
 import io.trino.spi.TrinoException;
 import io.trino.spi.eventlistener.*;
+import io.trino.spi.resourcegroups.QueryType;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -128,11 +129,13 @@ public class PixelsEventListener implements EventListener
 
         final String queryId = queryCompletedEvent.getMetadata().getQueryId();
         final String user = queryCompletedEvent.getContext().getUser();
-        final String schema = queryCompletedEvent.getContext().getSchema().get();
+        final Optional<String> schema = queryCompletedEvent.getContext().getSchema();
         final String query = queryCompletedEvent.getMetadata().getQuery();
+        final Optional<QueryType> queryType = queryCompletedEvent.getContext().getQueryType();
         final Optional<String> externalTraceId = queryCompletedEvent.getContext().getTraceToken();
         // PIXELS-506: we only set scan bytes for analytic queries if the external trace id presents.
-        if (query.toLowerCase().contains("select") && externalTraceId.isPresent())
+        if ((queryType.isPresent() && queryType.get() == QueryType.SELECT || query.toLowerCase().contains("select"))
+                && externalTraceId.isPresent())
         {
             try
             {
@@ -187,7 +190,7 @@ public class PixelsEventListener implements EventListener
             logger.info("query id: " + queryId + ", user: " + user);
             return;
         }
-        if (schema.equalsIgnoreCase(this.schema))
+        if (schema.isPresent() && schema.get().equalsIgnoreCase(this.schema))
         {
             if (this.userPrefix.equals("none") || user.startsWith(this.userPrefix))
             {
