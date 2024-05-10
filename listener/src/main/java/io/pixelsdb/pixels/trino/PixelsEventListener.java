@@ -22,6 +22,8 @@ package io.pixelsdb.pixels.trino;
 import com.alibaba.fastjson.parser.ParserConfig;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.TransException;
+import io.pixelsdb.pixels.common.transaction.QueryCost;
+import io.pixelsdb.pixels.common.transaction.QueryCostType;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.common.utils.DateUtil;
@@ -148,8 +150,7 @@ public class PixelsEventListener implements EventListener
                     memoryGBSeconds = queryCompletedEvent.getStatistics().getPeakUserMemoryBytes() *
                             queryCompletedEvent.getStatistics().getExecutionTime().get().toSeconds() / 1e9;
                 }
-                double vmCostCents = Math.max(cpuTimeSeconds * 1.3e-3, memoryGBSeconds * 3.2e-4);
-
+                QueryCost vmCostCents = new QueryCost(QueryCostType.VMCOST, Math.max(cpuTimeSeconds * 1.3e-3, memoryGBSeconds * 3.2e-4));
                 this.transService.updateQueryCosts(externalTraceId.get(), inputBytes, vmCostCents);
             } catch (TransException e)
             {

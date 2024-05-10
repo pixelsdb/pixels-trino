@@ -24,6 +24,8 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.QueryScheduleException;
 import io.pixelsdb.pixels.common.exception.TransException;
 import io.pixelsdb.pixels.common.state.StateManager;
+import io.pixelsdb.pixels.common.transaction.QueryCost;
+import io.pixelsdb.pixels.common.transaction.QueryCostType;
 import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
@@ -223,10 +225,12 @@ public class PixelsConnector implements Connector
          * used for the calculation of billed cents. Cost cents in the transaction handle is the
          * amount of money spent on cf workers, vm costs will be added later in the listener.
          */
-        this.transService.updateQueryCosts(transHandle.getTransId(),
-                transHandle.getScanBytes(), transHandle.getCostCents());
         if (transHandle.getExecutorType() == ExecutorType.CF)
         {
+            // PIXELS-649: update cfCost
+            QueryCost cfCost = new QueryCost(QueryCostType.CFCOST, transHandle.getCostCents());
+            this.transService.updateQueryCosts(transHandle.getTransId(),
+                    transHandle.getScanBytes(), cfCost);
             // PIXELS-506: delete the states of serverless query execution.
             StateManager.deleteAllStatesByPrefix(
                     getOutputStateKeyPrefix(transHandle.getTransId(), Optional.empty()));
