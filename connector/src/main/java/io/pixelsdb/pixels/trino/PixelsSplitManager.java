@@ -227,9 +227,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             String json = JSON.toJSONString(outputCollection, features);
                             logger.debug("scan outputs: " + json);
                             // PIXELS-506 TODO: calculate the cost cents using a general cost model.
-                            transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
-                            transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
-                            transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
+                            transHandle.addCFCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
+                            transHandle.addCFCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
+                            transHandle.addCFCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
                         } catch (Exception e)
                         {
                             logger.error(e, "failed to execute the scan operator using pixels-turbo");
@@ -313,9 +313,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.debug("join outputs: " + json);
                         // PIXELS-506 TODO: calculate the cost cents using a general cost model.
-                        transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
-                        transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
-                        transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
+                        transHandle.addCFCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
+                        transHandle.addCFCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
+                        transHandle.addCFCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the join plan using pixels-turbo");
@@ -387,9 +387,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         String json = JSON.toJSONString(outputCollection, features);
                         logger.debug("aggregation outputs: " + json);
                         // PIXELS-506 TODO: calculate the cost cents using a general cost model.
-                        transHandle.addCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
-                        transHandle.addCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
-                        transHandle.addCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
+                        transHandle.addCFCostCents(1.66667e-6 * outputCollection.getTotalGBMs());
+                        transHandle.addCFCostCents(4e-5 * outputCollection.getTotalNumReadRequests());
+                        transHandle.addCFCostCents(5e-4 * outputCollection.getTotalNumWriteRequests());
                     } catch (Exception e)
                     {
                         logger.error(e, "failed to execute the aggregation plan using pixels-turbo");

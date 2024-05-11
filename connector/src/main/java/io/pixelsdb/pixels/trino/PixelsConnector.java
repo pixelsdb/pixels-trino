@@ -228,7 +228,7 @@ public class PixelsConnector implements Connector
         if (transHandle.getExecutorType() == ExecutorType.CF)
         {
             // PIXELS-649: update cfCost
-            QueryCost cfCost = new QueryCost(QueryCostType.CFCOST, transHandle.getCostCents());
+            QueryCost cfCost = new QueryCost(QueryCostType.CFCOST, transHandle.getCFCostCents());
             this.transService.updateQueryCosts(transHandle.getTransId(),
                     transHandle.getScanBytes(), cfCost);
             // PIXELS-506: delete the states of serverless query execution.
