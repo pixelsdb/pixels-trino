@@ -49,9 +49,9 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
      */
     private final AtomicDouble scanBytes;
     /**
-     * The cost spent on executing this transaction (query) if the query is executed in the cloud.
+     * The cf cost spent on executing this transaction (query) if the query is executed in the cloud.
      */
-    private final AtomicDouble costCents;
+    private final AtomicDouble cfCostCents;
 
     /**
      * Create a transaction handle.
@@ -71,7 +71,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
         this.readOnly = readOnly;
         this.executorType = executorType;
         this.scanBytes = new AtomicDouble(0);
-        this.costCents = new AtomicDouble(0);
+        this.cfCostCents = new AtomicDouble(0);
     }
 
     @JsonProperty
@@ -113,13 +113,13 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
         return this.scanBytes.get();
     }
 
-    public void addCostCents(double costCents)
+    public void addCFCostCents(double costCents)
     {
-        this.costCents.addAndGet(costCents);
+        this.cfCostCents.addAndGet(costCents);
     }
 
-    public double getCostCents()
+    public double getCFCostCents()
     {
-        return this.costCents.get();
+        return this.cfCostCents.get();
     }
 }
