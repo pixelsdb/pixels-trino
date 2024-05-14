@@ -186,13 +186,8 @@
             <optional>true</optional>
             <scope>provided</scope>
         </dependency>
-        <dependency>
-            <groupId>io.trino</groupId>
-            <artifactId>trino-main</artifactId>
-            <version>405</version>
-            <scope>test</scope>
-        </dependency>
-        <!-- Maven Dependency -->
+
+        <!-- test -->
         <dependency>
             <groupId>io.trino</groupId>
             <artifactId>trino-testing</artifactId>

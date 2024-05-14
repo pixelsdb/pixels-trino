@@ -1,6 +1,5 @@
 package io.pixelsdb.pixels.trino.vector;
 
-import com.google.common.collect.ImmutableMap;
 import io.pixelsdb.pixels.trino.PixelsPlugin;
 import io.trino.Session;
 import io.trino.testing.DistributedQueryRunner;

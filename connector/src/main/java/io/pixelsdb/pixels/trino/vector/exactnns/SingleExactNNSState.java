@@ -1,3 +1,22 @@
+/*
+ * Copyright 2024 PixelsDB.
+ *
+ * This file is part of Pixels.
+ *
+ * Pixels is free software: you can redistribute it and/or modify
+ * it under the terms of the Affero GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Pixels is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * Affero GNU General Public License for more details.
+ *
+ * You should have received a copy of the Affero GNU General Public
+ * License along with Pixels.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
 package io.pixelsdb.pixels.trino.vector.exactnns;
 
 import io.airlift.slice.Slice;
@@ -22,9 +41,8 @@ import static java.lang.Math.toIntExact;
 // todo maybe can even use min_by(x,y,n)
 // createArrayBigintBlock shows another way to create block  for an array
 
-//KISS
-
-public class SingleExactNNSState implements ExactNNSState {
+public class SingleExactNNSState implements ExactNNSState
+{
     // stores the closest vector to the input vector among the rows that this state has seen so far.
     PriorityQueue<double[]> nearestVecs;
     double[] inputVec;
@@ -32,17 +50,16 @@ public class SingleExactNNSState implements ExactNNSState {
     int dimension;
     VecDistComparator vecDistDescComparator;
     VectorDistFuncs.DistFuncEnum vectorDistFuncEnum;
-    private static final int INSTANCE_SIZE = toIntExact(ClassLayout.parseClass(SingleExactNNSState.class).instanceSize()) +  toIntExact(ClassLayout.parseClass(PriorityQueue.class).instanceSize());
+    private static final int INSTANCE_SIZE = toIntExact(ClassLayout.parseClass(SingleExactNNSState.class).instanceSize()) +
+            toIntExact(ClassLayout.parseClass(PriorityQueue.class).instanceSize());
 
-    public SingleExactNNSState() {
-
+    public SingleExactNNSState()
+    {
     }
 
     @Override
-    public void init(Block inputVecBlock,
-                     int dimension,
-                     Slice distFuncSlice,
-                     int k) {
+    public void init(Block inputVecBlock, int dimension, Slice distFuncSlice, int k)
+    {
         this.inputVec = ExactNNSUtil.blockToVec(inputVecBlock);
         this.dimension = dimension;
         this.k = k;
