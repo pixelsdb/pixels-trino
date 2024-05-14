@@ -1,3 +1,22 @@
+/*
+ * Copyright 2024 PixelsDB.
+ *
+ * This file is part of Pixels.
+ *
+ * Pixels is free software: you can redistribute it and/or modify
+ * it under the terms of the Affero GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Pixels is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * Affero GNU General Public License for more details.
+ *
+ * You should have received a copy of the Affero GNU General Public
+ * License along with Pixels.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
 package io.pixelsdb.pixels.trino.vector;
 
 import io.pixelsdb.pixels.common.physical.Storage;
@@ -15,7 +34,8 @@ import java.io.IOException;
 /**
  * This class is responsible for writing test files containing vector columns to s3
  */
-public class S3TestFileGenerator {
+public class S3TestFileGenerator
+{
     public static void main(String[] args) throws IOException
     {
         writeVectorColumnToS3(getTestVectors(4,2), "exactNNS-test-file3.pxl");
@@ -26,7 +46,8 @@ public class S3TestFileGenerator {
     public static void writeVectorColumnToS3(double[][] vectorsToWrite, String s3File)
     {
         int length = vectorsToWrite.length;
-        if (vectorsToWrite[0]==null) {
+        if (vectorsToWrite[0]==null)
+        {
             return;
         }
         int dimension = vectorsToWrite[0].length;
@@ -94,8 +115,10 @@ public class S3TestFileGenerator {
     private static double[][] getTestVectors(int length, int dimension)
     {
         double[][] testVecs = new double[length][dimension];
-        for (int i=0; i<length; i++) {
-            for (int j=0; j<dimension; j++) {
+        for (int i=0; i<length; i++)
+        {
+            for (int j=0; j<dimension; j++)
+            {
                 testVecs[i][j] = i + j*0.0001;
             }
         }

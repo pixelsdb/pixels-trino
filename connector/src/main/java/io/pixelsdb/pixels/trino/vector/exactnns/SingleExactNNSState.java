@@ -1,3 +1,22 @@
+/*
+ * Copyright 2024 PixelsDB.
+ *
+ * This file is part of Pixels.
+ *
+ * Pixels is free software: you can redistribute it and/or modify
+ * it under the terms of the Affero GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Pixels is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * Affero GNU General Public License for more details.
+ *
+ * You should have received a copy of the Affero GNU General Public
+ * License along with Pixels.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
 package io.pixelsdb.pixels.trino.vector.exactnns;
 
 import io.airlift.slice.Slice;
@@ -22,9 +41,8 @@ import static java.lang.Math.toIntExact;
 // todo maybe can even use min_by(x,y,n)
 // createArrayBigintBlock shows another way to create block  for an array
 
-//KISS
-
-public class SingleExactNNSState implements ExactNNSState {
+public class SingleExactNNSState implements ExactNNSState
+{
     // stores the closest vector to the input vector among the rows that this state has seen so far.
     PriorityQueue<double[]> nearestVecs;
     double[] inputVec;
@@ -32,17 +50,14 @@ public class SingleExactNNSState implements ExactNNSState {
     int dimension;
     VecDistComparator vecDistDescComparator;
     VectorDistFuncs.DistFuncEnum vectorDistFuncEnum;
-    private static final int INSTANCE_SIZE = toIntExact(ClassLayout.parseClass(SingleExactNNSState.class).instanceSize()) +  toIntExact(ClassLayout.parseClass(PriorityQueue.class).instanceSize());
+    private static final int INSTANCE_SIZE = toIntExact(ClassLayout.parseClass(SingleExactNNSState.class).instanceSize()) +
+            toIntExact(ClassLayout.parseClass(PriorityQueue.class).instanceSize());
 
-    public SingleExactNNSState() {
-
-    }
+    public SingleExactNNSState() { }
 
     @Override
-    public void init(Block inputVecBlock,
-                     int dimension,
-                     Slice distFuncSlice,
-                     int k) {
+    public void init(Block inputVecBlock, int dimension, Slice distFuncSlice, int k)
+    {
         this.inputVec = ExactNNSUtil.blockToVec(inputVecBlock);
         this.dimension = dimension;
         this.k = k;
@@ -60,14 +75,17 @@ public class SingleExactNNSState implements ExactNNSState {
     }
 
     @Override
-    public void combineWithOtherState(ExactNNSState otherState) {
+    public void combineWithOtherState(ExactNNSState otherState)
+    {
         PriorityQueue<double[]> otherNearestVecs = otherState.getNearestVecs();
-        if (otherNearestVecs == null) {
+        if (otherNearestVecs == null)
+        {
             // other state is not initialized
             return;
         }
 
-        if (nearestVecs==null) {
+        if (nearestVecs==null)
+        {
             // this state is not initialized, copy over the other state
             nearestVecs = otherNearestVecs;
             inputVec = otherState.getInputVec();
@@ -78,7 +96,8 @@ public class SingleExactNNSState implements ExactNNSState {
             return;
         }
 
-        for (double[] vec : otherNearestVecs) {
+        for (double[] vec : otherNearestVecs)
+        {
             updateNearestVecs(vec);
         }
     }
@@ -88,11 +107,14 @@ public class SingleExactNNSState implements ExactNNSState {
      * @param vec a vector read from column data
      */
     @Override
-    public void updateNearestVecs(double[] vec) {
-        if (nearestVecs.size() < k) {
+    public void updateNearestVecs(double[] vec)
+    {
+        if (nearestVecs.size() < k)
+        {
             nearestVecs.add(vec);
-        } else if (vecDistDescComparator.compare(nearestVecs.peek(), vec) > 0) {
-            // if the vec with largest dist in PQ has distance larger than vec, then we remove the top
+        } else if (vecDistDescComparator.compare(nearestVecs.peek(), vec) > 0)
+        {
+            // if the vec with the largest dist in PQ has distance larger than vec, then we remove the top
             // of PQ and insert vec
             nearestVecs.poll();
             nearestVecs.add(vec);
@@ -100,16 +122,20 @@ public class SingleExactNNSState implements ExactNNSState {
     }
 
     /**
-     * again, trino has no documentation on this. But based on other implementation it seems that a blockbuilder maybe used to include values from multiple states. Can't seem to find an example of passing more than type to the factory
+     * Trino has no documentation on this. But based on other implementation it seems that a block builder maybe used to include values from multiple states.
+     * Can't seem to find an example of passing more than type to the factory
      * //todo probably will be eaiser to store pixels vectors as long and here use long to represent everything?
      * @param out
      */
     @Override
-    public void serialize(BlockBuilder out) {
-        if (nearestVecs.isEmpty()) {
+    public void serialize(BlockBuilder out)
+    {
+        if (nearestVecs.isEmpty())
+        {
             out.appendNull();
-        } else {
-
+        }
+        else
+        {
             BlockBuilder longBlock = out.beginBlockEntry();
             // write dimension, k, distFunc
             BIGINT.writeLong(longBlock, dimension);
@@ -117,14 +143,18 @@ public class SingleExactNNSState implements ExactNNSState {
             BIGINT.writeLong(longBlock, vectorDistFuncEnum.ordinal());
 
             // write the inputVec
-            for (double element:inputVec) {
-                BIGINT.writeLong(longBlock, Double.doubleToLongBits(element));//todo convert this to long representation);
+            for (double element:inputVec)
+            {
+                //todo convert this to long representation);
+                BIGINT.writeLong(longBlock, Double.doubleToLongBits(element));
             }
 
             // write nearestVecs
             BIGINT.writeLong(longBlock, nearestVecs.size());
-            for (double[] vec:nearestVecs) {
-                for (double element:vec) {
+            for (double[] vec:nearestVecs)
+            {
+                for (double element:vec)
+                {
                     BIGINT.writeLong(longBlock, Double.doubleToLongBits(element));
                 }
             }
@@ -139,7 +169,8 @@ public class SingleExactNNSState implements ExactNNSState {
      * @param block
      */
     @Override
-    public void deserialize(Block block) {
+    public void deserialize(Block block)
+    {
         int position = 0;
         // get the dimension, k and DistFunc
         dimension = (int) BIGINT.getLong(block, position++);
@@ -148,7 +179,8 @@ public class SingleExactNNSState implements ExactNNSState {
 
         // deserialize the input vector
         this.inputVec = new double[dimension];
-        for (int d=0; d<dimension; d++) {
+        for (int d=0; d<dimension; d++)
+        {
             inputVec[d] = Double.longBitsToDouble(BIGINT.getLong(block, position++));
         }
 
@@ -158,41 +190,48 @@ public class SingleExactNNSState implements ExactNNSState {
 
         // deserialize nearest vecs, use dimension and position count
         int numNearestVecs = (int) BIGINT.getLong(block, position++);
-        for (int i=0; i<numNearestVecs; i++) {
+        for (int i=0; i<numNearestVecs; i++)
+        {
             double[] vec = new double[dimension];
-            for (int d=0; d<dimension; d++) {
+            for (int d=0; d<dimension; d++)
+            {
                 vec[d] = Double.longBitsToDouble(BIGINT.getLong(block, position++));
             }
             nearestVecs.add(vec);
         }
-
         //todo maybe can test serialize and deserialize locally?
     }
 
     //todo maybe in the future would need to be more careful with this method for optimizing performance. No document describing what should be returned
     @Override
-    public long getEstimatedSize() {
+    public long getEstimatedSize()
+    {
         return INSTANCE_SIZE + (long) dimension * 8 * nearestVecs.size();
     }
 
     @Override
-    public int getDimension() {
+    public int getDimension()
+    {
         return dimension;
     }
 
-    public int getK() {
+    public int getK()
+    {
         return k;
     }
 
-    public double[] getInputVec() {
+    public double[] getInputVec()
+    {
         return inputVec;
     }
 
-    public VectorDistFuncs.DistFuncEnum getVectorDistFuncEnum() {
+    public VectorDistFuncs.DistFuncEnum getVectorDistFuncEnum()
+    {
         return vectorDistFuncEnum;
     }
 
-    public VecDistComparator getVecDistDescComparator() {
+    public VecDistComparator getVecDistDescComparator()
+    {
         return vecDistDescComparator;
     }
 
@@ -205,19 +244,24 @@ public class SingleExactNNSState implements ExactNNSState {
         double[] inputVec;
         VectorDistFunc vectorDistFunc;
 
-        public VecDistComparator(double[] inputVec, VectorDistFunc vectorDistFunc) {
+        public VecDistComparator(double[] inputVec, VectorDistFunc vectorDistFunc)
+        {
             this.inputVec = inputVec;
             this.vectorDistFunc = vectorDistFunc;
         }
 
         @Override
-        public int compare(double[] v1, double[] v2) {
+        public int compare(double[] v1, double[] v2)
+        {
             double res = vectorDistFunc.getDist(v1, inputVec) - vectorDistFunc.getDist(v2, inputVec);
-            if (res > 0) {
+            if (res > 0)
+            {
                 return 1;
-            } else if (res < 0) {
+            } else if (res < 0)
+            {
                 return -1;
-            } else {
+            } else
+            {
                 return 0;
             }
         }

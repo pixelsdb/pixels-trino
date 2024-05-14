@@ -68,6 +68,11 @@
                 <artifactId>trino-spi</artifactId>
                 <version>${dep.trino.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.trino</groupId>
+                <artifactId>trino-testing</artifactId>
+                <version>${dep.trino.version}</version>
+            </dependency>
 
             <!-- airlift -->
             <dependency>
