@@ -632,9 +632,11 @@ class PixelsPageSource implements ConnectorPageSource
                     BlockBuilder allDoublesBuilder = DOUBLE.createBlockBuilder(null, batchSize * vcv.dimension);
                     int[] offsets = new int[batchSize+1];
                     // build a block into which we put a double array
-                    for (int i = 0 ; i < batchSize; i++) {
+                    for (int i = 0 ; i < batchSize; i++)
+                    {
                         offsets[i] = i * vcv.dimension;
-                        for (int j = 0; j < vcv.dimension; j++) {
+                        for (int j = 0; j < vcv.dimension; j++)
+                        {
                             DOUBLE.writeDouble(allDoublesBuilder, vcv.vector[i][j]);
                         }
                     }
