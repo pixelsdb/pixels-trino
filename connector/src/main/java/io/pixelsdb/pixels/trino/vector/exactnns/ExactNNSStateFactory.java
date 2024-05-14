@@ -23,10 +23,8 @@ import io.trino.spi.function.AccumulatorStateFactory;
 
 public class ExactNNSStateFactory implements AccumulatorStateFactory<ExactNNSState>
 {
-    public ExactNNSStateFactory()
-    {
-    }
-    ;
+    public ExactNNSStateFactory() { }
+
     @Override
     public ExactNNSState createSingleState()
     {

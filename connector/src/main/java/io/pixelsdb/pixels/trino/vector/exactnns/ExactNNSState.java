@@ -32,8 +32,7 @@ import java.util.PriorityQueue;
         stateFactoryClass = ExactNNSStateFactory.class,
         stateSerializerClass = ExactNNSStateSerializer.class,
         serializedType = "ARRAY(DOUBLE)")
-public interface ExactNNSState
-        extends AccumulatorState
+public interface ExactNNSState extends AccumulatorState
 {
     //todo I think each state having a priority queue should work
     //todo also I think I need to implement a state factory
@@ -44,10 +43,7 @@ public interface ExactNNSState
 
     // todo maybe this should be in the constructor and be in the factory instead
     // but this will probably work as well
-    void init(Block inputVecBlock,
-                     int dimension,
-                     Slice distFuncSlice,
-                     int k);
+    void init(Block inputVecBlock, int dimension, Slice distFuncSlice, int k);
 
     PriorityQueue<double[]> getNearestVecs();
 

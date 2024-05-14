@@ -19,6 +19,7 @@
  */
 package io.pixelsdb.pixels.trino.vector;
 
-public interface VectorDistFunc {
+public interface VectorDistFunc
+{
     Double getDist(double[] vec1, double[] vec2);
 }

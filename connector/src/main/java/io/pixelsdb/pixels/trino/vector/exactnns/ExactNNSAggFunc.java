@@ -51,13 +51,15 @@ public class ExactNNSAggFunc
                              @SqlType("integer") long k)
     {
         // check input vector block
-        if (inputVecBlock==null || vecFromFile==null || k<=0) {
+        if (inputVecBlock==null || vecFromFile==null || k<=0)
+        {
             return;
         }
 
         // initialize the state if this is an uninitialized state handling the first row
-        if (state.getNearestVecs()==null) {
-            state.init(inputVecBlock, vecFromFile.getPositionCount(), sliceForVectorDistFunc, (int)k);
+        if (state.getNearestVecs()==null)
+        {
+            state.init(inputVecBlock, vecFromFile.getPositionCount(), sliceForVectorDistFunc, (int) k);
         }
 
         // use the input row, i.e. a vector to update the priority queue in the state
@@ -78,17 +80,20 @@ public class ExactNNSAggFunc
         int numVecs = state.getNearestVecs().size();
         int dimension = state.getDimension();
         double[][] nearestVecs = new double[numVecs][];
-        for (int i=0; i<numVecs; i++) {
+        for (int i=0; i<numVecs; i++)
+        {
             nearestVecs[i] = state.getNearestVecs().poll();
         }
         // sort the nearest vecs from smaller dist to larger dist
         Arrays.sort(nearestVecs, state.getNearestVecs().comparator().reversed());
-        try {
+        try
+        {
             ObjectMapper objectMapper = new ObjectMapper();
             String jsonResult = objectMapper.writeValueAsString(nearestVecs);
             out.writeBytes(Slices.utf8Slice(jsonResult), 0, jsonResult.length());
             out.closeEntry();
-        } catch (JsonProcessingException e) {
+        } catch (JsonProcessingException e)
+        {
             e.printStackTrace();
         }
     }

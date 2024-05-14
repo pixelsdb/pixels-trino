@@ -46,7 +46,8 @@ public class S3TestFileGenerator
     public static void writeVectorColumnToS3(double[][] vectorsToWrite, String s3File)
     {
         int length = vectorsToWrite.length;
-        if (vectorsToWrite[0]==null) {
+        if (vectorsToWrite[0]==null)
+        {
             return;
         }
         int dimension = vectorsToWrite[0].length;
@@ -114,8 +115,10 @@ public class S3TestFileGenerator
     private static double[][] getTestVectors(int length, int dimension)
     {
         double[][] testVecs = new double[length][dimension];
-        for (int i=0; i<length; i++) {
-            for (int j=0; j<dimension; j++) {
+        for (int i=0; i<length; i++)
+        {
+            for (int j=0; j<dimension; j++)
+            {
                 testVecs[i][j] = i + j*0.0001;
             }
         }

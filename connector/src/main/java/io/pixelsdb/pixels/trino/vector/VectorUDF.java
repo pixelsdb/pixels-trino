@@ -28,9 +28,10 @@ import io.trino.spi.type.StandardTypes;
 
 import static io.trino.spi.type.DoubleType.DOUBLE;
 
-public class VectorUDF {
+public class VectorUDF
+{
 
-    private VectorUDF() {}
+    private VectorUDF() { }
 
     @ScalarFunction("eucDist")
     @Description("calculate the Euclidean distance between two vectors")
@@ -40,12 +41,14 @@ public class VectorUDF {
             @SqlNullable @SqlType("array(double)") Block vec1,
             @SqlNullable @SqlType("array(double)") Block vec2)
     {
-        if (!distIsDefined(vec1, vec2)) {
+        if (!distIsDefined(vec1, vec2))
+        {
             return null;
         }
 
         double dist = 0.0;
-        for (int position = 0; position < vec1.getPositionCount(); position++) {
+        for (int position = 0; position < vec1.getPositionCount(); position++)
+        {
             //todo can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating (x[1]-y[1])^2, another (x[2]-y[2))^2
             // let's keep it simple and only use single thread for now
@@ -64,12 +67,14 @@ public class VectorUDF {
             @SqlNullable @SqlType("array(double)") Block vec1,
             @SqlNullable @SqlType("array(double)") Block vec2)
     {
-        if (!distIsDefined(vec1, vec2)) {
+        if (!distIsDefined(vec1, vec2))
+        {
             return null;
         }
 
         double dist = 0.0;
-        for (int position = 0; position < vec1.getPositionCount(); position++) {
+        for (int position = 0; position < vec1.getPositionCount(); position++)
+        {
             //todo can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating x[1]*y[1], another x[2]*y[2]
             // let's keep it simple and only use single thread for now
@@ -88,14 +93,16 @@ public class VectorUDF {
             @SqlNullable @SqlType("array(double)") Block vec1,
             @SqlNullable @SqlType("array(double)") Block vec2)
     {
-        if (!distIsDefined(vec1, vec2)) {
+        if (!distIsDefined(vec1, vec2))
+        {
             return null;
         }
 
         double dotProd = 0.0;
         double vec1L2Norm = 0.0;
         double vec2L2Norm = 0.0;
-        for (int position = 0; position < vec1.getPositionCount(); position++) {
+        for (int position = 0; position < vec1.getPositionCount(); position++)
+        {
             //todo can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating x[1]*y[1], another x[2]*y[2]
             // let's keep it simple and only use single thread for now
@@ -108,8 +115,10 @@ public class VectorUDF {
         return dotProd / (Math.sqrt(vec1L2Norm) * Math.sqrt(vec2L2Norm));
     }
 
-    private static boolean distIsDefined(Block vec1, Block vec2) {
-        if (vec1!=null && vec2!=null && vec1.getPositionCount()==vec2.getPositionCount()) {
+    private static boolean distIsDefined(Block vec1, Block vec2)
+    {
+        if (vec1!=null && vec2!=null && vec1.getPositionCount()==vec2.getPositionCount())
+        {
             return true;
         }
         return false;
