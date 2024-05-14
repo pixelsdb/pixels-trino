@@ -36,11 +36,10 @@ public class ExactNNSAggFunc
 {
     private ExactNNSAggFunc() {}
 
-
     /**
      * update a state from a single row, i.e. a single vector
      * @param state the state that is used for aggregate many rows into one state
-     * @param inputVecBlock a block representing the input vector for which we want to find the k nearest neighnbours
+     * @param inputVecBlock a block representing the input vector for which we want to find the k nearest neighbours
      * @param k we want the k nearest neighbours
      */
     @InputFunction
@@ -70,7 +69,7 @@ public class ExactNNSAggFunc
     @CombineFunction
     public static void combine(@AggregationState ExactNNSState state, @AggregationState ExactNNSState otherState)
     {
-        // todo update the PriorityQueue that stores nearest vectors in state, using the PriorityQueue in otherState
+        // TODO: update the PriorityQueue that stores nearest vectors in state, using the PriorityQueue in otherState
         state.combineWithOtherState(otherState);
     }
 
@@ -78,7 +77,6 @@ public class ExactNNSAggFunc
     public static void output(@AggregationState ExactNNSState state, BlockBuilder out)
     {
         int numVecs = state.getNearestVecs().size();
-        int dimension = state.getDimension();
         double[][] nearestVecs = new double[numVecs][];
         for (int i=0; i<numVecs; i++)
         {

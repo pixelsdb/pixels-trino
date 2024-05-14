@@ -32,13 +32,13 @@ import java.util.PriorityQueue;
 import static io.trino.spi.type.BigintType.BIGINT;
 import static java.lang.Math.toIntExact;
 
-//todo maybe can use typed heap instead?
+//TODO: maybe can use typed heap instead?
 // for serializing state to block, maybe no need to send k, distfunc and
 // input vec becuase serialization is for sending to one state to another
 // machine to combine with other states. The other states should already have
 // the same
 
-// todo maybe can even use min_by(x,y,n)
+// TODO: maybe can even use min_by(x,y,n)
 // createArrayBigintBlock shows another way to create block  for an array
 
 public class SingleExactNNSState implements ExactNNSState
@@ -67,7 +67,6 @@ public class SingleExactNNSState implements ExactNNSState
         // let top of the heap be the vec with largest distance that we might eliminate
         this.nearestVecs = new PriorityQueue<>(k, vecDistDescComparator.reversed());
     }
-
 
     @Override
     public PriorityQueue<double[]> getNearestVecs() {
@@ -124,7 +123,7 @@ public class SingleExactNNSState implements ExactNNSState
     /**
      * Trino has no documentation on this. But based on other implementation it seems that a block builder maybe used to include values from multiple states.
      * Can't seem to find an example of passing more than type to the factory
-     * //todo probably will be eaiser to store pixels vectors as long and here use long to represent everything?
+     * //TODO: probably will be eaiser to store pixels vectors as long and here use long to represent everything?
      * @param out
      */
     @Override
@@ -145,7 +144,7 @@ public class SingleExactNNSState implements ExactNNSState
             // write the inputVec
             for (double element:inputVec)
             {
-                //todo convert this to long representation);
+                //TODO: convert this to long representation);
                 BIGINT.writeLong(longBlock, Double.doubleToLongBits(element));
             }
 
@@ -164,7 +163,7 @@ public class SingleExactNNSState implements ExactNNSState
     }
 
     /**
-     * todo again maybe there's benefit of writing some shared stuff to the factory
+     * TODO: again maybe there's benefit of writing some shared stuff to the factory
      * let the factory to take the dimension,k,distFunc and input vec
      * @param block
      */
@@ -199,10 +198,10 @@ public class SingleExactNNSState implements ExactNNSState
             }
             nearestVecs.add(vec);
         }
-        //todo maybe can test serialize and deserialize locally?
+        //TODO: maybe can test serialize and deserialize locally?
     }
 
-    //todo maybe in the future would need to be more careful with this method for optimizing performance. No document describing what should be returned
+    //TODO: maybe in the future would need to be more careful with this method for optimizing performance. No document describing what should be returned
     @Override
     public long getEstimatedSize()
     {
@@ -266,5 +265,4 @@ public class SingleExactNNSState implements ExactNNSState
             }
         }
     }
-
 }

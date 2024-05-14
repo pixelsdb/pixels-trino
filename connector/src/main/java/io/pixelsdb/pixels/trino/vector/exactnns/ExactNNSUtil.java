@@ -34,7 +34,7 @@ public class ExactNNSUtil
         {
             return null;
         }
-        // todo use offset here
+        // TODO: use offset here
         inputVector = new double[block.getPositionCount()];
         for (int i = 0; i < block.getPositionCount(); i++)
         {

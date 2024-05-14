@@ -21,7 +21,6 @@ package io.pixelsdb.pixels.trino.vector;
 
 public class VectorDistFuncs
 {
-
     public enum DistFuncEnum
     {
         EUCLIDEAN_DISTANCE(VectorDistFuncs::eucDist),
@@ -46,9 +45,7 @@ public class VectorDistFuncs
         }
     }
 
-    public static Double eucDist(
-            double[] vec1,
-            double[] vec2)
+    public static Double eucDist(double[] vec1, double[] vec2)
     {
         if (!distIsDefined(vec1, vec2))
         {
@@ -58,7 +55,7 @@ public class VectorDistFuncs
         double dist = 0.0;
         for (int i = 0; i < vec1.length; i++)
         {
-            //todo can also use multi threads and let different threads be responsible for different elements
+            //TODO: can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating (x[1]-y[1])^2, another (x[2]-y[2))^2
             // let's keep it simple and only use single thread for now
             double xi = vec1[i];
@@ -78,7 +75,7 @@ public class VectorDistFuncs
         double dist = 0.0;
         for (int i = 0; i < vec1.length; i++)
         {
-            //todo can also use multi threads and let different threads be responsible for different elements
+            //TODO: can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating x[1]*y[1], another x[2]*y[2]
             // let's keep it simple and only use single thread for now
             double xi = vec1[i];
@@ -87,7 +84,6 @@ public class VectorDistFuncs
         }
         return dist;
     }
-
 
     public static Double cosSim(double[] vec1, double[] vec2)
     {
@@ -101,7 +97,7 @@ public class VectorDistFuncs
         double vec2L2Norm = 0.0;
         for (int position = 0; position < vec1.length; position++)
         {
-            //todo can also use multi threads and let different threads be responsible for different elements
+            //TODO: can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating x[1]*y[1], another x[2]*y[2]
             // let's keep it simple and only use single thread for now
             double xi = vec1[position];
