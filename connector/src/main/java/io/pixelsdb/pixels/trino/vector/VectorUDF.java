@@ -30,7 +30,6 @@ import static io.trino.spi.type.DoubleType.DOUBLE;
 
 public class VectorUDF
 {
-
     private VectorUDF() { }
 
     @ScalarFunction("eucDist")
@@ -49,7 +48,7 @@ public class VectorUDF
         double dist = 0.0;
         for (int position = 0; position < vec1.getPositionCount(); position++)
         {
-            //todo can also use multi threads and let different threads be responsible for different elements
+            //TODO: can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating (x[1]-y[1])^2, another (x[2]-y[2))^2
             // let's keep it simple and only use single thread for now
             double xi = DOUBLE.getDouble(vec1, position);
@@ -75,7 +74,7 @@ public class VectorUDF
         double dist = 0.0;
         for (int position = 0; position < vec1.getPositionCount(); position++)
         {
-            //todo can also use multi threads and let different threads be responsible for different elements
+            //TODO: can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating x[1]*y[1], another x[2]*y[2]
             // let's keep it simple and only use single thread for now
             double xi = DOUBLE.getDouble(vec1, position);
@@ -103,7 +102,7 @@ public class VectorUDF
         double vec2L2Norm = 0.0;
         for (int position = 0; position < vec1.getPositionCount(); position++)
         {
-            //todo can also use multi threads and let different threads be responsible for different elements
+            //TODO: can also use multi threads and let different threads be responsible for different elements
             // one thread for calculating x[1]*y[1], another x[2]*y[2]
             // let's keep it simple and only use single thread for now
             double xi = DOUBLE.getDouble(vec1, position);

@@ -40,7 +40,7 @@ public class S3TestFileGenerator
     {
         writeVectorColumnToS3(getTestVectors(4,2), "exactNNS-test-file3.pxl");
         writeVectorColumnToS3(getTestVectors(4,2), "exactNNS-test-file4.pxl");
-        // todo maybe add a large scale test
+        // TODO: maybe add a large scale test
     }
 
     public static void writeVectorColumnToS3(double[][] vectorsToWrite, String s3File)
@@ -64,19 +64,17 @@ public class S3TestFileGenerator
             VectorizedRowBatch rowBatch = schema.createRowBatch();
             VectorColumnVector v = (VectorColumnVector) rowBatch.cols[0];
 
-            PixelsWriter pixelsWriter =
-                    PixelsWriterImpl.newBuilder()
-                            .setSchema(schema)
-                            .setPixelStride(10000)
-                            .setRowGroupSize(64 * 1024 * 1024)
-                            .setStorage(storage)
-                            .setPath(pixelsFile)
-                            .setBlockSize(256 * 1024 * 1024)
-                            .setReplication((short) 3)
-                            .setBlockPadding(true)
-                            .setEncodingLevel(EncodingLevel.EL2)
-                            .setCompressionBlockSize(1)
-                            .build();
+            PixelsWriter pixelsWriter = PixelsWriterImpl.newBuilder()
+                    .setSchema(schema)
+                    .setPixelStride(10000)
+                    .setRowGroupSize(64 * 1024 * 1024)
+                    .setStorage(storage)
+                    .setPath(pixelsFile)
+                    .setBlockSize(256 * 1024 * 1024)
+                    .setReplication((short) 3)
+                    .setBlockPadding(true)
+                    .setEncodingLevel(EncodingLevel.EL2)
+                    .setCompressionBlockSize(1).build();
 
             for (int i = 0; i < length-1; i++)
             {
@@ -97,7 +95,6 @@ public class S3TestFileGenerator
                 System.out.println("A rowBatch of size " + rowBatch.size + " has been written to " + pixelsFile);
                 rowBatch.reset();
             }
-
             pixelsWriter.close();
         } catch (IOException | PixelsWriterException e)
         {

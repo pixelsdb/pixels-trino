@@ -34,14 +34,14 @@ import java.util.PriorityQueue;
         serializedType = "ARRAY(DOUBLE)")
 public interface ExactNNSState extends AccumulatorState
 {
-    //todo I think each state having a priority queue should work
-    //todo also I think I need to implement a state factory
+    //TODO: I think each state having a priority queue should work
+    //TODO: also I think I need to implement a state factory
 
     // each state maintains a priority queue, in the input function we initialize the priority queue;
     // in the combine function, we merge the priority queue from the other state to state
     // in the output function we turn the priority queue into a json
 
-    // todo maybe this should be in the constructor and be in the factory instead
+    // TODO: maybe this should be in the constructor and be in the factory instead
     // but this will probably work as well
     void init(Block inputVecBlock, int dimension, Slice distFuncSlice, int k);
 

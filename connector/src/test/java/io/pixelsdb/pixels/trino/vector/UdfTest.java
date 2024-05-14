@@ -33,7 +33,6 @@ import static org.junit.Assert.assertEquals;
 
 public class UdfTest
 {
-
     private static final QueryRunner queryRunner;
 
     static
@@ -73,7 +72,7 @@ public class UdfTest
     }
 
     /**
-     * Test exactNNS using euclidean distance as distance metric
+     * Test exactNNS using Euclidean distance as distance metric
      */
     @Test
     public void testExactNNSEuc()
