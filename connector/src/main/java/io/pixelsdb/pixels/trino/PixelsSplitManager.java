@@ -37,6 +37,7 @@ import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
+import io.pixelsdb.pixels.common.turbo.Output;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -76,6 +77,7 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -149,7 +151,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
     {
         PixelsTransactionHandle transHandle = (PixelsTransactionHandle) trans;
         PixelsTableHandle tableHandle = (PixelsTableHandle) handle;
-        String stateKeyPrefix = getOutputStateKeyPrefix(transHandle.getTransId(), Optional.of(tableHandle.getSchemaTableName()));
+        String stateKeyPrefix = getOutputStateKeyPrefix(transHandle.getTransId(),
+                Optional.of(tableHandle.getSchemaTableName()));
         List<String> columnOrder = ImmutableList.of();
         List<String> cacheOrder = ImmutableList.of();
         // The address is not used to dispatch Pixels splits, so we use set it the localhost.
@@ -209,12 +212,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     scanOperator.execute().thenAccept(scanOutputs -> {
                         for (int i = 0; i < scanOutputs.length; ++i)
                         {
-                            int finalI = i;
-                            scanOutputs[i].thenAccept(scanOutput -> {
-                                // PIXELS-506: set the state for the output of a scan task executed in cloud function.
-                                StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
-                                stateManager.setState(JSON.toJSONString(scanOutput.toSimpleOutput()));
-                            });
+                            setServerlessWorkerState(scanOutputs[i], stateKeyPrefix, i);
                         }
 
                         try
@@ -295,12 +293,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 joinOperator.execute().thenAccept(joinOutputs -> {
                     for (int i = 0; i < joinOutputs.length; ++i)
                     {
-                        int finalI = i;
-                        joinOutputs[i].thenAccept(joinOutput -> {
-                            // PIXELS-506: set the state for the output of a join task executed in cloud function.
-                            StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
-                            stateManager.setState(JSON.toJSONString(joinOutput.toSimpleOutput()));
-                        });
+                        setServerlessWorkerState(joinOutputs[i], stateKeyPrefix, i);
                     }
 
                     try
@@ -369,12 +362,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 aggrOperator.execute().thenAccept(aggrOutputs -> {
                     for (int i = 0; i < aggrOutputs.length; ++i)
                     {
-                        int finalI = i;
-                        aggrOutputs[i].thenAccept(aggrOutput -> {
-                            // PIXELS-506: set the state for the output of an aggregation task executed in cloud function.
-                            StateManager stateManager = new StateManager(stateKeyPrefix + finalI);
-                            stateManager.setState(JSON.toJSONString(aggrOutput.toSimpleOutput()));
-                        });
+                        setServerlessWorkerState(aggrOutputs[i], stateKeyPrefix, i);
                     }
 
                     try
@@ -412,6 +400,22 @@ public class PixelsSplitManager implements ConnectorSplitManager
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type is not supported");
         }
+    }
+
+    /**
+     * Set the state for the output (response) of a serverless worker in etcd.
+     * @param workerOutputFuture the completable future of the serverless worker's output
+     * @param stateKeyPrefix the prefix of state key to be set in etcd
+     * @param workerId the id of the serverless worker, should be unique in a query
+     */
+    private void setServerlessWorkerState(CompletableFuture<? extends Output> workerOutputFuture,
+                                          String stateKeyPrefix, int workerId)
+    {
+        workerOutputFuture.thenAccept(output -> {
+            // PIXELS-506: set the state in etcd
+            StateManager stateManager = new StateManager(stateKeyPrefix + workerId);
+            stateManager.setState(JSON.toJSONString(output.toSimpleOutput()));
+        });
     }
 
     /**
