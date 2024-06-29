@@ -81,6 +81,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.pixelsdb.pixels.planner.PixelsPlanner.getFilePaths;
 import static io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.getOutputStateKeyPrefix;
 import static java.util.Objects.requireNonNull;
 
@@ -896,7 +897,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             int rowGroupNum = splits.getNumRowGroupInFile();
 
             // get compact paths
-            String[] compactPaths;
+            List<Path> compactPaths;
             if (projectionReadEnabled)
             {
                 ProjectionsIndex projectionsIndex = IndexFactory.Instance().getProjectionsIndex(schemaTableName);
@@ -919,16 +920,22 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 if (projectionPattern != null)
                 {
                     logger.debug("suitable projection pattern is found");
-                    compactPaths = projectionPattern.getPaths();
+                    long[] projectionPathIds = projectionPattern.getPathIds();
+                    Map<Long, Path> projectionPaths = layout.getProjectionPaths();
+                    compactPaths = new ArrayList<>(projectionPathIds.length);
+                    for (long projectionPathId : projectionPathIds)
+                    {
+                        compactPaths.add(projectionPaths.get(projectionPathId));
+                    }
                 }
                 else
                 {
-                    compactPaths = layout.getCompactPathUris();
+                    compactPaths = layout.getCompactPaths();
                 }
             }
             else
             {
-                compactPaths = layout.getCompactPathUris();
+                compactPaths = layout.getCompactPaths();
             }
 
             long splitId = 0;
@@ -948,7 +955,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // 2. get the cached files of each node
                     List<KeyValue> nodeFiles = etcdUtil.getKeyValuesByPrefix(
                             Constants.CACHE_LOCATION_LITERAL + cacheVersion);
-                    if(nodeFiles.size() > 0)
+                    if(!nodeFiles.isEmpty())
                     {
                         Map<String, String> fileToNodeMap = new HashMap<>();
                         for (KeyValue kv : nodeFiles)
@@ -966,7 +973,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             // 3. add splits in orderedPaths
                             if (orderedPathEnabled)
                             {
-                                List<String> orderedFilePaths = storage.listPaths(layout.getOrderedPathUris());
+                                List<String> orderedFilePaths = getFilePaths(
+                                        layout.getOrderedPaths(), metadataProxy.getMetadataService());
 
                                 int numPath = orderedFilePaths.size();
                                 for (int i = 0; i < numPath; )
@@ -1005,7 +1013,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             if (compactPathEnabled)
                             {
                                 int curFileRGIdx;
-                                List<String> compactFilePaths = storage.listPaths(compactPaths);
+                                List<String> compactFilePaths = getFilePaths(
+                                        compactPaths, metadataProxy.getMetadataService());
                                 for (String path : compactFilePaths)
                                 {
                                     curFileRGIdx = 0;
@@ -1066,7 +1075,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // 1. add splits in orderedPaths
                     if (orderedPathEnabled)
                     {
-                        List<String> orderedFilePaths = storage.listPaths(layout.getOrderedPathUris());
+                        List<String> orderedFilePaths = getFilePaths(
+                                layout.getOrderedPaths(), metadataProxy.getMetadataService());
 
                         int numPath = orderedFilePaths.size();
                         for (int i = 0; i < numPath; )
@@ -1103,7 +1113,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // 2. add splits in compactPaths
                     if (compactPathEnabled)
                     {
-                        List<String> compactFilePaths = storage.listPaths(compactPaths);
+                        List<String> compactFilePaths = getFilePaths(
+                                compactPaths, metadataProxy.getMetadataService());
 
                         int curFileRGIdx;
                         for (String path : compactFilePaths)
@@ -1138,8 +1149,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     }
 
     public static TableScanFilter createTableScanFilter(
-            String schemaName, String tableName,
-            String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
+            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
     {
         SortedMap<Integer, ColumnFilter> columnFilters = new TreeMap<>();
         TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
