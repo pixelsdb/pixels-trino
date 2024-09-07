@@ -168,18 +168,21 @@ public class PixelsMetadata implements ConnectorMetadata
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;
         checkArgument(tableHandle.getConnectorId().equals(connectorId),
                 "tableHandle is not for this connector");
+        List<ColumnMetadata> columns;
         if (tableHandle.getColumns() != null)
         {
             List<PixelsColumnHandle> columnHandleList = tableHandle.getColumns();
-            List<ColumnMetadata> columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
-                    .collect(toImmutableList());
-            return new ConnectorTableMetadata(
-                    new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns);
+            columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata).collect(toImmutableList());
         }
-        return getTableMetadataInternal(tableHandle.getSchemaName(), tableHandle.getTableName());
+        else
+        {
+            columns = getColumnsMetadata(tableHandle.getSchemaName(), tableHandle.getTableName());
+        }
+        return new ConnectorTableMetadata(
+                new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns);
     }
 
-    private ConnectorTableMetadata getTableMetadataInternal(String schemaName, String tableName)
+    private List<ColumnMetadata> getColumnsMetadata(String schemaName, String tableName)
     {
         List<PixelsColumnHandle> columnHandleList;
         try
@@ -189,9 +192,8 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
         }
-        List<ColumnMetadata> columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
+        return columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
                 .collect(toList());
-        return new ConnectorTableMetadata(new SchemaTableName(schemaName, tableName), columns);
     }
 
     @Override
@@ -288,13 +290,7 @@ public class PixelsMetadata implements ConnectorMetadata
                  */
                 if (metadataProxy.existTable(tableName.getSchemaName(), tableName.getTableName()))
                 {
-                    ConnectorTableMetadata tableMetadata = getTableMetadataInternal(
-                            tableName.getSchemaName(), tableName.getTableName());
-                    // table can disappear during listing operation
-                    if (tableMetadata != null)
-                    {
-                        columns.put(tableName, tableMetadata.getColumns());
-                    }
+                    columns.put(tableName, getColumnsMetadata(tableName.getSchemaName(), tableName.getTableName()));
                 }
             } catch (MetadataException e)
             {
