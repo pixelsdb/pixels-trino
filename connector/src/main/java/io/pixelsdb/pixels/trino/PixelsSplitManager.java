@@ -49,6 +49,7 @@ import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.planner.PixelsPlanner;
+import io.pixelsdb.pixels.planner.coordinate.PlanCoordinatorFactory;
 import io.pixelsdb.pixels.planner.plan.PlanOptimizer;
 import io.pixelsdb.pixels.planner.plan.logical.*;
 import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
@@ -191,6 +192,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             Optional.of(this.metadataProxy.getMetadataService()));
 
                     ScanOperator scanOperator = (ScanOperator) planner.getRootOperator();
+                    PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), scanOperator);
                     List<ScanInput> scanInputs = scanOperator.getScanInputs();
                     // Build the splits of the scan result.
                     ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
@@ -209,7 +211,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 emptyConstraint, true, false);
                         splitsBuilder.add(split);
                     }
-                    // logger.debug("scan operator: " + JSON.toJSONString(scanOperator));
+                    // logger1.debug("scan operator: " + JSON.toJSONString(scanOperator));
                     scanOperator.execute().thenAccept(scanOutputs -> {
                         for (int i = 0; i < scanOutputs.length; ++i)
                         {
