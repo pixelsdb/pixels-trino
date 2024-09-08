@@ -19,7 +19,6 @@
  */
 package io.pixelsdb.pixels.trino;
 
-import com.alibaba.fastjson.JSON;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -31,7 +30,6 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
 import io.pixelsdb.pixels.common.metadata.domain.Layout;
-import io.pixelsdb.pixels.common.metadata.domain.SimpleLayout;
 import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
@@ -157,13 +155,18 @@ public class PixelsMetadata implements ConnectorMetadata
                 {
                     throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
                 }
-                List<SimpleLayout> simpleLayouts = table.getLayouts().get().stream().map(Layout::toSimpleLayout).toList();
+                List<String> storagePaths = new LinkedList<>();
+                for (Layout layout : table.getLayouts().get())
+                {
+                    Collections.addAll(storagePaths, layout.getCompactPathUris());
+                    Collections.addAll(storagePaths, layout.getOrderedPathUris());
+                }
                 PixelsTableHandle tableHandle = new PixelsTableHandle(
                         connectorId, tableName.getSchemaName(), tableName.getTableName(),
                         tableName.getTableName() + "_" + UUID.randomUUID()
                                 .toString().replace("-", ""),
                         columns, TupleDomain.all(), // match all tuples at the beginning.
-                        Table.TableType.BASE, null, null, table.getStorageScheme(), simpleLayouts);
+                        Table.TableType.BASE, null, null, table.getStorageScheme(), storagePaths);
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -193,7 +196,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             Map<String, Object> properties = new HashMap<>();
             properties.put("storage", tableHandle.getStorageScheme().name());
-            properties.put("paths", JSON.toJSONString(tableHandle.getSimpleLayouts()));
+            properties.put("paths", String.join(";", tableHandle.getStoragePaths()));
             return new ConnectorTableMetadata(
                     new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns, properties);
         }
@@ -499,7 +502,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 tableHandle.getSchemaName(), tableHandle.getTableName(),
                 tableHandle.getTableAlias(), tableHandle.getColumns(), newDomain,
                 tableHandle.getTableType(), tableHandle.getJoinHandle(),
-                tableHandle.getAggrHandle(), tableHandle.getStorageScheme(), tableHandle.getSimpleLayouts());
+                tableHandle.getAggrHandle(), tableHandle.getStorageScheme(), tableHandle.getStoragePaths());
 
         // pushing down without statistics pre-calculation.
         logger.debug("filter push down on " + newDomain.toString(session));
@@ -535,7 +538,7 @@ public class PixelsMetadata implements ConnectorMetadata
                         tableHandle.getTableName(),tableHandle.getTableAlias(),
                         newColumns, tableHandle.getConstraint(), tableHandle.getTableType(),
                         tableHandle.getJoinHandle(), tableHandle.getAggrHandle(),
-                        tableHandle.getStorageScheme(), tableHandle.getSimpleLayouts()),
+                        tableHandle.getStorageScheme(), tableHandle.getStoragePaths()),
                 projections,
                 assignments.entrySet().stream().map(assignment -> new Assignment(
                         assignment.getKey(), assignment.getValue(),
