@@ -27,7 +27,6 @@ import io.trino.spi.connector.ColumnMetadata;
 import io.trino.spi.type.Type;
 
 import java.util.Objects;
-import java.util.Optional;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
@@ -130,8 +129,7 @@ public final class PixelsColumnHandle implements ColumnHandle
 
     public ColumnMetadata getColumnMetadata()
     {
-        return ColumnMetadata.builder().setName(columnName).setType(columnType)
-                .setComment(Optional.ofNullable(columnComment)).build();
+        return ColumnMetadata.builder().setName(columnName).setType(columnType).build();
     }
 
     /**

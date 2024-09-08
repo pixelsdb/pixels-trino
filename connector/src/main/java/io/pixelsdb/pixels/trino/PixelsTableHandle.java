@@ -22,6 +22,8 @@ package io.pixelsdb.pixels.trino;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Joiner;
+import io.pixelsdb.pixels.common.metadata.domain.SimpleLayout;
+import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.SchemaTableName;
@@ -52,6 +54,15 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     private final Table.TableType tableType;
     private final PixelsJoinHandle joinHandle;
     private final PixelsAggrHandle aggrHandle;
+    /**
+     * The storage scheme of a base table.
+     */
+    private final Storage.Scheme storageScheme;
+    /**
+     * This is the simple data layouts to be observed by users of a base table.
+     * It does not contain enough information for creating table scan splits.
+     */
+    private final List<SimpleLayout> simpleLayouts;
 
     /**
      * The constructor for bast table handle.
@@ -74,7 +85,10 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("tableType") Table.TableType tableType,
             @JsonProperty("joinHandle") PixelsJoinHandle joinHandle,
-            @JsonProperty("aggrHandle") PixelsAggrHandle aggrHandle) {
+            @JsonProperty("aggrHandle") PixelsAggrHandle aggrHandle,
+            @JsonProperty("storageScheme") Storage.Scheme storageScheme,
+            @JsonProperty("simpleLayouts") List<SimpleLayout> simpleLayouts)
+    {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -97,6 +111,16 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         else
         {
             this.aggrHandle = null;
+        }
+        if (this.tableType == Table.TableType.BASE)
+        {
+            this.storageScheme = requireNonNull(storageScheme, "storageScheme is null");
+            this.simpleLayouts = requireNonNull(simpleLayouts, "simpleLayouts is null");
+        }
+        else
+        {
+            this.storageScheme = null;
+            this.simpleLayouts = null;
         }
     }
 
@@ -152,6 +176,18 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     public PixelsAggrHandle getAggrHandle()
     {
         return aggrHandle;
+    }
+
+    @JsonProperty
+    public Storage.Scheme getStorageScheme()
+    {
+        return storageScheme;
+    }
+
+    @JsonProperty
+    public List<SimpleLayout> getSimpleLayouts()
+    {
+        return simpleLayouts;
     }
 
     public SchemaTableName getSchemaTableName()
@@ -218,6 +254,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         private Table.TableType builderTableType;
         private PixelsJoinHandle builderJoinHandle;
         private PixelsAggrHandle builderAggrHandle;
+        private Storage.Scheme builderStorageScheme;
+        private List<SimpleLayout> builderSimpleLayouts;
 
         private Builder() { }
 
@@ -232,6 +270,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             this.builderTableType = tableHandle.tableType;
             this.builderJoinHandle = tableHandle.joinHandle;
             this.builderAggrHandle = tableHandle.aggrHandle;
+            this.builderStorageScheme = tableHandle.storageScheme;
+            this.builderSimpleLayouts = tableHandle.simpleLayouts;
         }
 
         public void setConnectorId(String builderConnectorId)
@@ -279,6 +319,12 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             this.builderAggrHandle = builderAggrHandle;
         }
 
+        public void setSimpleLayouts(List<SimpleLayout> builderSimpleLayouts)
+        {
+            this.builderSimpleLayouts = builderSimpleLayouts;
+        }
+
+
         public PixelsTableHandle build()
         {
             return new PixelsTableHandle(
@@ -290,7 +336,9 @@ public final class PixelsTableHandle implements ConnectorTableHandle
                     builderConstraint,
                     builderTableType,
                     builderJoinHandle,
-                    builderAggrHandle
+                    builderAggrHandle,
+                    builderStorageScheme,
+                    builderSimpleLayouts
             );
         }
     }

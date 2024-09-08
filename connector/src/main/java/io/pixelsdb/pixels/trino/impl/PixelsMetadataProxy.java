@@ -125,7 +125,8 @@ public class PixelsMetadataProxy
         SchemaTableName schemaTableName = new SchemaTableName(schemaName, tableName);
         if (!MetadataCache.Instance().isTableCached(transId, schemaTableName))
         {
-            Table table = metadataService.getTable(schemaName, tableName);
+            // Issue #106: get table with simple layouts, which is required by PixelsMetadata.getTableMetadata().
+            Table table = metadataService.getTable(schemaName, tableName, true);
             MetadataCache.Instance().cacheTable(transId, schemaTableName, table);
         }
         if (!MetadataCache.Instance().isTableColumnsCached(transId, schemaTableName))
