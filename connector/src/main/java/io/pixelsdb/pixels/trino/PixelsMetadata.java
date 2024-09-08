@@ -19,6 +19,7 @@
  */
 package io.pixelsdb.pixels.trino;
 
+import com.alibaba.fastjson.JSON;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -191,8 +192,8 @@ public class PixelsMetadata implements ConnectorMetadata
         if (tableHandle.getTableType() == Table.TableType.BASE)
         {
             Map<String, Object> properties = new HashMap<>();
-            properties.put("storage", tableHandle.getStorageScheme());
-            properties.put("layouts", tableHandle.getSimpleLayouts());
+            properties.put("storage", tableHandle.getStorageScheme().name());
+            properties.put("paths", JSON.toJSONString(tableHandle.getSimpleLayouts()));
             return new ConnectorTableMetadata(
                     new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns, properties);
         }
