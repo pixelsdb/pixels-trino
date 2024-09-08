@@ -129,7 +129,7 @@ public final class PixelsColumnHandle implements ColumnHandle
 
     public ColumnMetadata getColumnMetadata()
     {
-        return new ColumnMetadata(columnName, columnType);
+        return ColumnMetadata.builder().setName(columnName).setType(columnType).build();
     }
 
     /**

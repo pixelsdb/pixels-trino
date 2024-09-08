@@ -22,6 +22,7 @@ package io.pixelsdb.pixels.trino;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Joiner;
+import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.SchemaTableName;
@@ -52,6 +53,14 @@ public final class PixelsTableHandle implements ConnectorTableHandle
     private final Table.TableType tableType;
     private final PixelsJoinHandle joinHandle;
     private final PixelsAggrHandle aggrHandle;
+    /**
+     * The storage scheme of a base table.
+     */
+    private final Storage.Scheme storageScheme;
+    /**
+     * This is the storage paths of a base table to be observed by users.
+     */
+    private final List<String> storagePaths;
 
     /**
      * The constructor for bast table handle.
@@ -74,7 +83,10 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("tableType") Table.TableType tableType,
             @JsonProperty("joinHandle") PixelsJoinHandle joinHandle,
-            @JsonProperty("aggrHandle") PixelsAggrHandle aggrHandle) {
+            @JsonProperty("aggrHandle") PixelsAggrHandle aggrHandle,
+            @JsonProperty("storageScheme") Storage.Scheme storageScheme,
+            @JsonProperty("storagePaths") List<String> storagePaths)
+    {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -97,6 +109,16 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         else
         {
             this.aggrHandle = null;
+        }
+        if (this.tableType == Table.TableType.BASE)
+        {
+            this.storageScheme = requireNonNull(storageScheme, "storageScheme is null");
+            this.storagePaths = requireNonNull(storagePaths, "storagePaths is null");
+        }
+        else
+        {
+            this.storageScheme = null;
+            this.storagePaths = null;
         }
     }
 
@@ -154,6 +176,18 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         return aggrHandle;
     }
 
+    @JsonProperty
+    public Storage.Scheme getStorageScheme()
+    {
+        return storageScheme;
+    }
+
+    @JsonProperty
+    public List<String> getStoragePaths()
+    {
+        return storagePaths;
+    }
+
     public SchemaTableName getSchemaTableName()
     {
         return new SchemaTableName(schemaName, tableName);
@@ -186,7 +220,9 @@ public final class PixelsTableHandle implements ConnectorTableHandle
                 Objects.equals(this.columns, other.columns) &&
                 Objects.equals(this.tableType, other.tableType) &&
                 Objects.equals(this.joinHandle, other.joinHandle) &&
-                Objects.equals(this.aggrHandle, other.aggrHandle);
+                Objects.equals(this.aggrHandle, other.aggrHandle) &&
+                Objects.equals(this.storageScheme, other.storageScheme) &&
+                Objects.equals(this.storagePaths, other.getStoragePaths());
     }
 
     @Override
@@ -218,6 +254,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
         private Table.TableType builderTableType;
         private PixelsJoinHandle builderJoinHandle;
         private PixelsAggrHandle builderAggrHandle;
+        private Storage.Scheme builderStorageScheme;
+        private List<String> builderStoragePaths;
 
         private Builder() { }
 
@@ -232,6 +270,8 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             this.builderTableType = tableHandle.tableType;
             this.builderJoinHandle = tableHandle.joinHandle;
             this.builderAggrHandle = tableHandle.aggrHandle;
+            this.builderStorageScheme = tableHandle.storageScheme;
+            this.builderStoragePaths = tableHandle.storagePaths;
         }
 
         public void setConnectorId(String builderConnectorId)
@@ -279,6 +319,12 @@ public final class PixelsTableHandle implements ConnectorTableHandle
             this.builderAggrHandle = builderAggrHandle;
         }
 
+        public void setStoragePaths(List<String> builderStoragePaths)
+        {
+            this.builderStoragePaths = builderStoragePaths;
+        }
+
+
         public PixelsTableHandle build()
         {
             return new PixelsTableHandle(
@@ -290,7 +336,9 @@ public final class PixelsTableHandle implements ConnectorTableHandle
                     builderConstraint,
                     builderTableType,
                     builderJoinHandle,
-                    builderAggrHandle
+                    builderAggrHandle,
+                    builderStorageScheme,
+                    builderStoragePaths
             );
         }
     }

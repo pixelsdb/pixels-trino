@@ -29,6 +29,7 @@ import io.airlift.json.ObjectMapperProvider;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.domain.Column;
+import io.pixelsdb.pixels.common.metadata.domain.Layout;
 import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
@@ -129,6 +130,7 @@ public class PixelsMetadata implements ConnectorMetadata
             if (metadataProxy.existTable(tableName.getSchemaName(), tableName.getTableName()))
             {
                 List<PixelsColumnHandle> columns;
+                io.pixelsdb.pixels.common.metadata.domain.Table table;
                 try
                 {
                     /*
@@ -140,6 +142,12 @@ public class PixelsMetadata implements ConnectorMetadata
                      */
                     metadataProxy.refreshCachedTableAndColumns(
                             transHandle.getTransId(), tableName.getSchemaName(), tableName.getTableName());
+                    table = metadataProxy.getTable(transHandle.getTransId(), tableName.getSchemaName(), tableName.getTableName());
+                    if (table.getLayouts().isEmpty())
+                    {
+                        throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR,
+                                "layouts not found for table '" + tableName + "'");
+                    }
                     // initially, get all the columns from the table.
                     columns = metadataProxy.getTableColumns(
                             connectorId, transHandle.getTransId(), tableName.getSchemaName(), tableName.getTableName());
@@ -147,12 +155,18 @@ public class PixelsMetadata implements ConnectorMetadata
                 {
                     throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
                 }
+                List<String> storagePaths = new LinkedList<>();
+                for (Layout layout : table.getLayouts().get())
+                {
+                    Collections.addAll(storagePaths, layout.getCompactPathUris());
+                    Collections.addAll(storagePaths, layout.getOrderedPathUris());
+                }
                 PixelsTableHandle tableHandle = new PixelsTableHandle(
                         connectorId, tableName.getSchemaName(), tableName.getTableName(),
                         tableName.getTableName() + "_" + UUID.randomUUID()
                                 .toString().replace("-", ""),
                         columns, TupleDomain.all(), // match all tuples at the beginning.
-                        Table.TableType.BASE, null, null);
+                        Table.TableType.BASE, null, null, table.getStorageScheme(), storagePaths);
                 return tableHandle;
             }
         } catch (MetadataException e)
@@ -168,18 +182,32 @@ public class PixelsMetadata implements ConnectorMetadata
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;
         checkArgument(tableHandle.getConnectorId().equals(connectorId),
                 "tableHandle is not for this connector");
+        List<ColumnMetadata> columns;
         if (tableHandle.getColumns() != null)
         {
             List<PixelsColumnHandle> columnHandleList = tableHandle.getColumns();
-            List<ColumnMetadata> columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
-                    .collect(toImmutableList());
+            columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata).collect(toImmutableList());
+        }
+        else
+        {
+            columns = getColumnsMetadata(tableHandle.getSchemaName(), tableHandle.getTableName());
+        }
+        if (tableHandle.getTableType() == Table.TableType.BASE)
+        {
+            Map<String, Object> properties = new HashMap<>();
+            properties.put("storage", tableHandle.getStorageScheme().name());
+            properties.put("paths", String.join(";", tableHandle.getStoragePaths()));
+            return new ConnectorTableMetadata(
+                    new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns, properties);
+        }
+        else
+        {
             return new ConnectorTableMetadata(
                     new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns);
         }
-        return getTableMetadataInternal(tableHandle.getSchemaName(), tableHandle.getTableName());
     }
 
-    private ConnectorTableMetadata getTableMetadataInternal(String schemaName, String tableName)
+    private List<ColumnMetadata> getColumnsMetadata(String schemaName, String tableName)
     {
         List<PixelsColumnHandle> columnHandleList;
         try
@@ -189,9 +217,8 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
         }
-        List<ColumnMetadata> columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
+        return columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
                 .collect(toList());
-        return new ConnectorTableMetadata(new SchemaTableName(schemaName, tableName), columns);
     }
 
     @Override
@@ -288,13 +315,7 @@ public class PixelsMetadata implements ConnectorMetadata
                  */
                 if (metadataProxy.existTable(tableName.getSchemaName(), tableName.getTableName()))
                 {
-                    ConnectorTableMetadata tableMetadata = getTableMetadataInternal(
-                            tableName.getSchemaName(), tableName.getTableName());
-                    // table can disappear during listing operation
-                    if (tableMetadata != null)
-                    {
-                        columns.put(tableName, tableMetadata.getColumns());
-                    }
+                    columns.put(tableName, getColumnsMetadata(tableName.getSchemaName(), tableName.getTableName()));
                 }
             } catch (MetadataException e)
             {
@@ -481,7 +502,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 tableHandle.getSchemaName(), tableHandle.getTableName(),
                 tableHandle.getTableAlias(), tableHandle.getColumns(), newDomain,
                 tableHandle.getTableType(), tableHandle.getJoinHandle(),
-                tableHandle.getAggrHandle());
+                tableHandle.getAggrHandle(), tableHandle.getStorageScheme(), tableHandle.getStoragePaths());
 
         // pushing down without statistics pre-calculation.
         logger.debug("filter push down on " + newDomain.toString(session));
@@ -516,7 +537,8 @@ public class PixelsMetadata implements ConnectorMetadata
                 new PixelsTableHandle(connectorId, tableHandle.getSchemaName(),
                         tableHandle.getTableName(),tableHandle.getTableAlias(),
                         newColumns, tableHandle.getConstraint(), tableHandle.getTableType(),
-                        tableHandle.getJoinHandle(), tableHandle.getAggrHandle()),
+                        tableHandle.getJoinHandle(), tableHandle.getAggrHandle(),
+                        tableHandle.getStorageScheme(), tableHandle.getStoragePaths()),
                 projections,
                 assignments.entrySet().stream().map(assignment -> new Assignment(
                         assignment.getKey(), assignment.getValue(),
@@ -716,7 +738,8 @@ public class PixelsMetadata implements ConnectorMetadata
         String newTableName = "aggregate_" + tableHandle.getTableName();
         PixelsTableHandle newHandle = new PixelsTableHandle(
                 connectorId, newSchemaName, newTableName, newTableName, newColumns,
-                TupleDomain.all(), Table.TableType.AGGREGATED, null, aggrHandle);
+                TupleDomain.all(), Table.TableType.AGGREGATED,
+                null, aggrHandle, null, null);
 
         return Optional.of(new AggregationApplicationResult<>(newHandle, projections.build(),
                 resultAssignments.build(), ImmutableMap.of(), false));
@@ -823,7 +846,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
         PixelsTableHandle joinedTableHandle = new PixelsTableHandle(
                 connectorId, schemaName, tableName, tableName, joinedColumns.build(), TupleDomain.all(),
-                Table.TableType.JOINED, joinHandle, null);
+                Table.TableType.JOINED, joinHandle, null, null, null);
 
         return Optional.of(new JoinApplicationResult<>(
                 joinedTableHandle,
