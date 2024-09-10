@@ -258,6 +258,27 @@ public class PixelsTrinoConfig
     }
 
     /**
+     * Get the output file path for a transaction (query). It will not end with a slash '/'.
+     * @param transId the transaction id of the query
+     * @param post the postfix to be appended to the end of the file path
+     * @return the output file path
+     */
+    public String getOutputFilePathForQuery(long transId, String post)
+    {
+        if (this.cloudFunctionSwitch == CloudFunctionSwitch.OFF)
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    new Throwable("should not use output storage when cloud function is turned off"));
+        }
+        if (post.endsWith("/"))
+        {
+            throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR,
+                    "the file path postfix should not end with as slash '/'");
+        }
+        return this.outputFolder + transId + (post.startsWith("/") ? "" : "/") + post;
+    }
+
+    /**
      * Get the intermediate folder for a transaction (query). It will end with
      * a slash '/', hence there is no need to add a slash manually.
      * @param transId the transaction id of the query

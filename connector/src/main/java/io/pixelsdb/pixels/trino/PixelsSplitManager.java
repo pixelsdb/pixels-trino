@@ -348,7 +348,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 {
                     OutputInfo output = aggrInput.getOutput();
                     output.setStorageInfo(config.getOutputStorageInfo());
-                    output.setPath(config.getOutputFolderForQuery(transHandle.getTransId(),
+                    output.setPath(config.getOutputFilePathForQuery(transHandle.getTransId(),
                             output.getPath().substring(output.getPath().indexOf(tableHandle.getSchemaName()))));
                     aggrInput.setOutput(output);
                     PixelsSplit split = new PixelsSplit(
