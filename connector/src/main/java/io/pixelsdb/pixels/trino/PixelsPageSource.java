@@ -440,9 +440,9 @@ class PixelsPageSource implements ConnectorPageSource
             return;
         }
 
-        closed = true;
-
         closeReader();
+        
+        closed = true;
     }
 
     /**
