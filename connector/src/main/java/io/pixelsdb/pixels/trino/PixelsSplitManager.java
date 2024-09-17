@@ -53,10 +53,7 @@ import io.pixelsdb.pixels.planner.coordinate.PlanCoordinatorFactory;
 import io.pixelsdb.pixels.planner.plan.PlanOptimizer;
 import io.pixelsdb.pixels.planner.plan.logical.*;
 import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
-import io.pixelsdb.pixels.planner.plan.physical.AggregationOperator;
-import io.pixelsdb.pixels.planner.plan.physical.JoinOperator;
-import io.pixelsdb.pixels.planner.plan.physical.Operator;
-import io.pixelsdb.pixels.planner.plan.physical.ScanOperator;
+import io.pixelsdb.pixels.planner.plan.physical.*;
 import io.pixelsdb.pixels.planner.plan.physical.domain.*;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
@@ -192,7 +189,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             Optional.of(this.metadataProxy.getMetadataService()));
 
                     ScanOperator scanOperator = (ScanOperator) planner.getRootOperator();
-                    PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), scanOperator);
                     List<ScanInput> scanInputs = scanOperator.getScanInputs();
                     // Build the splits of the scan result.
                     ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
@@ -210,6 +206,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 // we do not use synthetic columns for scan operator
                                 emptyConstraint, true, false);
                         splitsBuilder.add(split);
+                    }
+                    if (Objects.equals(config.getConfigFactory().getProperty("executor.exchange.method"), ExchangeMethod.stream.name()))
+                    {
+                        PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), scanOperator);
                     }
                     // logger1.debug("scan operator: " + JSON.toJSONString(scanOperator));
                     scanOperator.execute().thenAccept(scanOutputs -> {
