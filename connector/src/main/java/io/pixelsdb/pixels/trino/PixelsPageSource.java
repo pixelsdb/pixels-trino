@@ -55,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.trino.spi.type.DoubleType.DOUBLE;
@@ -243,7 +244,7 @@ class PixelsPageSource implements ConnectorPageSource
         }
     }
 
-    private boolean readNextPath ()
+    private synchronized boolean readNextPath ()
     {
         try
         {
@@ -431,18 +432,20 @@ class PixelsPageSource implements ConnectorPageSource
         return new Page(rowBatchSize, blocks);
     }
 
+    /**
+     * Close the last reader.
+     */
     @Override
-    public void close()
+    public synchronized void close()
     {
-        // PIXELS-403: page source is not accessed by multiple threads, there is no need to synchronize on this method.
         if (closed)
         {
             return;
         }
 
-        closed = true;
-
         closeReader();
+
+        closed = true;
     }
 
     /**
@@ -452,11 +455,6 @@ class PixelsPageSource implements ConnectorPageSource
     {
         try
         {
-            if (closed)
-            {
-                return;
-            }
-
             if (pixelsReader != null)
             {
                 if (recordReader != null)
