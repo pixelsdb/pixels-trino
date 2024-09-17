@@ -74,7 +74,7 @@ class PixelsPageSource implements ConnectorPageSource
     private final List<PixelsColumnHandle> columns;
     private final String[] includeCols;
     private final Storage storage;
-    private AtomicBoolean closed;
+    private boolean closed;
     private PixelsReader pixelsReader;
     private PixelsRecordReader recordReader;
     private final PixelsCacheReader cacheReader;
@@ -114,7 +114,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.numColumnToRead = columnHandles.size();
         this.footerCache = pixelsFooterCache;
         this.batchId = 0;
-        this.closed = new AtomicBoolean(false);
+        this.closed = false;
         this.BatchSize = PixelsTrinoConfig.getBatchSize();
         this.filtered = new Bitmap(this.BatchSize, true);
         this.tmp = new Bitmap(this.BatchSize, false);
@@ -294,7 +294,7 @@ class PixelsPageSource implements ConnectorPageSource
     @Override
     public long getCompletedBytes()
     {
-        if (closed.get())
+        if (closed)
         {
             return this.completedBytes;
         }
@@ -304,7 +304,7 @@ class PixelsPageSource implements ConnectorPageSource
     @Override
     public long getReadTimeNanos()
     {
-        if (closed.get())
+        if (closed)
         {
             return readTimeNanos;
         }
@@ -322,7 +322,7 @@ class PixelsPageSource implements ConnectorPageSource
          * I tested about ten queries on test_1187, there was no problem, but
          * TODO: we still need to be careful about this method in the future.
          */
-        if (closed.get())
+        if (closed)
         {
             return memoryUsage;
         }
@@ -332,7 +332,7 @@ class PixelsPageSource implements ConnectorPageSource
     @Override
     public boolean isFinished()
     {
-        return this.closed.get();
+        return this.closed;
     }
 
     @Override
@@ -353,7 +353,7 @@ class PixelsPageSource implements ConnectorPageSource
             this.close();
         }
 
-        if (this.closed.get())
+        if (this.closed)
         {
             return null;
         }
@@ -432,16 +432,20 @@ class PixelsPageSource implements ConnectorPageSource
         return new Page(rowBatchSize, blocks);
     }
 
+    /**
+     * Close the last reader.
+     */
     @Override
-    public void close()
+    public synchronized void close()
     {
-        // PIXELS-403: page source is not accessed by multiple threads, there is no need to synchronize on this method.
-        if (closed.get())
+        if (closed)
         {
             return;
         }
 
-        closeLastReader();
+        closeReader();
+
+        closed = true;
     }
 
     /**
@@ -473,15 +477,6 @@ class PixelsPageSource implements ConnectorPageSource
             logger.error("close error: " + e.getMessage());
             throw new TrinoException(PixelsErrorCode.PIXELS_READER_CLOSE_ERROR, "close reader error.", e);
         }
-    }
-
-    /**
-     * Close the last pixels reader.
-     */
-    private synchronized void closeLastReader()
-    {
-        closeReader();
-        closed.set(true);
     }
 
     private void closeWithSuppression(Throwable throwable)
