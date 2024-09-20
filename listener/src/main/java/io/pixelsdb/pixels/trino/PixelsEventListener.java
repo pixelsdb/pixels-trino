@@ -92,6 +92,7 @@ public class PixelsEventListener implements EventListener
                 }
 
                 // PIXELS-506: create the transaction service to report accurate scan bytes.
+                // PIXELS-715: no need to shut down the default transaction service.
                 transService = TransService.Instance();
             }
             else
