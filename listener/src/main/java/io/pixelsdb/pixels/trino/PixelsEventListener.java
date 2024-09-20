@@ -92,18 +92,7 @@ public class PixelsEventListener implements EventListener
                 }
 
                 // PIXELS-506: create the transaction service to report accurate scan bytes.
-                transService = new TransService(
-                        ConfigFactory.Instance().getProperty("trans.server.host"),
-                        Integer.parseInt(ConfigFactory.Instance().getProperty("trans.server.port")));
-                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                    try
-                    {
-                        transService.shutdown();
-                    } catch (InterruptedException e)
-                    {
-                        logger.error("failed to shutdown transaction service");
-                    }
-                }));
+                transService = TransService.Instance();
             }
             else
             {
