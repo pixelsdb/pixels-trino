@@ -38,6 +38,7 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.Output;
+import io.pixelsdb.pixels.common.turbo.SimpleOutput;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -211,7 +212,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     {
                         PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), scanOperator);
                     }
-                    // logger1.debug("scan operator: " + JSON.toJSONString(scanOperator));
+                    // logger.debug("scan operator: " + JSON.toJSONString(scanOperator));
                     scanOperator.execute().thenAccept(scanOutputs -> {
                         for (int i = 0; i < scanOutputs.length; ++i)
                         {
