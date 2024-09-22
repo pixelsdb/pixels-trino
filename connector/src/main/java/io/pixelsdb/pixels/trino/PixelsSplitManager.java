@@ -979,7 +979,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         Map<String, String> fileToNodeMap = new HashMap<>();
                         for (KeyValue kv : nodeFiles)
                         {
-                            String node = kv.getKey().toString(StandardCharsets.UTF_8).split("_")[2];
+                            String node = kv.getKey().toString(StandardCharsets.UTF_8).split("_")[3];
                             String[] files = kv.getValue().toString(StandardCharsets.UTF_8).split(";");
                             for(String file : files)
                             {
