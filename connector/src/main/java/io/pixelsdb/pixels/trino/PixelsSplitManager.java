@@ -27,6 +27,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import io.etcd.jetcd.KeyValue;
+import io.pixelsdb.pixels.cache.PixelsCacheUtil;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.layout.*;
 import io.pixelsdb.pixels.common.metadata.SchemaTableName;
@@ -979,7 +980,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         Map<String, String> fileToNodeMap = new HashMap<>();
                         for (KeyValue kv : nodeFiles)
                         {
-                            String node = kv.getKey().toString(StandardCharsets.UTF_8).split("_")[3];
+                            String node = PixelsCacheUtil.getHostnameFromCacheLocationLiteral(
+                                    kv.getKey().toString(StandardCharsets.UTF_8));
                             String[] files = kv.getValue().toString(StandardCharsets.UTF_8).split(";");
                             for(String file : files)
                             {
