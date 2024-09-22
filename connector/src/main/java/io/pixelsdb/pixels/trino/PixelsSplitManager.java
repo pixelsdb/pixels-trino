@@ -116,8 +116,23 @@ public class PixelsSplitManager implements ConnectorSplitManager
         this.cacheEnabled = Boolean.parseBoolean(cacheEnabled);
         this.projectionReadEnabled = Boolean.parseBoolean(projectionReadEnabled);
         this.multiSplitForOrdered = Boolean.parseBoolean(multiSplit);
-        this.cacheSchema = config.getConfigFactory().getProperty("cache.schema");
-        this.cacheTable = config.getConfigFactory().getProperty("cache.table");
+        KeyValue keyValue = EtcdUtil.Instance().getKeyValue(Constants.LAYOUT_VERSION_LITERAL);
+        if (keyValue != null)
+        {
+            String value = keyValue.getValue().toString(StandardCharsets.UTF_8);
+            // PIXELS-636: get schema and table name from etcd instead of config file.
+            String[] splits = value.split(":");
+            checkArgument(splits.length == 2, "invalid value for key '" +
+                    Constants.LAYOUT_VERSION_LITERAL + "' in etcd: " + value);
+            SchemaTableName schemaTableName = new SchemaTableName(splits[0]);
+            this.cacheSchema = schemaTableName.getSchemaName();
+            this.cacheTable = schemaTableName.getTableName();
+        }
+        else
+        {
+            this.cacheSchema = null;
+            this.cacheTable = null;
+        }
     }
 
     public static List<PixelsColumnHandle> getIncludeColumns(PixelsTableHandle tableHandle)
