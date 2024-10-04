@@ -30,6 +30,7 @@ import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.QueryScheduleService;
+import io.pixelsdb.pixels.planner.coordinate.WorkerCoordinateServer;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
@@ -63,6 +64,7 @@ public class PixelsConnector implements Connector
     private final PixelsTrinoConfig config;
     private final TransService transService;
     private final QueryScheduleService queryScheduleService;
+    private final WorkerCoordinateServer workerCoordinatorServer;
 
     @Inject
     public PixelsConnector(
@@ -98,6 +100,10 @@ public class PixelsConnector implements Connector
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_SCHEDULE_ERROR, e);
         }
+        this.workerCoordinatorServer = new WorkerCoordinateServer(
+                Integer.parseInt(config.getConfigFactory().getProperty("worker.coordinate.server.port")));
+        Thread serverThread = new Thread(this.workerCoordinatorServer);
+        serverThread.start();
     }
 
     @Override
@@ -329,6 +335,7 @@ public class PixelsConnector implements Connector
             lifeCycleManager.stop();
             // PIXELS-715: no need to shut down the default transaction service.
             this.queryScheduleService.shutdown();
+            this.workerCoordinatorServer.shutdown();
         } catch (Exception e)
         {
             logger.error(e, "error in shutting down connector");

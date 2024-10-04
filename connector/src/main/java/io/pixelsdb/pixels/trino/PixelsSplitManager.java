@@ -50,6 +50,7 @@ import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.planner.PixelsPlanner;
+import io.pixelsdb.pixels.planner.coordinate.PlanCoordinatorFactory;
 import io.pixelsdb.pixels.planner.plan.PlanOptimizer;
 import io.pixelsdb.pixels.planner.plan.logical.*;
 import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
@@ -207,6 +208,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             Optional.of(this.metadataProxy.getMetadataService()));
 
                     ScanOperator scanOperator = (ScanOperator) planner.getRootOperator();
+                    PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), scanOperator);
                     List<ScanInput> scanInputs = scanOperator.getScanInputs();
                     // Build the splits of the scan result.
                     ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
@@ -287,6 +289,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         Optional.of(this.metadataProxy.getMetadataService()));
 
                 JoinOperator joinOperator = (JoinOperator) planner.getRootOperator();
+                PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), joinOperator);
                 List<JoinInput> joinInputs = joinOperator.getJoinInputs();
                 // Build the splits of the join result.
                 ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
@@ -357,6 +360,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
                         Optional.of(this.metadataProxy.getMetadataService()));
                 AggregationOperator aggrOperator = (AggregationOperator) planner.getRootOperator();
+                PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), aggrOperator);
                 List<AggregationInput> aggrInputs = aggrOperator.getFinalAggrInputs();
                 // Build the split of the aggregation result.
                 ImmutableList.Builder<PixelsSplit> splitsBuilder = ImmutableList.builder();
