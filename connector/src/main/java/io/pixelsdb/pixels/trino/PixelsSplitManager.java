@@ -39,6 +39,7 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.Output;
+import io.pixelsdb.pixels.common.turbo.SimpleOutput;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -50,13 +51,11 @@ import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
 import io.pixelsdb.pixels.executor.predicate.Filter;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
 import io.pixelsdb.pixels.planner.PixelsPlanner;
+import io.pixelsdb.pixels.planner.coordinate.PlanCoordinatorFactory;
 import io.pixelsdb.pixels.planner.plan.PlanOptimizer;
 import io.pixelsdb.pixels.planner.plan.logical.*;
 import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
-import io.pixelsdb.pixels.planner.plan.physical.AggregationOperator;
-import io.pixelsdb.pixels.planner.plan.physical.JoinOperator;
-import io.pixelsdb.pixels.planner.plan.physical.Operator;
-import io.pixelsdb.pixels.planner.plan.physical.ScanOperator;
+import io.pixelsdb.pixels.planner.plan.physical.*;
 import io.pixelsdb.pixels.planner.plan.physical.domain.*;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
@@ -224,6 +223,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 // we do not use synthetic columns for scan operator
                                 emptyConstraint, true, false);
                         splitsBuilder.add(split);
+                    }
+                    if (Objects.equals(config.getConfigFactory().getProperty("executor.exchange.method"), ExchangeMethod.stream.name()))
+                    {
+                        PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), scanOperator);
                     }
                     // logger.debug("scan operator: " + JSON.toJSONString(scanOperator));
                     scanOperator.execute().thenAccept(scanOutputs -> {
