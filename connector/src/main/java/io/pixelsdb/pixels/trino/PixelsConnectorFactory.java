@@ -37,8 +37,6 @@ import static java.util.Objects.requireNonNull;
 
 public class PixelsConnectorFactory implements ConnectorFactory
 {
-    private static final Logger log = LoggerFactory.getLogger(PixelsConnectorFactory.class);
-    private WorkerCoordinateServer coordinateServer;
     @Override
     public String getName()
     {

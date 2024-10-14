@@ -331,6 +331,7 @@ public class PixelsConnector implements Connector
             lifeCycleManager.stop();
             this.transService.shutdown();
             this.queryScheduleService.shutdown();
+            PixelsWorkerCoordinator.shutdown();
         } catch (Exception e)
         {
             logger.error(e, "error in shutting down connector");
