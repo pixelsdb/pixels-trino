@@ -22,10 +22,14 @@ package io.pixelsdb.pixels.trino;
 import com.google.inject.Injector;
 import io.airlift.bootstrap.Bootstrap;
 import io.airlift.json.JsonModule;
+import io.pixelsdb.pixels.common.server.Server;
+import io.pixelsdb.pixels.planner.coordinate.WorkerCoordinateServer;
 import io.trino.plugin.base.TypeDeserializerModule;
 import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorContext;
 import io.trino.spi.connector.ConnectorFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
@@ -49,12 +53,14 @@ public class PixelsConnectorFactory implements ConnectorFactory
                 new JsonModule(),
                 new TypeDeserializerModule(context.getTypeManager()),
                 new PixelsModule(catalogName, context.getTypeManager()));
-
         Injector injector = app
                 .doNotInitializeLogging()
                 .setRequiredConfigurationProperties(requiredConfig)
                 .initialize();
-
+        if (context.getNodeManager().getCurrentNode().isCoordinator())
+        {
+            PixelsWorkerCoordinator.init();
+        }
         return injector.getInstance(PixelsConnector.class);
     }
 }

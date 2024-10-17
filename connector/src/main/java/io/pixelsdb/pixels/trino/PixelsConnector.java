@@ -329,6 +329,7 @@ public class PixelsConnector implements Connector
             lifeCycleManager.stop();
             // PIXELS-715: no need to shut down the default transaction service.
             this.queryScheduleService.shutdown();
+            PixelsWorkerCoordinator.shutdown();
         } catch (Exception e)
         {
             logger.error(e, "error in shutting down connector");
