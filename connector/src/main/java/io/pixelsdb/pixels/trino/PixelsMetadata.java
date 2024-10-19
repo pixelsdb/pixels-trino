@@ -664,6 +664,13 @@ public class PixelsMetadata implements ConnectorMetadata
         List<PixelsColumnHandle> groupKeyColumns = groupingSets.get(0).stream()
                 .map(PixelsColumnHandle.class::cast).collect(toImmutableList());
 
+        if (groupKeyColumns == null || groupKeyColumns.isEmpty())
+        {
+            // TODO: support aggregation without group keys.
+            logger.debug("[aggregation push down is rejected: not support aggregation without group keys]");
+            return Optional.empty();
+        }
+
         List<PixelsColumnHandle> tableColumns = tableHandle.getColumns();
 
         Set<PixelsColumnHandle> columnSet = ImmutableSet.copyOf(tableColumns);
