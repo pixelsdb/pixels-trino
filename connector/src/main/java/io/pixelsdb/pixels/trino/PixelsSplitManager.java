@@ -309,6 +309,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             cacheOrder, emptyConstraint, true, true);
                     splitsBuilder.add(split);
                 }
+                if (Objects.equals(config.getConfigFactory().getProperty("executor.exchange.method"), ExchangeMethod.stream.name()))
+                {
+                    PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), joinOperator);
+                }
                 // logger.debug("join operator: " + JSON.toJSONString(joinOperator));
                 joinOperator.execute().thenAccept(joinOutputs -> {
                     for (int i = 0; i < joinOutputs.length; ++i)
