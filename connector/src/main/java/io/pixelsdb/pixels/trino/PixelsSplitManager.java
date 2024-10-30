@@ -202,7 +202,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
                     BaseTable root = this.parseBaseTable(tableHandle);
                     PixelsPlanner planner = new PixelsPlanner(
-                            transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
+                            transHandle.getTransId(), transHandle.getTimestamp(), root, orderedPathEnabled, compactPathEnabled,
                             Optional.of(this.metadataProxy.getMetadataService()));
 
                     ScanOperator scanOperator = (ScanOperator) planner.getRootOperator();
@@ -286,7 +286,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
                 // Call planner to optimize this join plan.
                 PixelsPlanner planner = new PixelsPlanner(
-                        transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
+                        transHandle.getTransId(), transHandle.getTimestamp(), root, orderedPathEnabled, compactPathEnabled,
                         Optional.of(this.metadataProxy.getMetadataService()));
 
                 JoinOperator joinOperator = (JoinOperator) planner.getRootOperator();
@@ -357,7 +357,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
                 // Call planner to optimize this aggregation plan.
                 PixelsPlanner planner = new PixelsPlanner(
-                        transHandle.getTransId(), root, orderedPathEnabled, compactPathEnabled,
+                        transHandle.getTransId(), transHandle.getTimestamp(), root, orderedPathEnabled, compactPathEnabled,
                         Optional.of(this.metadataProxy.getMetadataService()));
                 AggregationOperator aggrOperator = (AggregationOperator) planner.getRootOperator();
                 List<AggregationInput> aggrInputs = aggrOperator.getFinalAggrInputs();

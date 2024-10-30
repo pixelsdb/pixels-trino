@@ -87,20 +87,20 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 "connectorId is not for this connector");
         List<PixelsColumnHandle> pixelsColumns = columns.stream()
                 .map(PixelsColumnHandle.class::cast).collect(toList());
-
+        PixelsTransactionHandle pixelsTransactionHandle = (PixelsTransactionHandle) transactionHandle;
         try
         {
             Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
             if (pixelsSplit.getFromServerlessOutput())
             {
                 IntermediateFileCleaner.Instance().registerStorage(storage);
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, storage,
+                return new PixelsPageSource(pixelsSplit, pixelsColumns, pixelsTransactionHandle, storage,
                         cacheFile, indexFile, pixelsFooterCache);
             } else
             {
                 // perform scan push down.
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
-                return new PixelsPageSource(pixelsSplit, withFilterColumns, storage,
+                return new PixelsPageSource(pixelsSplit, withFilterColumns, pixelsTransactionHandle, storage,
                         cacheFile, indexFile, pixelsFooterCache);
             }
         } catch (IOException e)
