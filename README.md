@@ -2,14 +2,14 @@
 The Pixels connector for Trino.
 
 ## Compatibility
-Pixels integration (connector & event listener) is currently compatible with Trino 405. 
+Pixels integration (connector & event listener) is currently compatible with Trino 465. 
 Other Trino versions that are compatible
-with the Connector SPI in Trino 405 should also work well with Pixels.
+with the Connector SPI in Trino 465 should also work well with Pixels.
 
 ## Build
 This project can be opened as a maven project in Intellij and built using maven.
 
-**Note** that Trino 405 requires Java 17.0.3+, thus this project should be built by JDK 17 (17.0.6 is tested).
+**Note** that Trino 465 requires Java 23.0.1+, thus this project should be built by JDK 23 (Azul Zulu JDK 23.0.1+11 is tested).
 
 [Pixels](https://github.com/pixelsdb/pixels) is the parent of this project,
 therefore use `mvn install` to install Pixels modules into your local maven repository,
@@ -19,17 +19,17 @@ before building this project.
 Follow the instructions in
 [Pixels Installation](https://github.com/pixelsdb/pixels/blob/master/docs/INSTALL.md) to install Pixels and other components except Trino.
 After that, follow this document to install Trino and use it to query Pixels.
-Ensure Java 17 is in use as it is required by Trino 405.
+Ensure Java 23 is in use as it is required by Trino 465.
 
 ### Install Trino
 
-Download and install Trino 405 following the instructions in [Trino Docs](https://trino.io/docs/405/installation/deployment.html).
+Download and install Trino 465 following the instructions in [Trino Docs](https://trino.io/docs/465/installation/deployment.html).
 
-Here, we install Trino to `~/opt/trino-server-405` and create a link for it:
+Here, we install Trino to `~/opt/trino-server-465` and create a link for it:
 ```bash
-cd ~/opt; ln -s trino-server-405 trino-server
+cd ~/opt; ln -s trino-server-465 trino-server
 ```
-Then download [trino-cli](https://trinodb.github.io/docs.trino.io/405/client/cli.html) into `~/opt/trino-server/bin/`
+Then download [trino-cli](https://trinodb.github.io/docs.trino.io/465/client/cli.html) into `~/opt/trino-server/bin/`
 and give the executable permission to it.
 Some scripts in Trino may require python:
 ```bash
