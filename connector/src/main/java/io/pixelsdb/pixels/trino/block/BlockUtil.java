@@ -14,7 +14,6 @@
 package io.pixelsdb.pixels.trino.block;
 
 import io.airlift.slice.Slice;
-import io.airlift.slice.Slices;
 import io.trino.spi.block.Block;
 
 import javax.annotation.Nullable;
@@ -151,7 +150,7 @@ final class BlockUtil
         if (slice.isCompact() && index == 0 && length == slice.length()) {
             return slice;
         }
-        return Slices.copyOf(slice, index, length);
+        return slice.copy(index, length);
     }
 
     /**

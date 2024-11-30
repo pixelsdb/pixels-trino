@@ -20,7 +20,6 @@
 package io.pixelsdb.pixels.trino.block;
 
 import io.trino.spi.block.Block;
-import io.trino.spi.block.BlockBuilder;
 import io.trino.spi.block.ByteArrayBlock;
 import io.trino.spi.block.ValueBlock;
 import org.openjdk.jol.info.ClassLayout;
@@ -49,7 +48,7 @@ import static io.pixelsdb.pixels.trino.block.BlockUtil.*;
  * Created at: 26/04/2021
  * Author: hank
  */
-public sealed class TimeArrayBlock implements ValueBlock
+public class TimeArrayBlock implements ValueBlock
 {
     private static final long INSTANCE_SIZE = ClassLayout.parseClass(TimeArrayBlock.class).instanceSize();
     public static final int SIZE_IN_BYTES_PER_POSITION = Integer.BYTES + Byte.BYTES;
@@ -159,64 +158,26 @@ public sealed class TimeArrayBlock implements ValueBlock
         return positionCount;
     }
 
-    @Override
-    public long getLong(int position, int offset)
+    public long getLong(int position)
     {
         checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
         return values[position + arrayOffset] * SCALE_FACTOR;
     }
 
-    @Override
-    public int getInt(int position, int offset)
+    public int getInt(int position)
     {
         checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
         return values[position + arrayOffset];
     }
 
-    @Override
-    @Deprecated
-    // TODO: Remove when we fix intermediate types on aggregations.
-    public short getShort(int position, int offset)
+    protected int[] getRawValues()
     {
-        checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
-
-        short value = (short) (values[position + arrayOffset]);
-        if (value != values[position + arrayOffset])
-        {
-            throw new ArithmeticException("short overflow");
-        }
-        return value;
+        return this.values;
     }
 
-    @Override
-    @Deprecated
-    // TODO: Remove when we fix intermediate types on aggregations.
-    public byte getByte(int position, int offset)
+    protected int getRawValuesOffset()
     {
-        checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
-
-        byte value = (byte) (values[position + arrayOffset]);
-        if (value != values[position + arrayOffset])
-        {
-            throw new ArithmeticException("byte overflow");
-        }
-        return value;
+        return this.arrayOffset;
     }
 
     @Override
@@ -258,13 +219,6 @@ public sealed class TimeArrayBlock implements ValueBlock
     public Optional<ByteArrayBlock> getNulls()
     {
         return Optional.empty();
-    }
-
-    @Override
-    public void writeBytesTo(int position, int offset, int length, BlockBuilder blockBuilder)
-    {
-        checkReadablePosition(position);
-        blockBuilder.writeInt(values[position + arrayOffset]);
     }
 
     @Override

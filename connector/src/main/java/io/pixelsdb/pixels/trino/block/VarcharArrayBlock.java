@@ -21,10 +21,8 @@ package io.pixelsdb.pixels.trino.block;
 
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
-import io.airlift.slice.XxHash64;
 import io.pixelsdb.pixels.common.utils.JvmUtils;
 import io.trino.spi.block.Block;
-import io.trino.spi.block.BlockBuilder;
 import io.trino.spi.block.ByteArrayBlock;
 import io.trino.spi.block.ValueBlock;
 import org.openjdk.jol.info.ClassLayout;
@@ -43,7 +41,7 @@ import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
  * <p>
  * Our main modifications:
  * 1. we use a byte[][] instead of Slice as the backing storage
- * and replaced the implementation of each methods;
+ * and replaced the implementation of each method;
  * 2. add some other methods.
  * <p>
  *
@@ -173,8 +171,7 @@ public class VarcharArrayBlock implements ValueBlock
      * Gets the length of the value at the {@code position}.
      * This method must be implemented if @{code getSlice} is implemented.
      */
-    @Override
-    public int getSliceLength(int position)
+    protected int getSliceLength(int position)
     {
         checkReadablePosition(position);
         /**
@@ -435,102 +432,6 @@ public class VarcharArrayBlock implements ValueBlock
     }
 
     @Override
-    public byte getByte(int position, int offset)
-    {
-        checkReadablePosition(position);
-        return unsafe.getByte(getRawValue(position), address + getPositionOffset(position) + offset);
-    }
-
-    @Override
-    public short getShort(int position, int offset)
-    {
-        checkReadablePosition(position);
-        return unsafe.getShort(getRawValue(position), address + getPositionOffset(position) + offset);
-    }
-
-    @Override
-    public int getInt(int position, int offset)
-    {
-        checkReadablePosition(position);
-        return unsafe.getInt(getRawValue(position), address + getPositionOffset(position) + offset);
-    }
-
-    @Override
-    public long getLong(int position, int offset)
-    {
-        checkReadablePosition(position);
-        return unsafe.getLong(getRawValue(position), address + getPositionOffset(position) + offset);
-    }
-
-    @Override
-    public Slice getSlice(int position, int offset, int length)
-    {
-        checkReadablePosition(position);
-        return getRawSlice(position).slice(getPositionOffset(position) + offset, length);
-    }
-
-    @Override
-    public boolean equals(int position, int offset, Block otherBlock, int otherPosition, int otherOffset, int length)
-    {
-        checkReadablePosition(position);
-        if (valueIsNull[position + arrayOffset])
-        {
-            return false;
-        }
-        Slice rawSlice = getRawSlice(position);
-        if (getSliceLength(position) < length)
-        {
-            return false;
-        }
-        return otherBlock.bytesEqual(otherPosition, otherOffset, rawSlice, getPositionOffset(position) + offset, length);
-    }
-
-    @Override
-    public boolean bytesEqual(int position, int offset, Slice otherSlice, int otherOffset, int length)
-    {
-        checkReadablePosition(position);
-        if (valueIsNull[position + arrayOffset])
-        {
-            return false;
-        }
-        return getRawSlice(position).equals(getPositionOffset(position) + offset, length, otherSlice, otherOffset, length);
-    }
-
-    @Override
-    public long hash(int position, int offset, int length)
-    {
-        checkReadablePosition(position);
-        return XxHash64.hash(getRawSlice(position), getPositionOffset(position) + offset, length);
-    }
-
-    @Override
-    public int compareTo(int position, int offset, int length, Block otherBlock, int otherPosition, int otherOffset, int otherLength)
-    {
-        checkReadablePosition(position);
-        if (valueIsNull[position + arrayOffset])
-        {
-            return -1;
-        }
-        Slice rawSlice = getRawSlice(position);
-        if (getSliceLength(position) < length)
-        {
-            throw new IllegalArgumentException("Length longer than value length");
-        }
-        return -otherBlock.bytesCompare(otherPosition, otherOffset, otherLength, rawSlice, getPositionOffset(position) + offset, length);
-    }
-
-    @Override
-    public int bytesCompare(int position, int offset, int length, Slice otherSlice, int otherOffset, int otherLength)
-    {
-        checkReadablePosition(position);
-        if (valueIsNull[position + arrayOffset])
-        {
-            return -1;
-        }
-        return getRawSlice(position).compareTo(getPositionOffset(position) + offset, length, otherSlice, otherOffset, otherLength);
-    }
-
-    @Override
     public boolean isNull(int position)
     {
         checkReadablePosition(position);
@@ -575,13 +476,6 @@ public class VarcharArrayBlock implements ValueBlock
     protected void checkReadablePosition(int position)
     {
         BlockUtil.checkValidPosition(position, getPositionCount());
-    }
-
-    @Override
-    public void writeBytesTo(int position, int offset, int length, BlockBuilder blockBuilder)
-    {
-        checkReadablePosition(position);
-        blockBuilder.writeBytes(getRawSlice(position), getPositionOffset(position) + offset, length);
     }
 
     @Override

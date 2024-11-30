@@ -19,15 +19,14 @@
  */
 package io.pixelsdb.pixels.trino.block;
 
+import io.airlift.slice.SliceInput;
+import io.airlift.slice.SliceOutput;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockEncoding;
 import io.trino.spi.block.BlockEncodingSerde;
-import io.airlift.slice.SliceInput;
-import io.airlift.slice.SliceOutput;
-import io.airlift.slice.Slices;
 
-import static io.airlift.slice.SizeOf.SIZE_OF_INT;
-import static io.pixelsdb.pixels.trino.block.EncoderUtil.*;
+import static io.pixelsdb.pixels.trino.block.EncoderUtil.decodeNullBits;
+import static io.pixelsdb.pixels.trino.block.EncoderUtil.encodeNullsAsBits;
 
 /**
  * This class is derived from io.trino.spi.block.VariableWidthBlockEncoding
@@ -96,8 +95,8 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
 
         // offsets should be 0, do not read them from sliceInput.
 
-        // destinationIndex should be 0, because we do not need 0 the be the first item in lengths.
-        sliceInput.readBytes(Slices.wrappedIntArray(lengths), 0, positionCount * SIZE_OF_INT);
+        // destinationIndex should be 0, because we do not need 0 to be the first item in lengths.
+        sliceInput.readInts(lengths, 0, positionCount);
 
         boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).get();
 

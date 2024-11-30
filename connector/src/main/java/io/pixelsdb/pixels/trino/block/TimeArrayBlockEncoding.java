@@ -53,16 +53,25 @@ public class TimeArrayBlockEncoding implements BlockEncoding
     @Override
     public void writeBlock(BlockEncodingSerde blockEncodingSerde, SliceOutput sliceOutput, Block block)
     {
-        int positionCount = block.getPositionCount();
+        TimeArrayBlock timeArrayBlock = (TimeArrayBlock) block;
+        int positionCount = timeArrayBlock.getPositionCount();
         sliceOutput.appendInt(positionCount);
 
-        encodeNullsAsBits(sliceOutput, block);
+        encodeNullsAsBits(sliceOutput, timeArrayBlock);
 
-        for (int position = 0; position < positionCount; position++)
+        if (!timeArrayBlock.mayHaveNull())
         {
-            if (!block.isNull(position))
+            sliceOutput.writeInts(timeArrayBlock.getRawValues(),
+                    timeArrayBlock.getRawValuesOffset(), timeArrayBlock.getPositionCount());
+        }
+        else
+        {
+            for (int position = 0; position < positionCount; position++)
             {
-                sliceOutput.writeInt(block.getInt(position, 0));
+                if (!timeArrayBlock.isNull(position))
+                {
+                    sliceOutput.writeInt(timeArrayBlock.getInt(position));
+                }
             }
         }
     }
