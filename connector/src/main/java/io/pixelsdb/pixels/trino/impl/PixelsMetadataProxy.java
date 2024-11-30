@@ -145,7 +145,7 @@ public class PixelsMetadataProxy
             TypeDescription pixelsType = typeParser.parsePixelsType(c.getType());
             if (trinoType == null || pixelsType == null)
             {
-                throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR,
+                throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR,
                         "column type '" + c.getType() + "' is not supported.");
             }
             String name = c.getName();

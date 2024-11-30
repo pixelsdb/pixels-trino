@@ -21,8 +21,11 @@ package io.pixelsdb.pixels.trino.block;
 
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockBuilder;
+import io.trino.spi.block.ByteArrayBlock;
+import io.trino.spi.block.ValueBlock;
 import org.openjdk.jol.info.ClassLayout;
 
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.ObjLongConsumer;
 
@@ -46,7 +49,7 @@ import static io.pixelsdb.pixels.trino.block.BlockUtil.*;
  * Created at: 26/04/2021
  * Author: hank
  */
-public class TimeArrayBlock implements Block
+public sealed class TimeArrayBlock implements ValueBlock
 {
     private static final long INSTANCE_SIZE = ClassLayout.parseClass(TimeArrayBlock.class).instanceSize();
     public static final int SIZE_IN_BYTES_PER_POSITION = Integer.BYTES + Byte.BYTES;
@@ -231,12 +234,30 @@ public class TimeArrayBlock implements Block
      * i.e. not on in-progress block builders.
      */
     @Override
-    public Block copyWithAppendedNull()
+    public TimeArrayBlock copyWithAppendedNull()
     {
         boolean[] newValueIsNull = copyIsNullAndAppendNull(valueIsNull, arrayOffset, positionCount);
         int[] newValues = ensureCapacity(values, arrayOffset + positionCount + 1);
 
         return new TimeArrayBlock(arrayOffset, positionCount + 1, newValueIsNull, newValues);
+    }
+
+    @Override
+    public ValueBlock getUnderlyingValueBlock()
+    {
+        return null;
+    }
+
+    @Override
+    public int getUnderlyingValuePosition(int position)
+    {
+        return 0;
+    }
+
+    @Override
+    public Optional<ByteArrayBlock> getNulls()
+    {
+        return Optional.empty();
     }
 
     @Override
@@ -247,7 +268,7 @@ public class TimeArrayBlock implements Block
     }
 
     @Override
-    public Block getSingleValueBlock(int position)
+    public TimeArrayBlock getSingleValueBlock(int position)
     {
         checkReadablePosition(position);
         return new TimeArrayBlock(
@@ -257,7 +278,7 @@ public class TimeArrayBlock implements Block
     }
 
     @Override
-    public Block copyPositions(int[] positions, int offset, int length)
+    public TimeArrayBlock copyPositions(int[] positions, int offset, int length)
     {
         checkArrayRange(positions, offset, length);
 
@@ -274,7 +295,7 @@ public class TimeArrayBlock implements Block
     }
 
     @Override
-    public Block getRegion(int positionOffset, int length)
+    public TimeArrayBlock getRegion(int positionOffset, int length)
     {
         checkValidRegion(getPositionCount(), positionOffset, length);
 
@@ -282,7 +303,7 @@ public class TimeArrayBlock implements Block
     }
 
     @Override
-    public Block copyRegion(int positionOffset, int length)
+    public TimeArrayBlock copyRegion(int positionOffset, int length)
     {
         checkValidRegion(getPositionCount(), positionOffset, length);
 

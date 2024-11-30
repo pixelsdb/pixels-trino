@@ -39,7 +39,6 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.Output;
-import io.pixelsdb.pixels.common.turbo.SimpleOutput;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -620,7 +619,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         } catch (MetadataException | InvalidProtocolBufferException e)
         {
             logger.error("failed to get join algorithm", e);
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
 
         boolean rotateLeftRight = false;
@@ -838,7 +837,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
         catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         } catch (IOException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);

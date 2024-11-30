@@ -20,9 +20,9 @@
 package io.pixelsdb.pixels.trino.properties;
 
 import io.trino.spi.session.PropertyMetadata;
+import com.google.inject.Inject;
 import com.google.common.collect.ImmutableList;
 
-import javax.inject.Inject;
 import java.util.List;
 
 import static io.trino.spi.session.PropertyMetadata.stringProperty;

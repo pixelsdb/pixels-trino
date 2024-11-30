@@ -32,8 +32,8 @@ import io.pixelsdb.pixels.planner.plan.physical.domain.StorageInfoBuilder;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.SchemaTableName;
+import jakarta.validation.constraints.NotNull;
 
-import javax.validation.constraints.NotNull;
 import java.io.IOException;
 import java.util.Optional;
 

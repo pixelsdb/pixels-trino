@@ -14,8 +14,8 @@
     <packaging>trino-plugin</packaging>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>23</maven.compiler.source>
+        <maven.compiler.target>23</maven.compiler.target>
     </properties>
 
     <dependencies>
@@ -164,6 +164,12 @@
         </dependency>
 
         <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <optional>true</optional>
@@ -171,17 +177,6 @@
         <dependency>
             <groupId>com.google.inject</groupId>
             <artifactId>guice</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>javax.inject</groupId>
-            <artifactId>javax.inject</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>javax.validation</groupId>
-            <artifactId>validation-api</artifactId>
             <optional>true</optional>
         </dependency>
 
@@ -198,6 +193,5 @@
             <artifactId>trino-testing</artifactId>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 </project>

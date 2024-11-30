@@ -25,13 +25,12 @@ import io.airlift.slice.XxHash64;
 import io.pixelsdb.pixels.common.utils.JvmUtils;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockBuilder;
+import io.trino.spi.block.ByteArrayBlock;
+import io.trino.spi.block.ValueBlock;
 import org.openjdk.jol.info.ClassLayout;
 import sun.misc.Unsafe;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.OptionalInt;
-import java.util.Set;
+import java.util.*;
 import java.util.function.ObjLongConsumer;
 
 import static io.airlift.slice.SizeOf.sizeOf;
@@ -50,7 +49,7 @@ import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
  *
  * @author hank
  */
-public class VarcharArrayBlock implements Block
+public class VarcharArrayBlock implements ValueBlock
 {
     static final Unsafe unsafe;
     static final long address;
@@ -225,7 +224,7 @@ public class VarcharArrayBlock implements Block
     }
 
     /**
-     * Returns the size of of all positions marked true in the positions array.
+     * Returns the size of all positions marked true in the positions array.
      * This is equivalent to multiple calls of {@code block.getRegionSizeInBytes(position, length)}
      * where you mark all positions for the regions first.
      *
@@ -300,7 +299,7 @@ public class VarcharArrayBlock implements Block
      * The returned block must be a compact representation of the original block.
      */
     @Override
-    public Block copyPositions(int[] positions, int offset, int length)
+    public VarcharArrayBlock copyPositions(int[] positions, int offset, int length)
     {
         BlockUtil.checkArrayRange(positions, offset, length);
         byte[][] newValues = new byte[length][];
@@ -357,7 +356,7 @@ public class VarcharArrayBlock implements Block
      * this block may also be released.
      */
     @Override
-    public Block getRegion(int positionOffset, int length)
+    public VarcharArrayBlock getRegion(int positionOffset, int length)
     {
         BlockUtil.checkValidRegion(getPositionCount(), positionOffset, length);
 
@@ -374,7 +373,7 @@ public class VarcharArrayBlock implements Block
      * @throws IllegalArgumentException if this position is not valid
      */
     @Override
-    public Block getSingleValueBlock(int position)
+    public VarcharArrayBlock getSingleValueBlock(int position)
     {
         checkReadablePosition(position);
         byte[][] copy = new byte[1][];
@@ -402,7 +401,7 @@ public class VarcharArrayBlock implements Block
      * entire block.
      */
     @Override
-    public Block copyRegion(int positionOffset, int length)
+    public VarcharArrayBlock copyRegion(int positionOffset, int length)
     {
         BlockUtil.checkValidRegion(getPositionCount(), positionOffset, length);
         positionOffset += arrayOffset;
@@ -546,13 +545,31 @@ public class VarcharArrayBlock implements Block
      * i.e. not on in-progress block builders.
      */
     @Override
-    public Block copyWithAppendedNull()
+    public VarcharArrayBlock copyWithAppendedNull()
     {
         boolean[] newValueIsNull = copyIsNullAndAppendNull(valueIsNull, arrayOffset, positionCount);
         int[] newOffsets = copyOffsetsAndAppendNull(offsets, arrayOffset, positionCount);
         int[] newLengths = copyOffsetsAndAppendNull(lengths, arrayOffset, positionCount);
 
         return new VarcharArrayBlock(arrayOffset, positionCount + 1, values, newOffsets, newLengths, newValueIsNull);
+    }
+
+    @Override
+    public ValueBlock getUnderlyingValueBlock()
+    {
+        return ValueBlock.super.getUnderlyingValueBlock();
+    }
+
+    @Override
+    public int getUnderlyingValuePosition(int position)
+    {
+        return ValueBlock.super.getUnderlyingValuePosition(position);
+    }
+
+    @Override
+    public Optional<ByteArrayBlock> getNulls()
+    {
+        return Optional.empty();
     }
 
     protected void checkReadablePosition(int position)

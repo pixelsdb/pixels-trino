@@ -50,7 +50,6 @@ public class PixelsModule implements Module
         binder.bind(PixelsMetadataProxy.class).in(Scopes.SINGLETON);
         binder.bind(PixelsSplitManager.class).in(Scopes.SINGLETON);
         binder.bind(PixelsPageSourceProvider.class).in(Scopes.SINGLETON);
-        binder.bind(PixelsRecordSetProvider.class).in(Scopes.SINGLETON);
         binder.bind(PixelsSessionProperties.class).in(Scopes.SINGLETON);
         binder.bind(PixelsTableProperties.class).in(Scopes.SINGLETON);
         configBinder(binder).bindConfig(PixelsTrinoConfig.class);
