@@ -531,6 +531,14 @@ class PixelsPageSource implements ConnectorPageSource
                 case BYTE:
                 case SHORT:
                 case INT:
+                    LongColumnVector icv = (LongColumnVector) vector;
+                    int[] values = new int[batchSize];
+                    for (int i = 0; i < values.length; ++i)
+                    {
+                        values[i] = (int) icv.vector[i];
+                    }
+                    block = new IntArrayBlock(batchSize, Optional.ofNullable(icv.isNull), values);
+                    break;
                 case LONG:
                     LongColumnVector lcv = (LongColumnVector) vector;
                     block = new LongArrayBlock(batchSize, Optional.ofNullable(lcv.isNull), lcv.vector);
