@@ -40,14 +40,15 @@
         <maven.deploy.skip>true</maven.deploy.skip>
         <maven.install.skip>true</maven.install.skip>
 
-        <dep.trino.version>465</dep.trino.version>
-        <dep.airlift.version>285</dep.airlift.version>
+        <dep.trino.version>466</dep.trino.version>
+        <dep.airlift.version>287</dep.airlift.version>
         <!-- override the airlift.slice version in pixels -->
         <dep.airlift.slice.version>2.3</dep.airlift.slice.version>
         <dep.airlift.units.version>1.10</dep.airlift.units.version>
         <dep.jackson.version>2.18.1</dep.jackson.version>
         <dep.jakarta.validation.version>3.1.0</dep.jakarta.validation.version>
         <dep.io.opentelemetry.version>1.44.1</dep.io.opentelemetry.version>
+        <dep.errorprone.version>2.36.0</dep.errorprone.version>
         <!-- override the guava version in pixels -->
         <dep.google.guava.version>33.3.1-jre</dep.google.guava.version>
         <dep.google.inject.version>7.0.0</dep.google.inject.version>
@@ -116,6 +117,11 @@
                 <artifactId>guice</artifactId>
                 <version>${dep.google.inject.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.google.errorprone</groupId>
+                <artifactId>error_prone_annotations</artifactId>
+                <version>${dep.errorprone.version}</version>
+            </dependency>
 
             <!-- jackson -->
             <dependency>
@@ -129,12 +135,14 @@
                 <version>${dep.jackson.version}</version>
             </dependency>
 
+            <!-- jakarta -->
             <dependency>
                 <groupId>jakarta.validation</groupId>
                 <artifactId>jakarta.validation-api</artifactId>
                 <version>${dep.jakarta.validation.version}</version>
             </dependency>
 
+            <!-- io.opentelemetry -->
             <dependency>
                 <groupId>io.opentelemetry</groupId>
                 <artifactId>opentelemetry-api</artifactId>
@@ -198,6 +206,13 @@
                     <configuration>
                         <source>23</source>
                         <target>23</target>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>com.google.errorprone</groupId>
+                                <artifactId>error_prone_core</artifactId>
+                                <version>${dep.errorprone.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
                 <plugin>
