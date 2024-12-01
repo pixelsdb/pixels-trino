@@ -43,6 +43,8 @@ import static io.pixelsdb.pixels.trino.block.BlockUtil.copyOffsetsAndAppendNull;
  * <p>
  *
  * @author hank
+ * @create 2019-05
+ * @update 2024-12-01 adapt to with Trino 465 and add hasNull argument to the constructor.
  */
 public class VarcharArrayBlock implements ValueBlock
 {
@@ -50,11 +52,12 @@ public class VarcharArrayBlock implements ValueBlock
 
     private final int arrayOffset; // start index of the valid items in offsets and length, usually 0.
     private final int positionCount; // number of items in this block.
-    private final byte[][] values; // values of the items/
+    private final byte[][] values; // values of the items.
     private final int[] offsets; // start byte offset of the item in each value, \
     // always 0 if this block is deserialized by VarcharArrayBlockEncoding.readBlock.
     private final int[] lengths; // byte length of each item.
     private final boolean[] valueIsNull; // isNull flag of each item.
+    private final boolean hasNull;
 
     private final long retainedSizeInBytes;
     /**
@@ -64,23 +67,12 @@ public class VarcharArrayBlock implements ValueBlock
     private final long retainedSizeOfValues;
     private final long sizeInBytes;
 
-    static
+    public VarcharArrayBlock(int positionCount, byte[][] values, int[] offsets, int[] lengths, boolean hasNull, boolean[] valueIsNull)
     {
-        try
-        {
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
+        this(0, positionCount, values, offsets, lengths, hasNull, valueIsNull);
     }
 
-    public VarcharArrayBlock(int positionCount, byte[][] values, int[] offsets, int[] lengths, boolean[] valueIsNull)
-    {
-        this(0, positionCount, values, offsets, lengths, valueIsNull);
-    }
-
-    VarcharArrayBlock(int arrayOffset, int positionCount, byte[][] values, int[] offsets, int[] lengths, boolean[] valueIsNull)
+    VarcharArrayBlock(int arrayOffset, int positionCount, byte[][] values, int[] offsets, int[] lengths, boolean hasNull, boolean[] valueIsNull)
     {
         if (arrayOffset < 0)
         {
@@ -111,6 +103,8 @@ public class VarcharArrayBlock implements ValueBlock
         }
         this.lengths = lengths;
 
+        this.hasNull = hasNull;
+        // Issue #123: in Pixels, the isNull bitmap from column vectors always presents even if there is no nulls.
         if (valueIsNull == null || valueIsNull.length - arrayOffset < positionCount)
         {
             throw new IllegalArgumentException("valueIsNull is null or its length is less than positionCount");
@@ -149,7 +143,7 @@ public class VarcharArrayBlock implements ValueBlock
          * FIX: null must be checked here as offsets (i.e. starts) in column vector
          * may be reused in vectorized row batch and is not reset.
          */
-        if (valueIsNull[position + arrayOffset])
+        if (hasNull && valueIsNull[position + arrayOffset])
         {
             return 0;
         }
@@ -168,7 +162,7 @@ public class VarcharArrayBlock implements ValueBlock
          * FIX: null must be checked here as lengths (i.e. lens) in column vector
          * may be reused in vectorized row batch and is not reset.
          */
-        if (valueIsNull[position + arrayOffset])
+        if (hasNull && valueIsNull[position + arrayOffset])
         {
             return 0;
         }
@@ -205,7 +199,8 @@ public class VarcharArrayBlock implements ValueBlock
     }
 
     @Override
-    public OptionalInt fixedSizeInBytesPerPosition() {
+    public OptionalInt fixedSizeInBytesPerPosition()
+    {
         return OptionalInt.empty(); // size varies per element and is not fixed
     }
 
@@ -234,7 +229,7 @@ public class VarcharArrayBlock implements ValueBlock
 
     /**
      * Returns the retained size of this block in memory.
-     * This method is called from the inner most execution loop and must be fast.
+     * This method is called from the innermost execution loop and must be fast.
      */
     @Override
     public long getRetainedSizeInBytes()
@@ -291,15 +286,18 @@ public class VarcharArrayBlock implements ValueBlock
         byte[][] newValues = new byte[length][];
         int[] newStarts = new int[length];
         int[] newLengths = new int[length];
+        boolean newHasNull = false;
         boolean[] newValueIsNull = new boolean[length];
 
         for (int i = 0; i < length; i++)
         {
             int position = positions[offset + i];
-            if (valueIsNull[position + arrayOffset])
+            if (hasNull && valueIsNull[position + arrayOffset])
             {
                 newValueIsNull[i] = true;
-            } else
+                newHasNull = true;
+            }
+            else
             {
                 // we only copy the valid part of each value.
                 int from = offsets[position + arrayOffset];
@@ -309,14 +307,14 @@ public class VarcharArrayBlock implements ValueBlock
                 // newStarts is 0.
             }
         }
-        return new VarcharArrayBlock(length, newValues, newStarts, newLengths, newValueIsNull);
+        return new VarcharArrayBlock(length, newValues, newStarts, newLengths, newHasNull, newValueIsNull);
     }
 
     protected Slice getRawSlice(int position)
     {
-        // do not specify the offset and length for wrappedBuffer,
+        // DO NOT specify the offset and length for wrappedBuffer,
         // a raw slice should contain the whole bytes of value at the position.
-        if (valueIsNull[position + arrayOffset])
+        if (hasNull && valueIsNull[position + arrayOffset])
         {
             return Slices.EMPTY_SLICE;
         }
@@ -325,7 +323,7 @@ public class VarcharArrayBlock implements ValueBlock
 
     protected byte[] getRawValue(int position)
     {
-        if (valueIsNull[position + arrayOffset])
+        if (hasNull && valueIsNull[position + arrayOffset])
         {
             return null;
         }
@@ -334,7 +332,7 @@ public class VarcharArrayBlock implements ValueBlock
 
     /**
      * Returns a block starting at the specified position and extends for the
-     * specified length.  The specified region must be entirely contained
+     * specified length. The specified region must be entirely contained
      * within this block.
      * <p>
      * The region can be a view over this block.  If this block is released
@@ -346,7 +344,19 @@ public class VarcharArrayBlock implements ValueBlock
     {
         BlockUtil.checkValidRegion(getPositionCount(), positionOffset, length);
 
-        return new VarcharArrayBlock(positionOffset + arrayOffset, length, values, offsets, lengths, valueIsNull);
+        boolean newHasNull = false;
+        if (hasNull)
+        {
+            for (int i = 0; i < length; ++i)
+            {
+                if (valueIsNull[i + arrayOffset])
+                {
+                    newHasNull = true;
+                    break;
+                }
+            }
+        }
+        return new VarcharArrayBlock(positionOffset + arrayOffset, length, values, offsets, lengths, newHasNull, valueIsNull);
     }
 
     /**
@@ -365,7 +375,7 @@ public class VarcharArrayBlock implements ValueBlock
         byte[][] copy = new byte[1][];
         if (isNull(position))
         {
-            return new VarcharArrayBlock(1, copy, new int[]{0}, new int[]{0}, new boolean[]{true});
+            return new VarcharArrayBlock(1, copy, new int[]{0}, new int[]{0}, true, new boolean[]{true});
         }
 
         int offset = offsets[position + arrayOffset];
@@ -373,7 +383,7 @@ public class VarcharArrayBlock implements ValueBlock
         copy[0] = Arrays.copyOfRange(values[position + arrayOffset],
                 offset, offset + entrySize);
 
-        return new VarcharArrayBlock(1, copy, new int[]{0}, new int[]{entrySize}, new boolean[]{false});
+        return new VarcharArrayBlock(1, copy, new int[]{0}, new int[]{entrySize}, false, new boolean[]{false});
     }
 
     /**
@@ -395,13 +405,15 @@ public class VarcharArrayBlock implements ValueBlock
         byte[][] newValues = new byte[length][];
         int[] newStarts = new int[length];
         int[] newLengths = new int[length];
+        boolean newHasNull = false;
         boolean[] newValueIsNull = new boolean[length];
 
         for (int i = 0; i < length; i++)
         {
-            if (valueIsNull[positionOffset + i])
+            if (hasNull && valueIsNull[positionOffset + i])
             {
                 newValueIsNull[i] = true;
+                newHasNull = true;
             } else
             {
                 // we only copy the valid part of each value.
@@ -411,7 +423,7 @@ public class VarcharArrayBlock implements ValueBlock
                 // newStarts is 0.
             }
         }
-        return new VarcharArrayBlock(length, newValues, newStarts, newLengths, newValueIsNull);
+        return new VarcharArrayBlock(length, newValues, newStarts, newLengths, newHasNull, newValueIsNull);
     }
 
     @Override
@@ -424,7 +436,7 @@ public class VarcharArrayBlock implements ValueBlock
     public boolean isNull(int position)
     {
         checkReadablePosition(position);
-        return valueIsNull[position + arrayOffset];
+        return hasNull && valueIsNull[position + arrayOffset];
     }
 
     /**
@@ -441,25 +453,49 @@ public class VarcharArrayBlock implements ValueBlock
         int[] newOffsets = copyOffsetsAndAppendNull(offsets, arrayOffset, positionCount);
         int[] newLengths = copyOffsetsAndAppendNull(lengths, arrayOffset, positionCount);
 
-        return new VarcharArrayBlock(arrayOffset, positionCount + 1, values, newOffsets, newLengths, newValueIsNull);
+        return new VarcharArrayBlock(arrayOffset, positionCount + 1, values, newOffsets, newLengths, true, newValueIsNull);
     }
 
     @Override
     public ValueBlock getUnderlyingValueBlock()
     {
-        return ValueBlock.super.getUnderlyingValueBlock();
+        return this;
     }
 
     @Override
     public int getUnderlyingValuePosition(int position)
     {
-        return ValueBlock.super.getUnderlyingValuePosition(position);
+        return position;
     }
 
     @Override
     public Optional<ByteArrayBlock> getNulls()
     {
-        return Optional.empty();
+        return BlockUtil.getNulls(valueIsNull, arrayOffset, positionCount);
+    }
+
+    @Override
+    public boolean mayHaveNull()
+    {
+        return this.hasNull;
+    }
+
+    @Override
+    public Block getPositions(int[] positions, int offset, int length)
+    {
+        return ValueBlock.super.getPositions(positions, offset, length);
+    }
+
+    @Override
+    public boolean isLoaded()
+    {
+        return true;
+    }
+
+    @Override
+    public Block getLoadedBlock()
+    {
+        return this;
     }
 
     protected void checkReadablePosition(int position)

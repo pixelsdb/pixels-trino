@@ -60,6 +60,8 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
 
         int positionCount = varcharArrayBlock.getPositionCount();
         sliceOutput.appendInt(positionCount);
+        // hasNull
+        sliceOutput.appendByte(varcharArrayBlock.mayHaveNull() ? 1 : 0);
 
         // do not encode offsets, they should be 0.
 
@@ -89,7 +91,7 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
     public Block readBlock(BlockEncodingSerde blockEncodingSerde, SliceInput sliceInput)
     {
         int positionCount = sliceInput.readInt();
-
+        boolean hasNull = sliceInput.readByte() != 0;
         int[] offsets = new int[positionCount];
         int[] lengths = new int[positionCount];
 
@@ -108,6 +110,6 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
             sliceInput.readBytes(values[position]);
         }
 
-        return new VarcharArrayBlock(positionCount, values, offsets, lengths, valueIsNull);
+        return new VarcharArrayBlock(positionCount, values, offsets, lengths, hasNull, valueIsNull);
     }
 }

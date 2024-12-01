@@ -55,7 +55,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.trino.spi.type.DoubleType.DOUBLE;
@@ -572,7 +571,7 @@ class PixelsPageSource implements ConnectorPageSource
                     if (vector instanceof BinaryColumnVector)
                     {
                         BinaryColumnVector scv = (BinaryColumnVector) vector;
-                        block = new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, scv.isNull);
+                        block = new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, !scv.noNulls, scv.isNull);
                     }
                     else
                     {
@@ -613,7 +612,7 @@ class PixelsPageSource implements ConnectorPageSource
                      * Time value is stored as int, so here we use TimeArrayBlock, which
                      * accepts int values but provides getLong method same as LongArrayBlock.
                      */
-                    block = new TimeArrayBlock(batchSize, tcv.isNull, tcv.times);
+                    block = new TimeArrayBlock(batchSize, tcv.times, !tcv.noNulls, tcv.isNull);
                     break;
                 case TIMESTAMP:
                     TimestampColumnVector tscv = (TimestampColumnVector) vector;
