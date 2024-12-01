@@ -34,7 +34,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Trino-405 requires Java 17 -->
+        <!-- Trino-465 requires Java 23 -->
         <maven.compiler.source>23</maven.compiler.source>
         <maven.compiler.target>23</maven.compiler.target>
         <maven.deploy.skip>true</maven.deploy.skip>
@@ -47,6 +47,7 @@
         <dep.airlift.units.version>1.10</dep.airlift.units.version>
         <dep.jackson.version>2.18.1</dep.jackson.version>
         <dep.jakarta.validation.version>3.1.0</dep.jakarta.validation.version>
+        <dep.io.opentelemetry.version>1.44.1</dep.io.opentelemetry.version>
         <!-- override the guava version in pixels -->
         <dep.google.guava.version>33.3.1-jre</dep.google.guava.version>
         <dep.google.inject.version>7.0.0</dep.google.inject.version>
@@ -132,6 +133,17 @@
                 <groupId>jakarta.validation</groupId>
                 <artifactId>jakarta.validation-api</artifactId>
                 <version>${dep.jakarta.validation.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-api</artifactId>
+                <version>${dep.io.opentelemetry.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-context</artifactId>
+                <version>${dep.io.opentelemetry.version}</version>
             </dependency>
 
             <!-- openjdk -->

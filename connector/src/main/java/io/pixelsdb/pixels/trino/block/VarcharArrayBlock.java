@@ -21,12 +21,10 @@ package io.pixelsdb.pixels.trino.block;
 
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
-import io.pixelsdb.pixels.common.utils.JvmUtils;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.ByteArrayBlock;
 import io.trino.spi.block.ValueBlock;
 import org.openjdk.jol.info.ClassLayout;
-import sun.misc.Unsafe;
 
 import java.util.*;
 import java.util.function.ObjLongConsumer;
@@ -34,7 +32,6 @@ import java.util.function.ObjLongConsumer;
 import static io.airlift.slice.SizeOf.sizeOf;
 import static io.pixelsdb.pixels.trino.block.BlockUtil.copyIsNullAndAppendNull;
 import static io.pixelsdb.pixels.trino.block.BlockUtil.copyOffsetsAndAppendNull;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
 
 /**
  * This class is derived from io.trino.spi.block.VariableWidthBlock and AbstractVariableWidthBlock.
@@ -49,8 +46,6 @@ import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
  */
 public class VarcharArrayBlock implements ValueBlock
 {
-    static final Unsafe unsafe;
-    static final long address;
     private static final long INSTANCE_SIZE = ClassLayout.parseClass(VarcharArrayBlock.class).instanceSize();
 
     private final int arrayOffset; // start index of the valid items in offsets and length, usually 0.
@@ -73,14 +68,8 @@ public class VarcharArrayBlock implements ValueBlock
     {
         try
         {
-            // fetch theUnsafe object
-            unsafe = JvmUtils.unsafe;
-            if (unsafe == null)
-            {
-                throw new UnsupportedOperationException("Unsafe access not available");
-            }
-            address = ARRAY_BYTE_BASE_OFFSET;
-        } catch (Exception e)
+        }
+        catch (Exception e)
         {
             throw new RuntimeException(e);
         }
