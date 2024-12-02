@@ -182,6 +182,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.skipCorruptRecords(true);
         this.option.tolerantSchemaEvolution(true);
         this.option.enableEncodedColumnVector(true);
+        this.option.readIntColumnAsIntVector(true);
         this.option.includeCols(includeCols);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.transId(split.getTransId());
@@ -531,13 +532,8 @@ class PixelsPageSource implements ConnectorPageSource
                 case BYTE:
                 case SHORT:
                 case INT:
-                    LongColumnVector icv = (LongColumnVector) vector;
-                    int[] values = new int[batchSize];
-                    for (int i = 0; i < values.length; ++i)
-                    {
-                        values[i] = (int) icv.vector[i];
-                    }
-                    block = new IntArrayBlock(batchSize, Optional.ofNullable(icv.isNull), values);
+                    IntColumnVector icv = (IntColumnVector) vector;
+                    block = new IntArrayBlock(batchSize, Optional.ofNullable(icv.isNull), icv.vector);
                     break;
                 case LONG:
                     LongColumnVector lcv = (LongColumnVector) vector;
