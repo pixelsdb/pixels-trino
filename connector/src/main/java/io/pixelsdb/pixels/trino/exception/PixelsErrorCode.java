@@ -27,7 +27,7 @@ import static io.trino.spi.ErrorType.*;
 
 public enum PixelsErrorCode implements ErrorCodeSupplier
 {
-    PIXELS_METASTORE_ERROR(0, EXTERNAL),
+    PIXELS_METADATA_ERROR(0, EXTERNAL),
     PIXELS_CURSOR_ERROR(1, EXTERNAL),
     PIXELS_TABLE_OFFLINE(2, USER_ERROR),
     PIXELS_CANNOT_OPEN_SPLIT(3, EXTERNAL),

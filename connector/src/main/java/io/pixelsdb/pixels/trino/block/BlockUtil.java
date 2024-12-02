@@ -14,11 +14,12 @@
 package io.pixelsdb.pixels.trino.block;
 
 import io.airlift.slice.Slice;
-import io.airlift.slice.Slices;
 import io.trino.spi.block.Block;
+import io.trino.spi.block.ByteArrayBlock;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.Optional;
 
 import static java.lang.Math.ceil;
 import static java.lang.String.format;
@@ -151,7 +152,7 @@ final class BlockUtil
         if (slice.isCompact() && index == 0 && length == slice.length()) {
             return slice;
         }
-        return Slices.copyOf(slice, index, length);
+        return slice.copy(index, length);
     }
 
     /**
@@ -305,5 +306,26 @@ final class BlockUtil
         }
 
         return buffer;
+    }
+
+    /**
+     * Ideally, the underlying nulls array in Block implementations should be a byte array instead of a boolean array.
+     * This method is used to perform that conversion until the Block implementations are changed.
+     */
+    static Optional<ByteArrayBlock> getNulls(@Nullable boolean[] valueIsNull, int arrayOffset, int positionCount)
+    {
+        if (valueIsNull == null) {
+            return Optional.empty();
+        }
+        byte[] booleansAsBytes = new byte[positionCount];
+        boolean foundAnyNull = false;
+        for (int i = 0; i < positionCount; i++) {
+            booleansAsBytes[i] = (byte) (valueIsNull[arrayOffset + i] ? 1 : 0);
+            foundAnyNull = foundAnyNull || valueIsNull[arrayOffset + i];
+        }
+        if (!foundAnyNull) {
+            return Optional.empty();
+        }
+        return Optional.of(new ByteArrayBlock(booleansAsBytes.length, Optional.empty(), booleansAsBytes));
     }
 }

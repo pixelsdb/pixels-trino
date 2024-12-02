@@ -20,9 +20,11 @@
 package io.pixelsdb.pixels.trino.block;
 
 import io.trino.spi.block.Block;
-import io.trino.spi.block.BlockBuilder;
+import io.trino.spi.block.ByteArrayBlock;
+import io.trino.spi.block.ValueBlock;
 import org.openjdk.jol.info.ClassLayout;
 
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.ObjLongConsumer;
 
@@ -43,10 +45,11 @@ import static io.pixelsdb.pixels.trino.block.BlockUtil.*;
  * 2. change the returned statement of the methods that return Block or
  * BlockEncoding.
  *
- * Created at: 26/04/2021
- * Author: hank
+ * @author hank
+ * @create 2021-04-26
+ * @update 2024-12-01 adapt to with Trino 465 and add hasNull argument to the constructor.
  */
-public class TimeArrayBlock implements Block
+public class TimeArrayBlock implements ValueBlock
 {
     private static final long INSTANCE_SIZE = ClassLayout.parseClass(TimeArrayBlock.class).instanceSize();
     public static final int SIZE_IN_BYTES_PER_POSITION = Integer.BYTES + Byte.BYTES;
@@ -58,18 +61,19 @@ public class TimeArrayBlock implements Block
 
     private final int arrayOffset;
     private final int positionCount;
-    private final boolean[] valueIsNull;
     private final int[] values;
+    private final boolean[] valueIsNull;
+    private final boolean hasNull;
 
     private final long sizeInBytes;
     private final long retainedSizeInBytes;
 
-    public TimeArrayBlock(int positionCount, boolean[] valueIsNull, int[] values)
+    public TimeArrayBlock(int positionCount, int[] values, boolean hasNull, boolean[] valueIsNull)
     {
-        this(0, positionCount, valueIsNull, values);
+        this(0, positionCount, values, hasNull, valueIsNull);
     }
 
-    TimeArrayBlock(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values)
+    TimeArrayBlock(int arrayOffset, int positionCount, int[] values, boolean hasNull, boolean[] valueIsNull)
     {
         if (arrayOffset < 0)
         {
@@ -82,15 +86,17 @@ public class TimeArrayBlock implements Block
         }
         this.positionCount = positionCount;
 
-        if (values.length - arrayOffset < positionCount)
+        if (values == null || values.length - arrayOffset < positionCount)
         {
-            throw new IllegalArgumentException("values length is less than positionCount");
+            throw new IllegalArgumentException("values is null or its length is less than positionCount");
         }
         this.values = values;
 
-        if (valueIsNull.length - arrayOffset < positionCount)
+        this.hasNull = hasNull;
+        // Issue #123: in Pixels, the isNull bitmap from column vectors always presents even if there is no nulls.
+        if (valueIsNull == null || valueIsNull.length - arrayOffset < positionCount)
         {
-            throw new IllegalArgumentException("isNull length is less than positionCount");
+            throw new IllegalArgumentException("valueIsNull is null or its length is less than positionCount");
         }
         this.valueIsNull = valueIsNull;
 
@@ -141,12 +147,10 @@ public class TimeArrayBlock implements Block
     }
 
     @Override
-    public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer) {
+    public void retainedBytesForEachPart(ObjLongConsumer<Object> consumer)
+    {
         consumer.accept(values, sizeOf(values));
-        if (valueIsNull != null)
-        {
-            consumer.accept(valueIsNull, sizeOf(valueIsNull));
-        }
+        consumer.accept(valueIsNull, sizeOf(valueIsNull));
         consumer.accept(this, INSTANCE_SIZE);
     }
 
@@ -156,71 +160,33 @@ public class TimeArrayBlock implements Block
         return positionCount;
     }
 
-    @Override
-    public long getLong(int position, int offset)
+    public long getLong(int position)
     {
         checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
         return values[position + arrayOffset] * SCALE_FACTOR;
     }
 
-    @Override
-    public int getInt(int position, int offset)
+    public int getInt(int position)
     {
         checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
         return values[position + arrayOffset];
     }
 
-    @Override
-    @Deprecated
-    // TODO: Remove when we fix intermediate types on aggregations.
-    public short getShort(int position, int offset)
+    protected int[] getRawValues()
     {
-        checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
-
-        short value = (short) (values[position + arrayOffset]);
-        if (value != values[position + arrayOffset])
-        {
-            throw new ArithmeticException("short overflow");
-        }
-        return value;
+        return this.values;
     }
 
-    @Override
-    @Deprecated
-    // TODO: Remove when we fix intermediate types on aggregations.
-    public byte getByte(int position, int offset)
+    protected int getRawValuesOffset()
     {
-        checkReadablePosition(position);
-        if (offset != 0)
-        {
-            throw new IllegalArgumentException("offset must be zero");
-        }
-
-        byte value = (byte) (values[position + arrayOffset]);
-        if (value != values[position + arrayOffset])
-        {
-            throw new ArithmeticException("byte overflow");
-        }
-        return value;
+        return this.arrayOffset;
     }
 
     @Override
     public boolean isNull(int position)
     {
         checkReadablePosition(position);
-        return valueIsNull[position + arrayOffset];
+        return hasNull && valueIsNull[position + arrayOffset];
     }
 
     /**
@@ -231,58 +197,113 @@ public class TimeArrayBlock implements Block
      * i.e. not on in-progress block builders.
      */
     @Override
-    public Block copyWithAppendedNull()
+    public TimeArrayBlock copyWithAppendedNull()
     {
         boolean[] newValueIsNull = copyIsNullAndAppendNull(valueIsNull, arrayOffset, positionCount);
         int[] newValues = ensureCapacity(values, arrayOffset + positionCount + 1);
 
-        return new TimeArrayBlock(arrayOffset, positionCount + 1, newValueIsNull, newValues);
+        return new TimeArrayBlock(arrayOffset, positionCount + 1, newValues, true, newValueIsNull);
     }
 
     @Override
-    public void writeBytesTo(int position, int offset, int length, BlockBuilder blockBuilder)
+    public ValueBlock getUnderlyingValueBlock()
+    {
+        return this;
+    }
+
+    @Override
+    public int getUnderlyingValuePosition(int position)
+    {
+        return position;
+    }
+
+    @Override
+    public boolean mayHaveNull()
+    {
+        return hasNull;
+    }
+
+    @Override
+    public Optional<ByteArrayBlock> getNulls()
+    {
+        return BlockUtil.getNulls(valueIsNull, arrayOffset, positionCount);
+    }
+
+    @Override
+    public Block getPositions(int[] positions, int offset, int length)
+    {
+        return ValueBlock.super.getPositions(positions, offset, length);
+    }
+
+    @Override
+    public boolean isLoaded()
+    {
+        return true;
+    }
+
+    @Override
+    public Block getLoadedBlock()
+    {
+        return this;
+    }
+
+    @Override
+    public TimeArrayBlock getSingleValueBlock(int position)
     {
         checkReadablePosition(position);
-        blockBuilder.writeInt(values[position + arrayOffset]);
+        return new TimeArrayBlock(1,
+                new int[] {values[position + arrayOffset]},
+                hasNull && valueIsNull[position + arrayOffset],
+                new boolean[] {valueIsNull[position + arrayOffset]});
     }
 
     @Override
-    public Block getSingleValueBlock(int position)
-    {
-        checkReadablePosition(position);
-        return new TimeArrayBlock(
-                1,
-                new boolean[] {valueIsNull[position + arrayOffset]},
-                new int[] {values[position + arrayOffset]});
-    }
-
-    @Override
-    public Block copyPositions(int[] positions, int offset, int length)
+    public TimeArrayBlock copyPositions(int[] positions, int offset, int length)
     {
         checkArrayRange(positions, offset, length);
 
         boolean[] newValueIsNull = new boolean[length];
+        boolean newHasNull = false;
         int[] newValues = new int[length];
         for (int i = 0; i < length; i++)
         {
             int position = positions[offset + i];
             checkReadablePosition(position);
-            newValueIsNull[i] = valueIsNull[position + arrayOffset];
-            newValues[i] = values[position + arrayOffset];
+            if (hasNull && valueIsNull[position + arrayOffset])
+            {
+                newValueIsNull[i] = true;
+                newHasNull = true;
+            }
+            else
+            {
+                newValues[i] = values[position + arrayOffset];
+            }
         }
-        return new TimeArrayBlock(length, newValueIsNull, newValues);
+        return new TimeArrayBlock(length, newValues, newHasNull, newValueIsNull);
     }
 
     @Override
-    public Block getRegion(int positionOffset, int length)
+    public TimeArrayBlock getRegion(int positionOffset, int length)
     {
         checkValidRegion(getPositionCount(), positionOffset, length);
 
-        return new TimeArrayBlock(positionOffset + arrayOffset, length, valueIsNull, values);
+        boolean newHasNull = false;
+        if (hasNull)
+        {
+            for (int i = 0; i < length; ++i)
+            {
+                if (valueIsNull[i + arrayOffset])
+                {
+                    newHasNull = true;
+                    break;
+                }
+            }
+        }
+        return new TimeArrayBlock(positionOffset + arrayOffset, length, values, newHasNull, valueIsNull);
     }
 
     @Override
-    public Block copyRegion(int positionOffset, int length)
+    public TimeArrayBlock copyRegion(int positionOffset, int length)
     {
         checkValidRegion(getPositionCount(), positionOffset, length);
 
@@ -294,7 +315,20 @@ public class TimeArrayBlock implements Block
         {
             return this;
         }
-        return new TimeArrayBlock(length, newValueIsNull, newValues);
+
+        boolean newHasNull = false;
+        if (hasNull)
+        {
+            for (int i = 0; i < length; ++i)
+            {
+                if (newValueIsNull[i])
+                {
+                    newHasNull = true;
+                    break;
+                }
+            }
+        }
+        return new TimeArrayBlock(length, newValues, newHasNull, newValueIsNull);
     }
 
     @Override

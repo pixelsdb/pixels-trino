@@ -98,7 +98,7 @@ public class PixelsMetadata implements ConnectorMetadata
             return this.metadataProxy.existSchema(schemaName);
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
@@ -116,13 +116,15 @@ public class PixelsMetadata implements ConnectorMetadata
             schemaNameList = metadataProxy.getSchemaNames();
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
         return schemaNameList;
     }
 
     @Override
-    public PixelsTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName)
+    public PixelsTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName,
+                                            Optional<ConnectorTableVersion> startVersion,
+                                            Optional<ConnectorTableVersion> endVersion)
     {
         requireNonNull(tableName, "tableName is null");
         try
@@ -145,7 +147,7 @@ public class PixelsMetadata implements ConnectorMetadata
                     table = metadataProxy.getTable(transHandle.getTransId(), tableName.getSchemaName(), tableName.getTableName());
                     if (table.getLayouts().isEmpty())
                     {
-                        throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR,
+                        throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR,
                                 "layouts not found for table '" + tableName + "'");
                     }
                     // initially, get all the columns from the table.
@@ -153,7 +155,7 @@ public class PixelsMetadata implements ConnectorMetadata
                             connectorId, transHandle.getTransId(), tableName.getSchemaName(), tableName.getTableName());
                 } catch (MetadataException e)
                 {
-                    throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+                    throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
                 }
                 List<String> storagePaths = new LinkedList<>();
                 for (Layout layout : table.getLayouts().get())
@@ -171,7 +173,7 @@ public class PixelsMetadata implements ConnectorMetadata
             }
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
         return null;
     }
@@ -215,7 +217,7 @@ public class PixelsMetadata implements ConnectorMetadata
             columnHandleList = metadataProxy.getTableColumns(connectorId, transHandle.getTransId(), schemaName, tableName);
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
         return columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata)
                 .collect(toList());
@@ -257,7 +259,7 @@ public class PixelsMetadata implements ConnectorMetadata
             return builder.build();
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
@@ -281,7 +283,7 @@ public class PixelsMetadata implements ConnectorMetadata
                         pixelsTableHandle.getSchemaName(), pixelsTableHandle.getTableName());
             } catch (MetadataException e)
             {
-                throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+                throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
             }
         }
         if (columnHandleList == null)
@@ -319,7 +321,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 }
             } catch (MetadataException e)
             {
-                throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+                throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
             }
         }
         return columns.build();
@@ -333,7 +335,7 @@ public class PixelsMetadata implements ConnectorMetadata
     }
 
     @Override
-    public void createTable(ConnectorSession session, ConnectorTableMetadata tableMetadata, boolean ignoreExisting)
+    public void createTable(ConnectorSession session, ConnectorTableMetadata tableMetadata, SaveMode saveMode)
     {
         SchemaTableName schemaTableName = tableMetadata.getTable();
         String schemaName = schemaTableName.getSchemaName();
@@ -390,14 +392,14 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             boolean res = this.metadataProxy.createTable(schemaName, tableName, storageScheme,
                     Arrays.asList(basePathUris), columns);
-            if (!res && !ignoreExisting)
+            if (!res && saveMode != SaveMode.IGNORE)
             {
                 throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Table '" + schemaTableName + "' might already exist, failed to create it.");
             }
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
@@ -418,7 +420,7 @@ public class PixelsMetadata implements ConnectorMetadata
             }
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
@@ -436,24 +438,31 @@ public class PixelsMetadata implements ConnectorMetadata
             }
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
     @Override
-    public void dropSchema(ConnectorSession session, String schemaName)
+    public void dropSchema(ConnectorSession session, String schemaName, boolean cascade)
     {
-        try
+        if (cascade)
         {
-            boolean res = this.metadataProxy.dropSchema(schemaName);
-            if (!res)
+            try
             {
-                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
-                        "Schema " + schemaName + " does not exist.");
+                boolean res = this.metadataProxy.dropSchema(schemaName);
+                if (!res)
+                {
+                    throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                            "Schema " + schemaName + " does not exist.");
+                }
+            } catch (MetadataException e)
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
             }
-        } catch (MetadataException e)
+        }
+        else
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, "drop schema non-cascade is not supported");
         }
     }
 
@@ -506,7 +515,8 @@ public class PixelsMetadata implements ConnectorMetadata
 
         // pushing down without statistics pre-calculation.
         logger.debug("filter push down on " + newDomain.toString(session));
-        return Optional.of(new ConstraintApplicationResult<>(tableHandle, remainingFilter, false));
+        return Optional.of(new ConstraintApplicationResult<>(
+                tableHandle, remainingFilter, constraint.getExpression(), false));
     }
 
     @Override
@@ -563,7 +573,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             logger.error(e, "failed to check existence of '" +
                     tableHandle.getSchemaTableName() + "' through metadata service");
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
         List<Column> columns = metadataProxy.getColumnStatistics(
                 transHandle.getTransId(), tableHandle.getSchemaName(), tableHandle.getTableName());
@@ -583,7 +593,7 @@ public class PixelsMetadata implements ConnectorMetadata
         } catch (MetadataException e)
         {
             logger.error(e, "failed to get table from metadata service");
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
 
         for (PixelsColumnHandle columnHandle : tableHandle.getColumns())
@@ -886,7 +896,7 @@ public class PixelsMetadata implements ConnectorMetadata
 
     @Override
     public void createView(ConnectorSession session, SchemaTableName viewName,
-                           ConnectorViewDefinition definition, boolean replace)
+                           ConnectorViewDefinition definition, Map<String, Object> viewProperties, boolean replace)
     {
         /**
          * Issue #6:
@@ -908,7 +918,7 @@ public class PixelsMetadata implements ConnectorMetadata
             }
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
@@ -925,7 +935,7 @@ public class PixelsMetadata implements ConnectorMetadata
             }
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
@@ -965,7 +975,7 @@ public class PixelsMetadata implements ConnectorMetadata
             return builder.build();
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 
@@ -986,7 +996,7 @@ public class PixelsMetadata implements ConnectorMetadata
             }
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
         return Optional.empty();
     }
@@ -1042,7 +1052,7 @@ public class PixelsMetadata implements ConnectorMetadata
             return builder.build();
         } catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
     }
 }

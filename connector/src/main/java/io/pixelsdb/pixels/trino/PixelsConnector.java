@@ -19,6 +19,7 @@
  */
 package io.pixelsdb.pixels.trino;
 
+import com.google.inject.Inject;
 import io.airlift.bootstrap.LifeCycleManager;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.QueryScheduleException;
@@ -40,7 +41,6 @@ import io.trino.spi.connector.*;
 import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.transaction.IsolationLevel;
 
-import javax.inject.Inject;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,9 +55,7 @@ public class PixelsConnector implements Connector
     private final LifeCycleManager lifeCycleManager;
     private final PixelsMetadataProxy metadataProxy;
     private final PixelsSplitManager splitManager;
-    private final boolean recordCursorEnabled;
     private final PixelsPageSourceProvider pageSourceProvider;
-    private final PixelsRecordSetProvider recordSetProvider;
     private final PixelsSessionProperties sessionProperties;
     private final PixelsTableProperties tableProperties;
     private final PixelsTrinoConfig config;
@@ -72,7 +70,6 @@ public class PixelsConnector implements Connector
             PixelsSplitManager splitManager,
             PixelsTrinoConfig config,
             PixelsPageSourceProvider pageSourceProvider,
-            PixelsRecordSetProvider recordSetProvider,
             PixelsSessionProperties sessionProperties,
             PixelsTableProperties tableProperties)
     {
@@ -81,12 +78,10 @@ public class PixelsConnector implements Connector
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.splitManager = requireNonNull(splitManager, "splitManager is null");
         this.pageSourceProvider = requireNonNull(pageSourceProvider, "recordSetProvider is null");
-        this.recordSetProvider = requireNonNull(recordSetProvider, "recordSetProvider is null");
         this.sessionProperties = requireNonNull(sessionProperties, "sessionProperties is null");
         this.tableProperties = requireNonNull(tableProperties, "tableProperties is null");
         this.config = requireNonNull(config, "config is null");
         requireNonNull(config, "config is null");
-        this.recordCursorEnabled = Boolean.parseBoolean(config.getConfigFactory().getProperty("record.cursor.enabled"));
         this.transService = TransService.Instance();
         try
         {
@@ -301,24 +296,7 @@ public class PixelsConnector implements Connector
     @Override
     public PixelsPageSourceProvider getPageSourceProvider()
     {
-        if (this.recordCursorEnabled)
-        {
-            throw new UnsupportedOperationException();
-        }
         return pageSourceProvider;
-    }
-
-    /**
-     * @throws UnsupportedOperationException if this connector does not support reading tables record at a time
-     */
-    @Override
-    public ConnectorRecordSetProvider getRecordSetProvider()
-    {
-        if (this.recordCursorEnabled)
-        {
-            return recordSetProvider;
-        }
-        throw new UnsupportedOperationException();
     }
 
     @Override

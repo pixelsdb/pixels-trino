@@ -53,16 +53,29 @@ public class TimeArrayBlockEncoding implements BlockEncoding
     @Override
     public void writeBlock(BlockEncodingSerde blockEncodingSerde, SliceOutput sliceOutput, Block block)
     {
-        int positionCount = block.getPositionCount();
+        // The down casts here are safe because it is the block itself the provides this encoding implementation.
+        TimeArrayBlock timeArrayBlock = (TimeArrayBlock) block;
+
+        int positionCount = timeArrayBlock.getPositionCount();
         sliceOutput.appendInt(positionCount);
+        // hasNull
+        sliceOutput.appendByte(timeArrayBlock.mayHaveNull() ? 1 : 0);
 
-        encodeNullsAsBits(sliceOutput, block);
+        encodeNullsAsBits(sliceOutput, timeArrayBlock);
 
-        for (int position = 0; position < positionCount; position++)
+        if (!timeArrayBlock.mayHaveNull())
         {
-            if (!block.isNull(position))
+            sliceOutput.writeInts(timeArrayBlock.getRawValues(),
+                    timeArrayBlock.getRawValuesOffset(), timeArrayBlock.getPositionCount());
+        }
+        else
+        {
+            for (int position = 0; position < positionCount; position++)
             {
-                sliceOutput.writeInt(block.getInt(position, 0));
+                if (!timeArrayBlock.isNull(position))
+                {
+                    sliceOutput.writeInt(timeArrayBlock.getInt(position));
+                }
             }
         }
     }
@@ -71,6 +84,7 @@ public class TimeArrayBlockEncoding implements BlockEncoding
     public Block readBlock(BlockEncodingSerde blockEncodingSerde, SliceInput sliceInput)
     {
         int positionCount = sliceInput.readInt();
+        boolean hasNull = sliceInput.readByte() != 0;
 
         boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).get();
 
@@ -83,6 +97,6 @@ public class TimeArrayBlockEncoding implements BlockEncoding
             }
         }
 
-        return new TimeArrayBlock(positionCount, valueIsNull, values);
+        return new TimeArrayBlock(positionCount, values, hasNull, valueIsNull);
     }
 }

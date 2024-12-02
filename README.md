@@ -2,39 +2,44 @@
 The Pixels connector for Trino.
 
 ## Compatibility
-Pixels integration (connector & event listener) is currently compatible with Trino 405. 
+Pixels integration (connector & event listener) is currently compatible with Trino 466.
 Other Trino versions that are compatible
-with the Connector SPI in Trino 405 should also work well with Pixels.
+with the Connector SPI in Trino 466 should also work well with Pixels.
 
 ## Build
 This project can be opened as a maven project in Intellij and built using maven.
 
-**Note** that Trino 405 requires Java 17.0.3+, thus this project should be built by JDK 17 (17.0.6 is tested).
+**Note** that Trino 466 requires Java 23.0.0+, thus this project should be built by JDK 23
+(Azul Zulu JDK 23.0.1+11 is tested).
 
 [Pixels](https://github.com/pixelsdb/pixels) is the parent of this project,
 therefore use `mvn install` to install Pixels modules into your local maven repository,
 before building this project.
 
+After building `pixels-trino`, find the following zip files in the build target directories:
+* `pixels-trino-listener-*.zip`, this is the event listener plugin for Trino.
+* `pixels-trino-connector-*.zip`, this is the connector for Trino.
+
+They will be used in the following steps.
+
+
 ## Use Pixels in Trino
 Follow the instructions in
 [Pixels Installation](https://github.com/pixelsdb/pixels/blob/master/docs/INSTALL.md) to install Pixels and other components except Trino.
 After that, follow this document to install Trino and use it to query Pixels.
-Ensure Java 17 is in use as it is required by Trino 405.
+Ensure Java 23 is in use as it is required by Trino 466.
+
 
 ### Install Trino
 
-Download and install Trino 405 following the instructions in [Trino Docs](https://trino.io/docs/405/installation/deployment.html).
+Download and install Trino 466 following the instructions in [Trino Docs](https://trino.io/docs/466/installation/deployment.html).
 
-Here, we install Trino to `~/opt/trino-server-405` and create a link for it:
+Here, we install Trino to `~/opt/trino-server-466` and create a link for it:
 ```bash
-cd ~/opt; ln -s trino-server-405 trino-server
+cd ~/opt; ln -s trino-server-466 trino-server
 ```
-Then download [trino-cli](https://trinodb.github.io/docs.trino.io/405/client/cli.html) into `~/opt/trino-server/bin/`
+Then download [trino-cli](https://trinodb.github.io/docs.trino.io/466/client/cli.html) into `~/opt/trino-server/bin/`
 and give the executable permission to it.
-Some scripts in Trino may require python:
-```bash
-sudo apt-get install python
-```
 
 
 ### Install Pixels Connector
@@ -64,6 +69,7 @@ Append the following two lines into `etc/jvm.config`:
 --add-opens=java.base/java.nio=ALL-UNNAMED
 ```
 Thus, pixels can reflect internal or low-level classes to improve performance. This is only needed for Java 9+.
+
 
 ### Install Pixels Event Listener*
 Pixels event listener is optional. It is used to collect the query completion information for performance evaluations.

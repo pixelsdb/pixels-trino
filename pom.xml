@@ -34,25 +34,25 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Trino-405 requires Java 17 -->
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <!-- Trino-465 requires Java 23 -->
+        <maven.compiler.source>23</maven.compiler.source>
+        <maven.compiler.target>23</maven.compiler.target>
         <maven.deploy.skip>true</maven.deploy.skip>
         <maven.install.skip>true</maven.install.skip>
 
-        <dep.trino.version>405</dep.trino.version>
-        <dep.airlift.version>219</dep.airlift.version>
+        <dep.trino.version>466</dep.trino.version>
+        <dep.airlift.version>287</dep.airlift.version>
         <!-- override the airlift.slice version in pixels -->
-        <dep.airlift.slice.version>0.44</dep.airlift.slice.version>
-        <dep.airlift.units.version>1.7</dep.airlift.units.version>
-        <dep.jackson.version>2.13.4</dep.jackson.version>
+        <dep.airlift.slice.version>2.3</dep.airlift.slice.version>
+        <dep.airlift.units.version>1.10</dep.airlift.units.version>
+        <dep.jackson.version>2.18.1</dep.jackson.version>
+        <dep.jakarta.validation.version>3.1.0</dep.jakarta.validation.version>
+        <dep.io.opentelemetry.version>1.44.1</dep.io.opentelemetry.version>
+        <dep.errorprone.version>2.36.0</dep.errorprone.version>
         <!-- override the guava version in pixels -->
-        <dep.google.guava.version>31.1-jre</dep.google.guava.version>
-        <dep.google.inject.version>5.1.0</dep.google.inject.version>
-        <dep.javax.inject.version>1</dep.javax.inject.version>
-        <dep.javax.annotation.version>1.3.2</dep.javax.annotation.version>
-        <dep.javax.validation.version>2.0.1.Final</dep.javax.validation.version>
-        <dep.openjdk.jol.version>0.16</dep.openjdk.jol.version>
+        <dep.google.guava.version>33.3.1-jre</dep.google.guava.version>
+        <dep.google.inject.version>7.0.0</dep.google.inject.version>
+        <dep.openjdk.jol.version>0.17</dep.openjdk.jol.version>
     </properties>
 
     <dependencyManagement>
@@ -117,17 +117,10 @@
                 <artifactId>guice</artifactId>
                 <version>${dep.google.inject.version}</version>
             </dependency>
-
-            <!-- javax -->
             <dependency>
-                <groupId>javax.validation</groupId>
-                <artifactId>validation-api</artifactId>
-                <version>${dep.javax.validation.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>javax.inject</groupId>
-                <artifactId>javax.inject</artifactId>
-                <version>${dep.javax.inject.version}</version>
+                <groupId>com.google.errorprone</groupId>
+                <artifactId>error_prone_annotations</artifactId>
+                <version>${dep.errorprone.version}</version>
             </dependency>
 
             <!-- jackson -->
@@ -140,6 +133,25 @@
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${dep.jackson.version}</version>
+            </dependency>
+
+            <!-- jakarta -->
+            <dependency>
+                <groupId>jakarta.validation</groupId>
+                <artifactId>jakarta.validation-api</artifactId>
+                <version>${dep.jakarta.validation.version}</version>
+            </dependency>
+
+            <!-- io.opentelemetry -->
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-api</artifactId>
+                <version>${dep.io.opentelemetry.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-context</artifactId>
+                <version>${dep.io.opentelemetry.version}</version>
             </dependency>
 
             <!-- openjdk -->
@@ -190,22 +202,29 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.8.1</version>
+                    <version>3.13.0</version>
                     <configuration>
-                        <source>17</source>
-                        <target>17</target>
+                        <source>23</source>
+                        <target>23</target>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>com.google.errorprone</groupId>
+                                <artifactId>error_prone_core</artifactId>
+                                <version>${dep.errorprone.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-shade-plugin</artifactId>
-                    <version>3.2.4</version>
+                    <version>3.6.0</version>
                 </plugin>
 
                 <plugin>
                     <groupId>ca.vanzyl.provisio.maven.plugins</groupId>
                     <artifactId>provisio-maven-plugin</artifactId>
-                    <version>1.0.18</version>
+                    <version>1.1.1</version>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -213,7 +232,7 @@
             <plugin>
                 <groupId>io.trino</groupId>
                 <artifactId>trino-maven-plugin</artifactId>
-                <version>11</version>
+                <version>15</version>
                 <extensions>true</extensions>
             </plugin>
         </plugins>

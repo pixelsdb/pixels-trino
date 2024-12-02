@@ -23,6 +23,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.inject.Inject;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
@@ -39,7 +40,6 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.Output;
-import io.pixelsdb.pixels.common.turbo.SimpleOutput;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -56,7 +56,10 @@ import io.pixelsdb.pixels.planner.plan.PlanOptimizer;
 import io.pixelsdb.pixels.planner.plan.logical.*;
 import io.pixelsdb.pixels.planner.plan.logical.Table.TableType;
 import io.pixelsdb.pixels.planner.plan.physical.*;
-import io.pixelsdb.pixels.planner.plan.physical.domain.*;
+import io.pixelsdb.pixels.planner.plan.physical.domain.InputInfo;
+import io.pixelsdb.pixels.planner.plan.physical.domain.InputSplit;
+import io.pixelsdb.pixels.planner.plan.physical.domain.MultiOutputInfo;
+import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
@@ -73,7 +76,6 @@ import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.type.StandardTypes;
 import io.trino.spi.type.Type;
 
-import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -620,7 +622,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         } catch (MetadataException | InvalidProtocolBufferException e)
         {
             logger.error("failed to get join algorithm", e);
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
 
         boolean rotateLeftRight = false;
@@ -838,7 +840,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         }
         catch (MetadataException e)
         {
-            throw new TrinoException(PixelsErrorCode.PIXELS_METASTORE_ERROR, e);
+            throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         } catch (IOException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);

@@ -19,15 +19,14 @@
  */
 package io.pixelsdb.pixels.trino.block;
 
+import io.airlift.slice.SliceInput;
+import io.airlift.slice.SliceOutput;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockEncoding;
 import io.trino.spi.block.BlockEncodingSerde;
-import io.airlift.slice.SliceInput;
-import io.airlift.slice.SliceOutput;
-import io.airlift.slice.Slices;
 
-import static io.airlift.slice.SizeOf.SIZE_OF_INT;
-import static io.pixelsdb.pixels.trino.block.EncoderUtil.*;
+import static io.pixelsdb.pixels.trino.block.EncoderUtil.decodeNullBits;
+import static io.pixelsdb.pixels.trino.block.EncoderUtil.encodeNullsAsBits;
 
 /**
  * This class is derived from io.trino.spi.block.VariableWidthBlockEncoding
@@ -61,6 +60,8 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
 
         int positionCount = varcharArrayBlock.getPositionCount();
         sliceOutput.appendInt(positionCount);
+        // hasNull
+        sliceOutput.appendByte(varcharArrayBlock.mayHaveNull() ? 1 : 0);
 
         // do not encode offsets, they should be 0.
 
@@ -90,14 +91,14 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
     public Block readBlock(BlockEncodingSerde blockEncodingSerde, SliceInput sliceInput)
     {
         int positionCount = sliceInput.readInt();
-
+        boolean hasNull = sliceInput.readByte() != 0;
         int[] offsets = new int[positionCount];
         int[] lengths = new int[positionCount];
 
         // offsets should be 0, do not read them from sliceInput.
 
-        // destinationIndex should be 0, because we do not need 0 the be the first item in lengths.
-        sliceInput.readBytes(Slices.wrappedIntArray(lengths), 0, positionCount * SIZE_OF_INT);
+        // destinationIndex should be 0, because we do not need 0 to be the first item in lengths.
+        sliceInput.readInts(lengths, 0, positionCount);
 
         boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).get();
 
@@ -109,6 +110,6 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
             sliceInput.readBytes(values[position]);
         }
 
-        return new VarcharArrayBlock(positionCount, values, offsets, lengths, valueIsNull);
+        return new VarcharArrayBlock(positionCount, values, offsets, lengths, hasNull, valueIsNull);
     }
 }
