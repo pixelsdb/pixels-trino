@@ -186,7 +186,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.includeCols(includeCols);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.transId(split.getTransId());
-        this.option.timestamp(transactionHandle.getTimestamp());
+        this.option.transTimestamp(transactionHandle.getTimestamp());
 
         if (split.getConstraint().getDomains().isPresent() && !split.getColumnOrder().isEmpty())
         {
