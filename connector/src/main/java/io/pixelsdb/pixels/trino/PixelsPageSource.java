@@ -55,7 +55,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.trino.spi.type.DoubleType.DOUBLE;
@@ -186,7 +185,7 @@ class PixelsPageSource implements ConnectorPageSource
         this.option.includeCols(includeCols);
         this.option.rgRange(split.getRgStart(), split.getRgLength());
         this.option.transId(split.getTransId());
-        this.option.timestamp(transactionHandle.getTimestamp());
+        this.option.transTimestamp(transactionHandle.getTimestamp());
 
         if (split.getConstraint().getDomains().isPresent() && !split.getColumnOrder().isEmpty())
         {
