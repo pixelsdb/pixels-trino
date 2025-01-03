@@ -142,6 +142,15 @@ public class PixelsEventListener implements EventListener
                 }
                 QueryCost vmCostCents = new QueryCost(QueryCostType.VMCOST, Math.max(cpuTimeSeconds * 1.3e-3, memoryGBSeconds * 3.2e-4));
                 this.transService.updateQueryCosts(externalTraceId.get(), inputBytes, vmCostCents);
+                
+                // send the resource usage to pixles 
+                final long cpuTimeMillseconds = queryCompletedEvent.getStatistics().getCpuTime().toMillis();
+                final double memUsage = queryCompletedEvent.getStatistics().getPeakUserMemoryBytes();
+                this.transService.setTransProperty(externalTraceId.get(), "queryinfo", queryCompletedEvent.getCreateTime().toString()
+                                                                                        +',' + String.valueOf(memUsage)
+                                                                                        +',' + String.valueOf(cpuTimeMillseconds)
+                                                                                        +',' + queryCompletedEvent.getEndTime().toString());
+                                                                                        
             } catch (TransException e)
             {
                 logger.error("can not set scan bytes for the query in pixels event listener");
