@@ -186,7 +186,7 @@ public class PixelsEventListener implements EventListener
 
         if (queryCompletedEvent.getContext().getSchema().isEmpty())
         {
-            logger.error("can not write log in pixels event listener");
+            logger.warn("listener schema is empty");
             logger.info("query id: " + queryId + ", user: " + user);
             return;
         }
