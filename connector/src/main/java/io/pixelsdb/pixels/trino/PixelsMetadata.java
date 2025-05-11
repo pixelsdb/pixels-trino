@@ -694,6 +694,11 @@ public class PixelsMetadata implements ConnectorMetadata
                     groupKey, tableColumns);
             newColumnsBuilder.add(groupKey);
         }
+        if (aggregates.isEmpty())
+        {
+            logger.debug("[aggregation push down is rejected: no aggregation functions]");
+            return Optional.empty();
+        }
 
         for (AggregateFunction aggregate : aggregates)
         {
