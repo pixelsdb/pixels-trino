@@ -19,6 +19,8 @@
  */
 package io.pixelsdb.pixels.trino;
 
+import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
+import io.pixelsdb.pixels.trino.split.PixelsSplit;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.connector.ConnectorSplitSource;
 

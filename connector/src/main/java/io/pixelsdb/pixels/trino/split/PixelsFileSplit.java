@@ -17,13 +17,14 @@
  * License along with Pixels.  If not, see
  * <https://www.gnu.org/licenses/>.
  */
-package io.pixelsdb.pixels.trino;
+package io.pixelsdb.pixels.trino.split;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
+
+import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
-import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.predicate.TupleDomain;
 
@@ -37,7 +38,7 @@ import static java.util.Objects.requireNonNull;
  * @author tao
  * @author hank
  */
-public class PixelsSplit implements ConnectorSplit
+public class PixelsFileSplit implements PixelsSplit
 {
     private final long transId;
     private final long splitId;
@@ -59,7 +60,7 @@ public class PixelsSplit implements ConnectorSplit
     private final boolean readSynthColumns;
 
     @JsonCreator
-    public PixelsSplit(
+    public PixelsFileSplit(
             @JsonProperty("transId") long transId,
             @JsonProperty("splitId") long splitId,
             @JsonProperty("connectorId") String connectorId,
@@ -273,7 +274,7 @@ public class PixelsSplit implements ConnectorSplit
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
-        PixelsSplit that = (PixelsSplit) o;
+        PixelsFileSplit that = (PixelsFileSplit) o;
 
         return this.transId == that.transId && this.splitId == that.splitId &&
                 Objects.equals(this.connectorId, that.connectorId) &&
