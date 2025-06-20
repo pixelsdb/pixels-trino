@@ -27,6 +27,9 @@ import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
+import io.pixelsdb.pixels.trino.split.PixelsBufferSplit;
+import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
+import io.pixelsdb.pixels.trino.split.PixelsSplit;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 
@@ -91,18 +94,29 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         try
         {
             Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
-            if (pixelsSplit.getFromServerlessOutput())
-            {
-                IntermediateFileCleaner.Instance().registerStorage(storage);
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, pixelsTransactionHandle, storage,
-                        cacheFile, indexFile, pixelsFooterCache);
-            } else
-            {
-                // perform scan push down.
-                List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
-                return new PixelsPageSource(pixelsSplit, withFilterColumns, pixelsTransactionHandle, storage,
-                        cacheFile, indexFile, pixelsFooterCache);
+            if(pixelsSplit instanceof PixelsSplit) {
+                PixelsFileSplit pixelsFileSplit = (PixelsFileSplit) pixelsSplit;
+                if (pixelsFileSplit.getFromServerlessOutput())
+                {
+                    IntermediateFileCleaner.Instance().registerStorage(storage);
+                    return new PixelsPageSource(pixelsFileSplit, pixelsColumns, pixelsTransactionHandle, storage,
+                            cacheFile, indexFile, pixelsFooterCache);
+                } else
+                {
+                    // perform scan push down.
+                    List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
+                    return new PixelsPageSource(pixelsFileSplit, withFilterColumns, pixelsTransactionHandle, storage,
+                            cacheFile, indexFile, pixelsFooterCache);
+                }
             }
+
+            if(pixelsSplit instanceof PixelsBufferSplit) {
+                PixelsBufferSplit pixelsBufferSplit = (PixelsBufferSplit) pixelsSplit;
+                return new PixelsBufferPageSource(pixelsBufferSplit, pixelsColumns, pixelsTransactionHandle, storage, cacheFile, indexFile, pixelsFooterCache);
+            }
+
+            throw new TrinoException(PixelsErrorCode.PIXELS_SPLIT_TYPE_ERROR,"Unknown Pixels Split Type");
+
         } catch (IOException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);

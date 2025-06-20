@@ -42,6 +42,7 @@ import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.impl.PixelsTupleDomainPredicate;
+import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
 import io.trino.spi.Page;
 import io.trino.spi.TrinoException;
 import io.trino.spi.block.*;
@@ -69,7 +70,7 @@ class PixelsPageSource implements ConnectorPageSource
 {
     private static final Logger logger = Logger.get(PixelsPageSource.class);
     private final int BatchSize;
-    private final PixelsSplit split;
+    private final PixelsFileSplit split;
     private final List<PixelsColumnHandle> columns;
     private final PixelsTransactionHandle transactionHandle;
     private final String[] includeCols;
@@ -91,7 +92,7 @@ class PixelsPageSource implements ConnectorPageSource
 
     private int batchId;
 
-    public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, PixelsTransactionHandle transactionHandle,
+    public PixelsPageSource(PixelsFileSplit split, List<PixelsColumnHandle> columnHandles, PixelsTransactionHandle transactionHandle,
                             Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
                             PixelsFooterCache pixelsFooterCache)
     {
