@@ -158,8 +158,7 @@ public class PixelsBufferPageSource implements ConnectorPageSource{
                         .newBuilder()
                         .setStorage(this.storage)
                         .setPath(split.getPath())
-                        .setEnableCache(false)
-                        .setCacheOrder(split.getCacheOrder())
+
                         .setPixelsFooterCache(footerCache)
                         .build();
                 if (this.pixelsReader.getRowGroupNum() <= this.option.getRGStart())

@@ -49,7 +49,6 @@ public class PixelsBufferSplit implements PixelsSplit {
     private int pathIndex;
     private final List<HostAddress> addresses;
     private List<String> columnOrder;
-    private List<String> cacheOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
 
     @JsonCreator
@@ -65,7 +64,6 @@ public class PixelsBufferSplit implements PixelsSplit {
             @JsonProperty("rgLengths") List<Integer> rgLengths,
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("columnOrder") List<String> columnOrder,
-            @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint) {
         this.transId = transId;
         this.splitId = splitId;
@@ -84,7 +82,6 @@ public class PixelsBufferSplit implements PixelsSplit {
                 "the size of rgLengths and paths are different");
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
         this.columnOrder = requireNonNull(columnOrder, "order is null");
-        this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
     }
 
@@ -166,11 +163,6 @@ public class PixelsBufferSplit implements PixelsSplit {
     @JsonProperty
     public List<String> getColumnOrder() {
         return columnOrder;
-    }
-
-    @JsonProperty
-    public List<String> getCacheOrder() {
-        return cacheOrder;
     }
 
     @JsonProperty
