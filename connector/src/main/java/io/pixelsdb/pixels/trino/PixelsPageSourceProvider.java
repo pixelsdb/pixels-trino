@@ -93,8 +93,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         PixelsTransactionHandle pixelsTransactionHandle = (PixelsTransactionHandle) transactionHandle;
         try
         {
-            Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
-            if(pixelsSplit instanceof PixelsSplit) {
+            if(pixelsSplit instanceof PixelsFileSplit) {
+                Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
                 PixelsFileSplit pixelsFileSplit = (PixelsFileSplit) pixelsSplit;
                 if (pixelsFileSplit.getFromServerlessOutput())
                 {
@@ -112,7 +112,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 
             if(pixelsSplit instanceof PixelsBufferSplit) {
                 PixelsBufferSplit pixelsBufferSplit = (PixelsBufferSplit) pixelsSplit;
-                return new PixelsBufferPageSource(pixelsBufferSplit, pixelsColumns, pixelsTransactionHandle, storage, cacheFile, indexFile, pixelsFooterCache);
+                return new PixelsBufferPageSource(pixelsBufferSplit, pixelsColumns, pixelsTransactionHandle, cacheFile, indexFile, pixelsFooterCache);
             }
 
             throw new TrinoException(PixelsErrorCode.PIXELS_SPLIT_TYPE_ERROR,"Unknown Pixels Split Type");

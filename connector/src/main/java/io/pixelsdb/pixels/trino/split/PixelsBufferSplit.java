@@ -28,7 +28,6 @@ import com.google.common.collect.ImmutableList;
 
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
-import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.predicate.TupleDomain;
 
 import static java.util.Objects.requireNonNull;
@@ -36,21 +35,23 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 public class PixelsBufferSplit implements PixelsSplit {
 
+    public enum RetinaSplitType {
+        MEMTABLE,
+        FILE // minio
+    }
 
     private final long transId;
     private final long splitId;
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
-    private String storageScheme;
     private List<String> paths;
-    private List<Integer> rgStarts;
-    private List<Integer> rgLengths;
-    private int pathIndex;
+    private List<Long> memtableIds;
+    private int index; // index for paths or memtableId
     private final List<HostAddress> addresses;
     private List<String> columnOrder;
     private final TupleDomain<PixelsColumnHandle> constraint;
-
+    private final RetinaSplitType retinaSplitType;
     @JsonCreator
     public PixelsBufferSplit(
             @JsonProperty("transId") long transId,
@@ -58,31 +59,29 @@ public class PixelsBufferSplit implements PixelsSplit {
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
-            @JsonProperty("storageScheme") String storageScheme, // TODO: new storage scheme
+            @JsonProperty("memTableIds") List<Long> ids,
             @JsonProperty("paths") List<String> paths,
-            @JsonProperty("rgStarts") List<Integer> rgStarts,
-            @JsonProperty("rgLengths") List<Integer> rgLengths,
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("columnOrder") List<String> columnOrder,
-            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint) {
+            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
+            @JsonProperty("splitType") RetinaSplitType type) {
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
-        this.storageScheme = requireNonNull(storageScheme, "storage scheme is null");
-        this.paths = requireNonNull(paths, "paths is null");
-        checkArgument(!paths.isEmpty(), "paths is empty");
-        this.pathIndex = 0;
-        this.rgStarts = requireNonNull(rgStarts, "rgStarts is null");
-        checkArgument(rgStarts.size() == paths.size(),
-                "the size of rgStarts and paths are different");
-        this.rgLengths = requireNonNull(rgLengths, "rgLengths is null");
-        checkArgument(rgLengths.size() == paths.size(),
-                "the size of rgLengths and paths are different");
+        this.retinaSplitType = type;
+        if(this.retinaSplitType == RetinaSplitType.FILE) {
+            this.paths = requireNonNull(paths, "paths is null");
+            checkArgument(!paths.isEmpty(), "paths is empty");
+        } else {
+            this.memtableIds = ids;
+        }
+        this.index = 0;
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
         this.columnOrder = requireNonNull(columnOrder, "order is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
+        
     }
 
     public Boolean isEmpty() {
@@ -93,17 +92,6 @@ public class PixelsBufferSplit implements PixelsSplit {
     {
         return this.paths.get(this.pathIndex);
     }
-
-    public int getRgStart()
-    {
-        return this.rgStarts.get(pathIndex);
-    }
-
-    public int getRgLength()
-    {
-        return this.rgLengths.get(pathIndex);
-    }
-
 
     @JsonProperty
     public long getTransId() {
@@ -130,24 +118,10 @@ public class PixelsBufferSplit implements PixelsSplit {
         return tableName;
     }
 
-    @JsonProperty
-    public String getStorageScheme() {
-        return storageScheme;
-    }
 
     @JsonProperty
     public List<String> getPaths() {
         return paths;
-    }
-
-    @JsonProperty
-    public List<Integer> getRgStarts() {
-        return rgStarts;
-    }
-
-    @JsonProperty
-    public List<Integer> getRgLengths() {
-        return rgLengths;
     }
 
     @JsonProperty

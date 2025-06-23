@@ -60,7 +60,6 @@ public class PixelsBufferPageSource implements ConnectorPageSource{
     private final List<PixelsColumnHandle> columns;
     private final PixelsTransactionHandle transactionHandle;
     private final String[] includeCols;
-    private final Storage storage;
     private boolean closed;
     private PixelsReader pixelsReader;
     private PixelsRecordReader recordReader;
@@ -77,11 +76,10 @@ public class PixelsBufferPageSource implements ConnectorPageSource{
     private int batchId;
 
     public PixelsBufferPageSource(PixelsBufferSplit split, List<PixelsColumnHandle> columnHandles, PixelsTransactionHandle transactionHandle,
-                            Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
+                            MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
                             PixelsFooterCache pixelsFooterCache) {
         this.split = split;
         this.transactionHandle = transactionHandle;
-        this.storage = storage;
         this.columns = columnHandles;
         this.includeCols =  new String[columns.size()];
         for (int i = 0; i < includeCols.length; ++i)
@@ -158,7 +156,6 @@ public class PixelsBufferPageSource implements ConnectorPageSource{
                         .newBuilder()
                         .setStorage(this.storage)
                         .setPath(split.getPath())
-
                         .setPixelsFooterCache(footerCache)
                         .build();
                 if (this.pixelsReader.getRowGroupNum() <= this.option.getRGStart())
