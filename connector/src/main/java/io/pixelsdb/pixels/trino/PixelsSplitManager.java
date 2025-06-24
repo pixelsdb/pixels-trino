@@ -1210,10 +1210,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         Table table;
      
         table = metadataProxy.getTable(transHandle.getTransId(), schemaName, tableName);
-        TypeDescription typeDescription = metadataProxy.getTypeDescription(schemaName, tableName);
         
-        
-        // TODO(AntiO2) 获取buffer split
+        // TODO(AntiO2) generate buffer split
 
         return pixelsBufferSplits;
     }

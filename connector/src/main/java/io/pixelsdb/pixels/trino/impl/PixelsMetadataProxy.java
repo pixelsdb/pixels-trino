@@ -37,7 +37,6 @@ import io.trino.spi.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -223,13 +222,5 @@ public class PixelsMetadataProxy
     public boolean existSchema (String schemaName) throws MetadataException
     {
         return metadataService.existSchema(schemaName);
-    }
-
-    public TypeDescription getTypeDescription(String schemaName, String tableName) throws MetadataException {
-        List<Column> columns = metadataService.getColumns(schemaName, tableName, false);
-        List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
-        List<String> columnTypes = columns.stream().map(Column::getType).collect(Collectors.toList());
-        TypeDescription schema = TypeDescription.createSchemaFromStrings(columnNames, columnTypes);
-        return schema;
     }
 }

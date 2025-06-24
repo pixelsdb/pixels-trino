@@ -20,6 +20,9 @@
 
 package io.pixelsdb.pixels.trino.split;
 
+import static java.util.Objects.requireNonNull;
+
+import java.io.IOException;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -28,17 +31,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.ImmutableList;
 
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
 import io.trino.spi.predicate.TupleDomain;
-
-import static java.util.Objects.requireNonNull;
-
-import java.io.IOException;
 
 public class PixelsBufferSplit implements PixelsSplit {
 
@@ -62,9 +60,6 @@ public class PixelsBufferSplit implements PixelsSplit {
     private final TupleDomain<PixelsColumnHandle> constraint;
     private final RetinaSplitType retinaSplitType;
 
-    @JsonSerialize(using = TypeDescriptionJsonSerializer.class)
-    private final TypeDescription typeDescription;
-
     @JsonCreator
     public PixelsBufferSplit(
             @JsonProperty("transId") long transId,
@@ -76,11 +71,10 @@ public class PixelsBufferSplit implements PixelsSplit {
             @JsonProperty("activeMemtableData") byte[] activeMemtableData,
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("columnOrder") List<String> columnOrder,
-            // @JsonProperty("constraint") 
+            // @JsonProperty("constraint")
             TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("splitType") RetinaSplitType type,
             @JsonProperty("typeDescription") TypeDescription typeDescription) {
-        this.typeDescription = typeDescription;
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
@@ -137,7 +131,7 @@ public class PixelsBufferSplit implements PixelsSplit {
     }
 
     public long getNextMemtableId() {
-        if(index >= memtableIds.size()) {
+        if (index >= memtableIds.size()) {
             return -1;
         }
         return memtableIds.get(index++);
@@ -165,11 +159,6 @@ public class PixelsBufferSplit implements PixelsSplit {
     }
 
     @JsonProperty
-    public TypeDescription getTypeDescription() {
-        return typeDescription;
-    }
-
-    @JsonProperty
     public List<Long> getMemtableIds() {
         return memtableIds;
     }
@@ -188,26 +177,4 @@ public class PixelsBufferSplit implements PixelsSplit {
     public String getStorageScheme() {
         return "minio";
     }
-
-    public static class TypeDescriptionJsonSerializer extends JsonSerializer<TypeDescription> {
-        public TypeDescriptionJsonSerializer() {
-        }
-
-        @Override
-        public void serialize(TypeDescription value, JsonGenerator gen, SerializerProvider serializers)
-                throws IOException {
-            gen.writeRawValue(value.toJson());
-        }
-    }
-
-    // public class TypeDescriptionDeserializer extends
-        // JsonDeserializer<TypeDescription> {
-        // @Override
-        // public TypeDescription deserialize(JsonParser p, DeserializationContext ctxt)
-        // throws IOException, JacksonException {
-        // String json = p.readValueAs(String.class);
-        // return TypeDescription.fromJson(json); 
-        // }
-    // }
-
 }
