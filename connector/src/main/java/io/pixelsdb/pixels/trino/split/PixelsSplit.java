@@ -23,5 +23,4 @@ import io.trino.spi.connector.ConnectorSplit;
 
 public interface PixelsSplit extends ConnectorSplit {
     public String getConnectorId();
-    public String getStorageScheme();
 }

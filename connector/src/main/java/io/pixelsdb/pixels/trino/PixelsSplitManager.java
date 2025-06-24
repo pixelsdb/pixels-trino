@@ -1198,8 +1198,22 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
     private List<PixelsBufferSplit> getBufferSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
                                             PixelsTableHandle tableHandle) throws MetadataException {
-        // TODO: get write buffer info from metadataservice
-        List<PixelsBufferSplit> pixelsBufferSplits = new ArrayList<>();         
+        List<PixelsBufferSplit> pixelsBufferSplits = new ArrayList<>();
+        
+        // Do not use constraint_ in the parameters, it is always TupleDomain.all().
+        TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
+        List<PixelsColumnHandle> desiredColumns = getIncludeColumns(tableHandle);
+
+        String schemaName = tableHandle.getSchemaName();
+        String tableName = tableHandle.getTableName();
+        Table table;
+     
+        table = metadataProxy.getTable(transHandle.getTransId(), schemaName, tableName);
+        TypeDescription typeDescription = metadataProxy.getTypeDescription(schemaName, tableName);
+        
+        
+        // todo 获取buffer split
+
         return pixelsBufferSplits;
     }
 

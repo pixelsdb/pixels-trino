@@ -23,21 +23,28 @@ package io.pixelsdb.pixels.trino.split;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.ImmutableList;
 
+import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
 import io.trino.spi.predicate.TupleDomain;
 
 import static java.util.Objects.requireNonNull;
-import static com.google.common.base.Preconditions.checkArgument;
+
+import java.io.IOException;
 
 public class PixelsBufferSplit implements PixelsSplit {
 
     public enum RetinaSplitType {
-        MEMTABLE,
-        FILE // minio
+        ACTIVE_MEMTABLE,
+        FILE_ID // minio
     }
 
     private final long transId;
@@ -45,13 +52,19 @@ public class PixelsBufferSplit implements PixelsSplit {
     private final String connectorId;
     private final String schemaName;
     private final String tableName;
-    private List<String> paths;
     private List<Long> memtableIds;
-    private int index; // index for paths or memtableId
+    private byte[] activeMemtableData;
+    private int index; // index for memtableIds
     private final List<HostAddress> addresses;
     private List<String> columnOrder;
+
+    @JsonIgnore
     private final TupleDomain<PixelsColumnHandle> constraint;
     private final RetinaSplitType retinaSplitType;
+
+    @JsonSerialize(using = TypeDescriptionJsonSerializer.class)
+    private final TypeDescription typeDescription;
+
     @JsonCreator
     public PixelsBufferSplit(
             @JsonProperty("transId") long transId,
@@ -60,20 +73,22 @@ public class PixelsBufferSplit implements PixelsSplit {
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
             @JsonProperty("memTableIds") List<Long> ids,
-            @JsonProperty("paths") List<String> paths,
+            @JsonProperty("activeMemtableData") byte[] activeMemtableData,
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("columnOrder") List<String> columnOrder,
-            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("splitType") RetinaSplitType type) {
+            // @JsonProperty("constraint") 
+            TupleDomain<PixelsColumnHandle> constraint,
+            @JsonProperty("splitType") RetinaSplitType type,
+            @JsonProperty("typeDescription") TypeDescription typeDescription) {
+        this.typeDescription = typeDescription;
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
         this.connectorId = requireNonNull(connectorId, "connector id is null");
         this.tableName = requireNonNull(tableName, "table name is null");
         this.retinaSplitType = type;
-        if(this.retinaSplitType == RetinaSplitType.FILE) {
-            this.paths = requireNonNull(paths, "paths is null");
-            checkArgument(!paths.isEmpty(), "paths is empty");
+        if (this.retinaSplitType == RetinaSplitType.ACTIVE_MEMTABLE) {
+            this.activeMemtableData = activeMemtableData;
         } else {
             this.memtableIds = ids;
         }
@@ -81,16 +96,14 @@ public class PixelsBufferSplit implements PixelsSplit {
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
         this.columnOrder = requireNonNull(columnOrder, "order is null");
         this.constraint = requireNonNull(constraint, "constraint is null");
-        
     }
 
     public Boolean isEmpty() {
-        return paths.isEmpty();
-    }
-
-    public String getPath()
-    {
-        return this.paths.get(this.pathIndex);
+        if (retinaSplitType == RetinaSplitType.ACTIVE_MEMTABLE) {
+            return activeMemtableData == null || activeMemtableData.length == 0;
+        } else {
+            return memtableIds.isEmpty();
+        }
     }
 
     @JsonProperty
@@ -118,15 +131,9 @@ public class PixelsBufferSplit implements PixelsSplit {
         return tableName;
     }
 
-
     @JsonProperty
-    public List<String> getPaths() {
-        return paths;
-    }
-
-    @JsonProperty
-    public int getPathIndex() {
-        return pathIndex;
+    public int getIndex() {
+        return index;
     }
 
     @JsonProperty
@@ -139,8 +146,55 @@ public class PixelsBufferSplit implements PixelsSplit {
         return columnOrder;
     }
 
-    @JsonProperty
+    // @JsonProperty
+    @JsonIgnore
     public TupleDomain<PixelsColumnHandle> getConstraint() {
         return constraint;
     }
+
+    @JsonProperty
+    public RetinaSplitType getRetinaSplitType() {
+        return retinaSplitType;
+    }
+
+    @JsonProperty
+    public TypeDescription getTypeDescription() {
+        return typeDescription;
+    }
+
+    @JsonProperty
+    public List<Long> getMemtableIds() {
+        return memtableIds;
+    }
+
+    @JsonProperty
+    public byte[] getActiveMemtableData() {
+        return activeMemtableData;
+    }
+
+    @Override
+    public long getRetainedSizeInBytes() {
+        return 0L;
+    }
+
+    public static class TypeDescriptionJsonSerializer extends JsonSerializer<TypeDescription> {
+        public TypeDescriptionJsonSerializer() {
+        }
+
+        @Override
+        public void serialize(TypeDescription value, JsonGenerator gen, SerializerProvider serializers)
+                throws IOException {
+            gen.writeRawValue(value.toJson());
+        }
+    }
+
+    // public class TypeDescriptionDeserializer extends
+        // JsonDeserializer<TypeDescription> {
+        // @Override
+        // public TypeDescription deserialize(JsonParser p, DeserializationContext ctxt)
+        // throws IOException, JacksonException {
+        // String json = p.readValueAs(String.class);
+        // return TypeDescription.fromJson(json); 
+        // }
+    // }
 }
