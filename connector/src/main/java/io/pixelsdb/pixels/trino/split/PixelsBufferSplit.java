@@ -136,6 +136,13 @@ public class PixelsBufferSplit implements PixelsSplit {
         return index;
     }
 
+    public long getNextMemtableId() {
+        if(index >= memtableIds.size()) {
+            return -1;
+        }
+        return memtableIds.get(index++);
+    }
+
     @JsonProperty
     public List<HostAddress> getAddresses() {
         return addresses;
@@ -177,6 +184,11 @@ public class PixelsBufferSplit implements PixelsSplit {
         return 0L;
     }
 
+    @Override
+    public String getStorageScheme() {
+        return "minio";
+    }
+
     public static class TypeDescriptionJsonSerializer extends JsonSerializer<TypeDescription> {
         public TypeDescriptionJsonSerializer() {
         }
@@ -197,4 +209,5 @@ public class PixelsBufferSplit implements PixelsSplit {
         // return TypeDescription.fromJson(json); 
         // }
     // }
+
 }

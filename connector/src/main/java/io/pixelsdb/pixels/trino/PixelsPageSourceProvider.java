@@ -93,26 +93,27 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         PixelsTransactionHandle pixelsTransactionHandle = (PixelsTransactionHandle) transactionHandle;
         try
         {
+            Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
             if(pixelsSplit instanceof PixelsFileSplit) {
                 PixelsFileSplit pixelsFileSplit = (PixelsFileSplit) pixelsSplit;
-                Storage storage = StorageFactory.Instance().getStorage(pixelsFileSplit.getStorageScheme());
+                
                 if (pixelsFileSplit.getFromServerlessOutput())
                 {
                     IntermediateFileCleaner.Instance().registerStorage(storage);
-                    return new PixelsPageSource(pixelsFileSplit, pixelsColumns, pixelsTransactionHandle, storage,
+                    return new PixelsFilePageSource(pixelsFileSplit, pixelsColumns, pixelsTransactionHandle, storage,
                             cacheFile, indexFile, pixelsFooterCache);
                 } else
                 {
                     // perform scan push down.
                     List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
-                    return new PixelsPageSource(pixelsFileSplit, withFilterColumns, pixelsTransactionHandle, storage,
+                    return new PixelsFilePageSource(pixelsFileSplit, withFilterColumns, pixelsTransactionHandle, storage,
                             cacheFile, indexFile, pixelsFooterCache);
                 }
             }
 
             if(pixelsSplit instanceof PixelsBufferSplit) {
                 PixelsBufferSplit pixelsBufferSplit = (PixelsBufferSplit) pixelsSplit;
-                return new PixelsBufferPageSource(pixelsBufferSplit, pixelsColumns, pixelsTransactionHandle);
+                return new PixelsBufferPageSource(pixelsBufferSplit, pixelsColumns, pixelsTransactionHandle, storage);
             }
 
             throw new TrinoException(PixelsErrorCode.PIXELS_SPLIT_TYPE_ERROR,"Unknown Pixels Split Type");

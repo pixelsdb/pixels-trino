@@ -143,6 +143,7 @@ public class PixelsFileSplit implements PixelsSplit
     }
 
     @JsonProperty
+    @Override
     public String getStorageScheme()
     {
         return storageScheme;

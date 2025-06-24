@@ -76,6 +76,7 @@ import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.TupleDomain;
+import io.trino.spi.type.BigintType;
 import io.trino.spi.type.StandardTypes;
 import io.trino.spi.type.Type;
 
@@ -1212,16 +1213,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
         TypeDescription typeDescription = metadataProxy.getTypeDescription(schemaName, tableName);
         
         
-        // todo 获取buffer split
+        // TODO(AntiO2) 获取buffer split
 
         return pixelsBufferSplits;
     }
 
-    public static TableScanFilter createTableScanFilter(
-            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
-    {
+
+    public static SortedMap<Integer, ColumnFilter> getColumnFilters(
+            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint) {
         SortedMap<Integer, ColumnFilter> columnFilters = new TreeMap<>();
-        TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
+        
         Map<String, Integer> colToCid = new HashMap<>(includeCols.length);
         for (int i = 0; i < includeCols.length; ++i)
         {
@@ -1244,7 +1245,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 }
             }
         }
+        return columnFilters;
+    }
 
+    public static TableScanFilter createTableScanFilter(
+            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
+    {
+        SortedMap<Integer, ColumnFilter> columnFilters = getColumnFilters(schemaName, tableName, includeCols, constraint);
+        TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
         return tableScanFilter;
     }
 
@@ -1374,6 +1382,83 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
         return bound;
     }
+
+    private static  <T extends Comparable<T>> ColumnFilter<T> createTimeStampFilter(Domain domain)
+    {
+        Type prestoType = BigintType.BIGINT;
+        String columnName = "hidden_column";
+        TypeDescription.Category columnType = TypeDescription.Category.LONG;
+        Class<?> filterJavaType = columnType.getInternalJavaType() == byte[].class ?
+                String.class : columnType.getInternalJavaType();
+        boolean isAll = domain.isAll();
+        boolean isNone = domain.isNone();
+        boolean allowNull = domain.isNullAllowed();
+        boolean onlyNull = domain.isOnlyNull();
+
+        Filter<T> filter = domain.getValues().getValuesProcessor().transform(
+                ranges -> {
+                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
+                    if (ranges.getRangeCount() > 0)
+                    {
+                        ranges.getOrderedRanges().forEach(range ->
+                        {
+                            if (range.isSingleValue())
+                            {
+                                Bound<?> bound = createBound(prestoType, Bound.Type.INCLUDED,
+                                        range.getSingleValue());
+                                res.addDiscreteValue((Bound<T>) bound);
+                            } else
+                            {
+                                Bound.Type lowerBoundType = range.isLowInclusive() ?
+                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                                Bound.Type upperBoundType = range.isHighInclusive() ?
+                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                                Object lowerBoundValue = null, upperBoundValue = null;
+                                if (range.isLowUnbounded())
+                                {
+                                    lowerBoundType = Bound.Type.UNBOUNDED;
+                                } else
+                                {
+                                    lowerBoundValue = range.getLowBoundedValue();
+                                }
+                                if (range.isHighUnbounded())
+                                {
+                                    upperBoundType = Bound.Type.UNBOUNDED;
+                                } else
+                                {
+                                    upperBoundValue = range.getHighBoundedValue();
+                                }
+                                Bound<?> lowerBound = createBound(prestoType, lowerBoundType, lowerBoundValue);
+                                Bound<?> upperBound = createBound(prestoType, upperBoundType, upperBoundValue);
+                                res.addRange((Bound<T>) lowerBound, (Bound<T>) upperBound);
+                            }
+                        });
+                    }
+                    return res;
+                },
+                discreteValues -> {
+                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
+                    Bound.Type boundType = discreteValues.isInclusive() ?
+                            Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                    discreteValues.getValues().forEach(value ->
+                    {
+                        if (value == null)
+                        {
+                            throw new TrinoException(PixelsErrorCode.PIXELS_INVALID_METADATA,
+                                    "discrete value is null");
+                        } else
+                        {
+                            Bound<?> bound = createBound(prestoType, boundType, value);
+                            res.addDiscreteValue((Bound<T>) bound);
+                        }
+                    });
+                    return res;
+                },
+                allOrNone -> new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull)
+        );
+        return new ColumnFilter<>(columnName, columnType, filter);
+    }
+
 
     private List<HostAddress> toHostAddresses(List<Location> locations)
     {

@@ -56,8 +56,6 @@ public class TestPixelsBufferSplit {
 
     private TypeDescription createTypeDescription() {
         String schemaStr = "struct<a_:boolean,b_:date,c_:decimal(5,2),d_:double,e_:float,f_:int,g_:long,h_:decimal(30,20),i:string,j_:time,k_:timestamp>";
-        // TODO: vector is not supported
-        
         TypeDescription schema = TypeDescription.fromString(schemaStr);
         return schema;
     }
