@@ -20,23 +20,16 @@
 
 package io.pixelsdb.pixels.trino.split;
 
-import static java.util.Objects.requireNonNull;
-
-import java.io.IOException;
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
 import com.google.common.collect.ImmutableList;
-
-import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
 import io.trino.spi.predicate.TupleDomain;
+
+import java.util.List;
+
+import static java.util.Objects.requireNonNull;
 
 public class PixelsBufferSplit implements PixelsSplit {
 
@@ -56,7 +49,6 @@ public class PixelsBufferSplit implements PixelsSplit {
     private final List<HostAddress> addresses;
     private List<String> columnOrder;
 
-    @JsonIgnore
     private final TupleDomain<PixelsColumnHandle> constraint;
     private final RetinaSplitType retinaSplitType;
 
@@ -71,10 +63,8 @@ public class PixelsBufferSplit implements PixelsSplit {
             @JsonProperty("activeMemtableData") byte[] activeMemtableData,
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("columnOrder") List<String> columnOrder,
-            // @JsonProperty("constraint")
-            TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("splitType") RetinaSplitType type,
-            @JsonProperty("typeDescription") TypeDescription typeDescription) {
+            @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
+            @JsonProperty("retinaSplitType") RetinaSplitType type) {
         this.transId = transId;
         this.splitId = splitId;
         this.schemaName = requireNonNull(schemaName, "schema name is null");
@@ -84,7 +74,7 @@ public class PixelsBufferSplit implements PixelsSplit {
         if (this.retinaSplitType == RetinaSplitType.ACTIVE_MEMTABLE) {
             this.activeMemtableData = activeMemtableData;
         } else {
-            this.memtableIds = ids;
+            this.memtableIds = requireNonNull(ids, "Buffer Split type is FILE_ID, but ids is null");
         }
         this.index = 0;
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
@@ -147,13 +137,12 @@ public class PixelsBufferSplit implements PixelsSplit {
         return columnOrder;
     }
 
-    // @JsonProperty
-    @JsonIgnore
+    @JsonProperty
     public TupleDomain<PixelsColumnHandle> getConstraint() {
         return constraint;
     }
 
-    @JsonProperty
+    @JsonProperty("retinaSplitType")
     public RetinaSplitType getRetinaSplitType() {
         return retinaSplitType;
     }

@@ -20,18 +20,6 @@
 
 package io.pixelsdb.pixels.trino;
 
-import static java.util.Objects.requireNonNull;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.concurrent.CompletableFuture;
-
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.physical.PhysicalReader;
 import io.pixelsdb.pixels.common.physical.PhysicalReaderUtil;
@@ -42,9 +30,7 @@ import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.ColumnVector;
 import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
-import io.pixelsdb.pixels.executor.predicate.ColumnFilter;
-import io.pixelsdb.pixels.executor.predicate.Filter;
-import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
+import io.pixelsdb.pixels.executor.predicate.*;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.impl.PixelsTupleDomainPredicate;
@@ -54,10 +40,13 @@ import io.trino.spi.TrinoException;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.LazyBlock;
 import io.trino.spi.predicate.Domain;
-import io.trino.spi.predicate.Range;
 import io.trino.spi.predicate.TupleDomain;
-import io.trino.spi.type.BigintType;
 import io.trino.spi.type.Type;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class PixelsBufferPageSource implements PixelsPageSource {
 
@@ -158,7 +147,7 @@ public class PixelsBufferPageSource implements PixelsPageSource {
         try {
             if (split.getRetinaSplitType() == PixelsBufferSplit.RetinaSplitType.ACTIVE_MEMTABLE) {
                 if (activeMemtableReaded) {
-                    // active memtable has been readed. Finish this split
+                    // active memtable has been read. Finish this split
                     return false;
                 }
                 data = split.getActiveMemtableData();
@@ -224,6 +213,8 @@ public class PixelsBufferPageSource implements PixelsPageSource {
             }
 
             return new Page(rowBatchSize, blocks);
+        } catch (RuntimeException e) {
+            throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR, "Can't Read Retina Data", e);
         } finally {
             totalReadTimeNanos += System.nanoTime() - start;
         }
@@ -310,12 +301,14 @@ public class PixelsBufferPageSource implements PixelsPageSource {
      */
     @SuppressWarnings({ "rawtypes", "unchecked" })
     private static ColumnFilter<Long> getTimeStampColumnFilter(long timeStamp) {
-        Range range = Range.lessThanOrEqual(BigintType.BIGINT, timeStamp);
+        Bound<Long> lowerBound = new Bound<Long>(Bound.Type.UNBOUNDED, -1L); // UNBOUNDED
+        Bound<Long> upperBound = new Bound<Long>(Bound.Type.EXCLUDED, timeStamp);
+        Range range = new Range(lowerBound, upperBound);
         TypeDescription.Category columnType = TypeDescription.Category.LONG;
         Class<?> filterJavaType = columnType.getInternalJavaType();
         Filter<Long> filter = new Filter<>(filterJavaType,
                 new ArrayList(List.of(range)),
-                new ArrayList<>(),
+                new ArrayList<Bound<Long>>(),
                 false,
                 false,
                 false,

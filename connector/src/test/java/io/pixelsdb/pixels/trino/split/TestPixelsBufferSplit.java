@@ -196,8 +196,7 @@ public class TestPixelsBufferSplit {
                 List.of(HostAddress.fromParts("localhost", 8080)), // addresses
                 List.of("b_", "a_"),        // columnOrder
                 constraint,              // constraint (simplified)
-                PixelsBufferSplit.RetinaSplitType.ACTIVE_MEMTABLE, // type
-                typeDescription
+                PixelsBufferSplit.RetinaSplitType.ACTIVE_MEMTABLE // type
         );
         String typeString = typeDescription.toJson();
         // Serialize to JSON

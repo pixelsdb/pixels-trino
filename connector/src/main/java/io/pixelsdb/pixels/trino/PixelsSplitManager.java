@@ -30,13 +30,15 @@ import io.airlift.slice.Slice;
 import io.etcd.jetcd.KeyValue;
 import io.pixelsdb.pixels.cache.PixelsCacheUtil;
 import io.pixelsdb.pixels.common.exception.MetadataException;
+import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.layout.*;
 import io.pixelsdb.pixels.common.metadata.SchemaTableName;
-import io.pixelsdb.pixels.common.metadata.domain.Table;
 import io.pixelsdb.pixels.common.metadata.domain.*;
+import io.pixelsdb.pixels.common.metadata.domain.Table;
 import io.pixelsdb.pixels.common.physical.Location;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
+import io.pixelsdb.pixels.common.retina.RetinaService;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.Output;
@@ -63,6 +65,7 @@ import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
+import io.pixelsdb.pixels.retina.RetinaProto;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -76,7 +79,6 @@ import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.TupleDomain;
-import io.trino.spi.type.BigintType;
 import io.trino.spi.type.StandardTypes;
 import io.trino.spi.type.Type;
 
@@ -101,6 +103,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private static final Logger logger = Logger.get(PixelsSplitManager.class);
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
+    private final RetinaService retinaService;
     private final PixelsTrinoConfig config;
     private final boolean cacheEnabled;
     private final boolean multiSplitForOrdered;
@@ -112,6 +115,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     @Inject
     public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
                               PixelsTrinoConfig config) {
+        this.retinaService = RetinaService.Instance();
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.config = requireNonNull(config, "config is null");
@@ -277,18 +281,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 }
                 
                 {
-                    // TODO: add writerBufferSplit
-                    List<PixelsBufferSplit> pixelsBufferSplit = getBufferSplits(transHandle, session, tableHandle);
+                    List<PixelsBufferSplit> pixelsBufferSplits = getBufferSplits(transHandle, session, tableHandle,
+                            (long) pixelsSplits.size());
                     pixelsSplits.addAll(
-                        pixelsBufferSplit.stream()
+                        pixelsBufferSplits.stream()
                         .map(split -> (PixelsSplit) split)
-                        .collect(Collectors.toList())
+                        .toList()
                     );
                 }
 
-
-
-            } catch (MetadataException | IOException e)
+            } catch (MetadataException | IOException | RetinaException e)
             {
                 logger.error(e, "failed to get scan splits");
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
@@ -1198,7 +1200,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
 
     private List<PixelsBufferSplit> getBufferSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
-                                            PixelsTableHandle tableHandle) throws MetadataException {
+                                            PixelsTableHandle tableHandle, long splitId) throws MetadataException, RetinaException {
         List<PixelsBufferSplit> pixelsBufferSplits = new ArrayList<>();
         
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
@@ -1210,8 +1212,36 @@ public class PixelsSplitManager implements ConnectorSplitManager
         Table table;
      
         table = metadataProxy.getTable(transHandle.getTransId(), schemaName, tableName);
-        
-        // TODO(AntiO2) generate buffer split
+        // The address is not used to dispatch Pixels splits, so we use set it the localhost.
+        HostAddress address = HostAddress.fromString("localhost:8080");
+        RetinaProto.GetSuperVersionResponse superVersion = retinaService.getSuperVersion(schemaName, tableName);
+
+        List<String> columnOrder = ImmutableList.of();
+        TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
+                columnHandle -> (PixelsColumnHandle) columnHandle);
+
+        if(!superVersion.getData().isEmpty()) {
+            PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
+                    schemaName, tableName, null, superVersion.getData().toByteArray(), List.of(address),
+                    columnOrder, emptyConstraint, // maybe useless
+                    PixelsBufferSplit.RetinaSplitType.ACTIVE_MEMTABLE
+                    );
+            pixelsBufferSplits.add(split);
+        }
+
+        int idCnt = superVersion.getIdsCount();
+        if(idCnt > 0) {
+            for(int i = 0; i < idCnt; ++i) {
+                PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
+                        schemaName, tableName,
+                        Collections.singletonList(superVersion.getIds(i)), // In the future, we can implement handling multiple memtable IDs in a single split
+                        null,
+                        List.of(address), columnOrder, emptyConstraint, // maybe useless
+                        PixelsBufferSplit.RetinaSplitType.FILE_ID
+                );
+                pixelsBufferSplits.add(split);
+            }
+        }
 
         return pixelsBufferSplits;
     }
