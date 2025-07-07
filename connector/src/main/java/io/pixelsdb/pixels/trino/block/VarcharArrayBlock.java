@@ -513,4 +513,8 @@ public class VarcharArrayBlock implements ValueBlock
         sb.append('}');
         return sb.toString();
     }
+
+    public boolean[] getValueIsNull() {
+        return valueIsNull;
+    }
 }

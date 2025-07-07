@@ -220,11 +220,12 @@ public class PixelsBufferPageSource implements PixelsPageSource {
 
             rowBatchSize = rowBatch.size;
 
-            for (int fieldId = 0; fieldId < blocks.length; ++fieldId) {
-                Type type = columns.get(fieldId).getColumnType();
-                TypeDescription.Category typeCategory = columns.get(fieldId).getTypeCategory();
+            for (int i = 0; i < blocks.length; ++i) {
+                Type type = columns.get(i).getColumnType();
+                TypeDescription.Category typeCategory = columns.get(i).getTypeCategory();
+                int fieldId = columns.get(i).getLogicalOrdinal();
                 ColumnVector vector = rowBatch.cols[fieldId];
-                blocks[fieldId] = new LazyBlock(rowBatchSize, new PixelsBlockLoader(
+                blocks[i] = new LazyBlock(rowBatchSize, new PixelsBlockLoader(
                         this, vector, type, typeCategory, rowBatchSize));
             }
 
