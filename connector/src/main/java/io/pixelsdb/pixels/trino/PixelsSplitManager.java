@@ -103,7 +103,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private static final Logger logger = Logger.get(PixelsSplitManager.class);
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
-    private final RetinaService retinaService;
     private final PixelsTrinoConfig config;
     private final boolean cacheEnabled;
     private final boolean multiSplitForOrdered;
@@ -115,7 +114,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
     @Inject
     public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
                               PixelsTrinoConfig config) {
-        this.retinaService = RetinaService.Instance();
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.config = requireNonNull(config, "config is null");
@@ -1202,46 +1200,29 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private List<PixelsBufferSplit> getBufferSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
                                             PixelsTableHandle tableHandle, long splitId) throws MetadataException, RetinaException {
         List<PixelsBufferSplit> pixelsBufferSplits = new ArrayList<>();
-        
+
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
         TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
         List<PixelsColumnHandle> desiredColumns = getIncludeColumns(tableHandle);
 
         String schemaName = tableHandle.getSchemaName();
         String tableName = tableHandle.getTableName();
-        Table table;
-     
-        table = metadataProxy.getTable(transHandle.getTransId(), schemaName, tableName);
+
+        int originColumnCnt = metadataProxy.getMetadataService().getColumns(schemaName, tableName, false).size();
         // The address is not used to dispatch Pixels splits, so we use set it the localhost.
         HostAddress address = HostAddress.fromString("localhost:8080");
-        RetinaProto.GetSuperVersionResponse superVersion = retinaService.getSuperVersion(schemaName, tableName);
 
         List<String> columnOrder = ImmutableList.of();
         TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
                 columnHandle -> (PixelsColumnHandle) columnHandle);
 
-        if(!superVersion.getData().isEmpty()) {
-            PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
-                    schemaName, tableName, null, superVersion.getData().toByteArray(), List.of(address),
-                    columnOrder, emptyConstraint, // maybe useless
-                    PixelsBufferSplit.RetinaSplitType.ACTIVE_MEMTABLE
-                    );
-            pixelsBufferSplits.add(split);
-        }
-
-        int idCnt = superVersion.getIdsCount();
-        if(idCnt > 0) {
-            for(int i = 0; i < idCnt; ++i) {
-                PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
-                        schemaName, tableName,
-                        Collections.singletonList(superVersion.getIds(i)), // In the future, we can implement handling multiple memtable IDs in a single split
-                        null,
-                        List.of(address), columnOrder, emptyConstraint, // maybe useless
-                        PixelsBufferSplit.RetinaSplitType.FILE_ID
+        PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
+                schemaName, tableName,
+                List.of(address),
+                columnOrder, emptyConstraint, // maybe useless
+                originColumnCnt
                 );
-                pixelsBufferSplits.add(split);
-            }
-        }
+        pixelsBufferSplits.add(split);
 
         return pixelsBufferSplits;
     }

@@ -191,12 +191,10 @@ public class TestPixelsBufferSplit {
                 connectorId,                 // connectorId
                 schema,
                 table,
-                ids,
-                data,             // activeMemtableData
                 List.of(HostAddress.fromParts("localhost", 8080)), // addresses
                 List.of("b_", "a_"),        // columnOrder
                 constraint,              // constraint (simplified)
-                PixelsBufferSplit.RetinaSplitType.ACTIVE_MEMTABLE // type
+                2
         );
         String typeString = typeDescription.toJson();
         // Serialize to JSON

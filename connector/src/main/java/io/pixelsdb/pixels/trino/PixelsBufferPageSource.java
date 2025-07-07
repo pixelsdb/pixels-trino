@@ -21,9 +21,11 @@
 package io.pixelsdb.pixels.trino;
 
 import io.airlift.log.Logger;
+import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.physical.PhysicalReader;
 import io.pixelsdb.pixels.common.physical.PhysicalReaderUtil;
 import io.pixelsdb.pixels.common.physical.Storage;
+import io.pixelsdb.pixels.common.retina.RetinaService;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
@@ -31,6 +33,7 @@ import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.ColumnVector;
 import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
 import io.pixelsdb.pixels.executor.predicate.*;
+import io.pixelsdb.pixels.retina.RetinaProto;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.impl.PixelsTupleDomainPredicate;
@@ -43,6 +46,8 @@ import io.trino.spi.predicate.Domain;
 import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.type.Type;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -72,13 +77,19 @@ public class PixelsBufferPageSource implements PixelsPageSource {
 
     private byte[] data;
 
+    private byte[] activeMemtableData;
+    private List<Long> fileIds;
+    private int fileIdIndex = 0;
     private boolean activeMemtableReaded = false;
+
     private final long startTimeNanos;
     private long totalReadTimeNanos;
 
+    private final RetinaService retinaService;
+
     public PixelsBufferPageSource(PixelsBufferSplit split, List<PixelsColumnHandle> columnHandles,
-            PixelsTransactionHandle transactionHandle,
-            Storage storage) {
+                                  PixelsTransactionHandle transactionHandle,
+                                  Storage storage) {
         this.startTimeNanos = System.nanoTime();
         this.split = split;
         this.transactionHandle = transactionHandle;
@@ -94,6 +105,16 @@ public class PixelsBufferPageSource implements PixelsPageSource {
         this.BatchSize = PixelsTrinoConfig.getBatchSize();
         this.filtered = new Bitmap(this.BatchSize, true);
         this.tmp = new Bitmap(this.BatchSize, false);
+
+        /**
+         * TODO(Li Zinuo): The Host and Port of RetinaService can be stored in Metadata
+         *  So we can support horizontal scaling of multiple RetinaService instances.
+         *
+         *  Currently, each Split is read by only one PixelsBufferPageSource,
+         *  so only a single RetinaService instance can be used.
+         */
+        this.retinaService = RetinaService.Instance();
+
         TupleDomain<PixelsColumnHandle> tupleDomain = split.getConstraint();
 
         SortedMap<Integer, ColumnFilter> columnFilters = new TreeMap<>();
@@ -102,10 +123,7 @@ public class PixelsBufferPageSource implements PixelsPageSource {
                     includeCols, split.getConstraint());
         }
 
-        columnFilters.put(columns.size(), getTimeStampColumnFilter(transactionHandle.getTimestamp())); // TODO(AntiO2)
-                                                                                                       // check if
-                                                                                                       // columns.size()
-                                                                                                       // is correct
+        columnFilters.put(split.getOriginColumnSize(), getTimeStampColumnFilter(transactionHandle.getTimestamp()));
         this.filter = Optional.of(new TableScanFilter(split.getSchemaName(), split.getTableName(), columnFilters));
         initWriterBuffer();
         this.blocked = NOT_BLOCKED;
@@ -115,10 +133,6 @@ public class PixelsBufferPageSource implements PixelsPageSource {
      * Get Data of writer buffer
      */
     private void initWriterBuffer() {
-        if (split.isEmpty()) {
-            this.close();
-            return;
-        }
 
         if (split.getConstraint().getDomains().isPresent() && !split.getColumnOrder().isEmpty()) {
             Map<PixelsColumnHandle, Domain> domains = split.getConstraint().getDomains().get();
@@ -137,40 +151,40 @@ public class PixelsBufferPageSource implements PixelsPageSource {
             PixelsPredicate predicate = new PixelsTupleDomainPredicate<>(split.getConstraint(), columnReferences);
             // TODO(AntiO2): use predicate
         }
+
+        try {
+            RetinaProto.GetSuperVersionResponse response = retinaService.getSuperVersion(split.getSchemaName(), split.getTableName());
+            this.activeMemtableData = response.getData().toByteArray();
+
+            if(activeMemtableData == null || activeMemtableData.length == 0) {
+                activeMemtableReaded = true; // we do not need to read active memory table
+            } else {
+                data = activeMemtableData;
+            }
+
+            this.fileIds = response.getIdsList(); // TODO(AntiO2) check the behavior if response is empty
+        } catch (RetinaException e) {
+            throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
+                    "Can't get super version of: " + split.getSchemaName() + "/" + split.getTableName(), e);
+        }
     }
 
     /**
-     * 
      * @return true: fetch data to read; false: No more data to read
      */
     public boolean readNextData() {
-        try {
-            if (split.getRetinaSplitType() == PixelsBufferSplit.RetinaSplitType.ACTIVE_MEMTABLE) {
-                if (activeMemtableReaded) {
-                    // active memtable has been read. Finish this split
-                    return false;
-                }
-                data = split.getActiveMemtableData();
-                activeMemtableReaded = true;
-                return true;
-            }
-
-            if (split.getRetinaSplitType() == PixelsBufferSplit.RetinaSplitType.FILE_ID) {
-                Long id = split.getNextMemtableId();
-                if (id == -1) {
-                    return false;
-                }
-                String path = getMinioPathFromId(id);
-                getMemtableDataFromMinio(path);
-            }
-            logger.error("pixelsReader error: storage handler is null");
-            throw new IOException("pixelsReader error: storage handler is null.");
-        } catch (IOException e) {
-            logger.error("pixelsReader error: " + e.getMessage());
-            // closeWithSuppression(e);
-            throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
-                    "create Pixels reader error.", e);
+        if (!activeMemtableReaded) {
+            activeMemtableReaded = true;
+            return true;
         }
+
+        if (fileIdIndex >= fileIds.size()) {
+            return false;
+        }
+
+        String path = getMinioPathFromId(fileIdIndex++);
+        getMemtableDataFromMinio(path);
+        return true;
     }
 
     @Override
@@ -192,6 +206,8 @@ public class PixelsBufferPageSource implements PixelsPageSource {
                 return null;
             }
             this.batchId++;
+
+            // String testMd5sum = md5Hex(this.data);
             VectorizedRowBatch rowBatch = VectorizedRowBatch.deserialize(data);
             int rowBatchSize = 0;
 
@@ -241,8 +257,7 @@ public class PixelsBufferPageSource implements PixelsPageSource {
 
     @Override
     public long getMemoryUsage() {
-        if (closed)
-        {
+        if (closed) {
             return memoryUsage;
         }
         return this.memoryUsage + (data != null ? data.length : 0);
@@ -260,15 +275,15 @@ public class PixelsBufferPageSource implements PixelsPageSource {
         closed = true;
     }
 
-    private String getMinioPathFromId(Long id) {
+    private String getMinioPathFromId(Integer id) {
         String minioEntry = split.getSchemaName() + '/' + split.getTableName() + '/' + id;
         return minioEntry;
     }
 
     private void getMemtableDataFromMinio(String path) {
         // Firstly, if the id is an immutable memtable,
-        // we need to wait for it to be flushed to the storage (currently implemented
-        // using minio)
+        // we need to wait for it to be flushed to the storage
+        // (currently implemented using minio)
         boolean fileExists = false;
         try {
             while (!fileExists) {
@@ -295,11 +310,11 @@ public class PixelsBufferPageSource implements PixelsPageSource {
 
     /**
      * Create filter for Timestamp
-     * 
+     *
      * @param timeStamp
      * @return
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @SuppressWarnings({"rawtypes", "unchecked"})
     private static ColumnFilter<Long> getTimeStampColumnFilter(long timeStamp) {
         Bound<Long> lowerBound = new Bound<Long>(Bound.Type.UNBOUNDED, -1L); // UNBOUNDED
         Bound<Long> upperBound = new Bound<Long>(Bound.Type.EXCLUDED, timeStamp);
@@ -322,4 +337,18 @@ public class PixelsBufferPageSource implements PixelsPageSource {
         return batchId;
     }
 
+
+    private static String md5Hex(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(data);
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(Integer.toHexString((b & 0xFF) | 0x100).substring(1));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("MD5 algorithm not available", e);
+        }
+    }
 }
