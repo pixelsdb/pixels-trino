@@ -68,7 +68,6 @@ public final class PixelsFileSplit extends PixelsSplit
             @JsonProperty("fromServerlessOutput") boolean fromServerlessOutput,
             @JsonProperty("readSynthColumns") boolean readSynthColumns) {
         super(transId, splitId, connectorId, schemaName, tableName, storageScheme, addresses, columnOrder, constraint);
-        
         this.paths = requireNonNull(paths, "paths is null");
         checkArgument(!paths.isEmpty(), "paths is empty");
         this.pathIndex = 0;

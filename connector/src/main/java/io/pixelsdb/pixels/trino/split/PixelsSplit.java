@@ -107,6 +107,6 @@ public abstract class PixelsSplit implements ConnectorSplit {
 
     @JsonProperty
     public String getStorageScheme() {
-        return null;
+        return storageScheme;
     }
 }
