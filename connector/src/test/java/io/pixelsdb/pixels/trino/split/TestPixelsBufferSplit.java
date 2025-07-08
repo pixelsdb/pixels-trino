@@ -191,6 +191,7 @@ public class TestPixelsBufferSplit {
                 connectorId,                 // connectorId
                 schema,
                 table,
+                "minio",
                 List.of(HostAddress.fromParts("localhost", 8080)), // addresses
                 List.of("b_", "a_"),        // columnOrder
                 constraint,              // constraint (simplified)

@@ -1218,6 +1218,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
         PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
                 schemaName, tableName,
+                "minio",
                 List.of(address),
                 columnOrder, emptyConstraint, // maybe useless
                 originColumnCnt

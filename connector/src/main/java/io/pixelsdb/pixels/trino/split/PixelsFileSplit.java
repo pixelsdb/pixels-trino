@@ -21,8 +21,6 @@ package io.pixelsdb.pixels.trino.split;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.ImmutableList;
-
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
 import io.trino.spi.connector.SchemaTableName;
@@ -38,24 +36,15 @@ import static java.util.Objects.requireNonNull;
  * @author tao
  * @author hank
  */
-public class PixelsFileSplit implements PixelsSplit
+public final class PixelsFileSplit extends PixelsSplit
 {
-    private final long transId;
-    private final long splitId;
-    private final String connectorId;
-    private final String schemaName;
-    private final String tableName;
-    private String storageScheme;
     private List<String> paths;
     private List<Integer> rgStarts;
     private List<Integer> rgLengths;
     private int pathIndex;
     private boolean cached;
     private final boolean ensureLocality;
-    private final List<HostAddress> addresses;
-    private List<String> columnOrder;
     private List<String> cacheOrder;
-    private final TupleDomain<PixelsColumnHandle> constraint;
     private boolean fromServerlessOutput;
     private final boolean readSynthColumns;
 
@@ -78,12 +67,8 @@ public class PixelsFileSplit implements PixelsSplit
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("fromServerlessOutput") boolean fromServerlessOutput,
             @JsonProperty("readSynthColumns") boolean readSynthColumns) {
-        this.transId = transId;
-        this.splitId = splitId;
-        this.schemaName = requireNonNull(schemaName, "schema name is null");
-        this.connectorId = requireNonNull(connectorId, "connector id is null");
-        this.tableName = requireNonNull(tableName, "table name is null");
-        this.storageScheme = requireNonNull(storageScheme, "storage scheme is null");
+        super(transId, splitId, connectorId, schemaName, tableName, storageScheme, addresses, columnOrder, constraint);
+        
         this.paths = requireNonNull(paths, "paths is null");
         checkArgument(!paths.isEmpty(), "paths is empty");
         this.pathIndex = 0;
@@ -95,10 +80,7 @@ public class PixelsFileSplit implements PixelsSplit
                 "the size of rgLengths and paths are different");
         this.cached = cached;
         this.ensureLocality = ensureLocality;
-        this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
-        this.columnOrder = requireNonNull(columnOrder, "order is null");
         this.cacheOrder = requireNonNull(cacheOrder, "cacheOrder is null");
-        this.constraint = requireNonNull(constraint, "constraint is null");
         this.fromServerlessOutput = fromServerlessOutput;
         this.readSynthColumns = readSynthColumns;
     }
