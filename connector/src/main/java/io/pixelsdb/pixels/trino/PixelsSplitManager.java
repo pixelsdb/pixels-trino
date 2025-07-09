@@ -30,13 +30,15 @@ import io.airlift.slice.Slice;
 import io.etcd.jetcd.KeyValue;
 import io.pixelsdb.pixels.cache.PixelsCacheUtil;
 import io.pixelsdb.pixels.common.exception.MetadataException;
+import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.layout.*;
 import io.pixelsdb.pixels.common.metadata.SchemaTableName;
-import io.pixelsdb.pixels.common.metadata.domain.Table;
 import io.pixelsdb.pixels.common.metadata.domain.*;
+import io.pixelsdb.pixels.common.metadata.domain.Table;
 import io.pixelsdb.pixels.common.physical.Location;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
+import io.pixelsdb.pixels.common.retina.RetinaService;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.Output;
@@ -63,11 +65,15 @@ import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
+import io.pixelsdb.pixels.retina.RetinaProto;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
+import io.pixelsdb.pixels.trino.split.PixelsBufferSplit;
+import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
+import io.pixelsdb.pixels.trino.split.PixelsSplit;
 import io.trino.spi.HostAddress;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
@@ -218,7 +224,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         OutputInfo outputInfo = new OutputInfo(folder, config.getOutputStorageInfo(), true);
                         scanInput.setOutput(outputInfo);
                         List<String> outputPaths = ScanInput.generateOutputPaths(scanInput);
-                        PixelsSplit split = new PixelsSplit(transHandle.getTransId(), splitId++, connectorId,
+                        PixelsFileSplit split = new PixelsFileSplit(transHandle.getTransId(), splitId++, connectorId,
                                 root.getSchemaName(), root.getTableName(), config.getOutputStorageScheme().name(), outputPaths,
                                 Collections.nCopies(outputPaths.size(), 0), Collections.nCopies(outputPaths.size(), -1),
                                 false, false, Arrays.asList(address), columnOrder, cacheOrder,
@@ -265,16 +271,30 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     pixelsSplits = splitsBuilder.build();
                 } else
                 {
-                    pixelsSplits = getScanSplits(transHandle, session, tableHandle);
-                    Collections.shuffle(pixelsSplits);
+                    List<PixelsFileSplit> pixelsFileSplits = getScanSplits(transHandle, session, tableHandle);
+                    Collections.shuffle(pixelsFileSplits);
+                    pixelsSplits = pixelsFileSplits.stream()
+                        .map(split -> (PixelsSplit) split)
+                        .collect(Collectors.toList());
                 }
-            } catch (MetadataException | IOException e)
+                
+                {
+                    List<PixelsBufferSplit> pixelsBufferSplits = getBufferSplits(transHandle, session, tableHandle,
+                            (long) pixelsSplits.size());
+                    pixelsSplits.addAll(
+                        pixelsBufferSplits.stream()
+                        .map(split -> (PixelsSplit) split)
+                        .toList()
+                    );
+                }
+
+            } catch (MetadataException | IOException | RetinaException e)
             {
                 logger.error(e, "failed to get scan splits");
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "failed to get scan splits", e);
             }
-
+            
             return new PixelsSplitSource(pixelsSplits);
         }
         else if (tableHandle.getTableType() == TableType.JOINED)
@@ -302,7 +322,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     output.setPath(config.getOutputFolderForQuery(transHandle.getTransId(),
                             tableHandle.getSchemaName() + "/" + tableHandle.getTableName()));
                     joinInput.setOutput(output);
-                    PixelsSplit split = new PixelsSplit(
+                    PixelsFileSplit split = new PixelsFileSplit(
                             transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
                             config.getOutputStorageScheme().name(), MultiOutputInfo.generateOutputPaths(output),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
@@ -372,7 +392,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     output.setPath(config.getOutputFilePathForQuery(transHandle.getTransId(),
                             output.getPath().substring(output.getPath().indexOf(tableHandle.getSchemaName()))));
                     aggrInput.setOutput(output);
-                    PixelsSplit split = new PixelsSplit(
+                    PixelsFileSplit split = new PixelsFileSplit(
                             transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
                             config.getOutputStorageScheme().name(), ImmutableList.of(output.getPath()), ImmutableList.of(0),
                             ImmutableList.of(-1), false, false, Arrays.asList(address), columnOrder,
@@ -793,7 +813,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 tableHandle.getTableName(), columns, tableHandle.getConstraint()));
     }
 
-    public static Pair<Integer, InputSplit> getInputSplit(PixelsSplit split)
+    public static Pair<Integer, InputSplit> getInputSplit(PixelsFileSplit split)
     {
         ArrayList<InputInfo> inputInfos = new ArrayList<>();
         int splitSize = 0;
@@ -809,7 +829,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return new Pair<>(splitSize, new InputSplit(inputInfos));
     }
 
-    private List<PixelsSplit> getScanSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
+    private List<PixelsFileSplit> getScanSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
                                             PixelsTableHandle tableHandle) throws MetadataException
     {
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
@@ -870,7 +890,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         boolean orderedPathEnabled = PixelsSessionProperties.getOrderedPathEnabled(session);
         boolean compactPathEnabled = PixelsSessionProperties.getCompactPathEnabled(session);
 
-        List<PixelsSplit> pixelsSplits = new ArrayList<>();
+        List<PixelsFileSplit> pixelsSplits = new ArrayList<>();
         for (Layout layout : layouts)
         {
             // get index
@@ -1022,7 +1042,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     List<HostAddress> orderedAddresses = toHostAddresses(
                                             storage.getLocations(orderedFilePaths.get(firstPath)));
 
-                                    PixelsSplit pixelsSplit = new PixelsSplit(
+                                    PixelsFileSplit pixelsSplit = new PixelsFileSplit(
                                             transHandle.getTransId(), splitId++, connectorId,
                                             tableHandle.getSchemaName(), tableHandle.getTableName(),
                                             table.getStorageScheme().name(), paths,
@@ -1063,7 +1083,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                             ensureLocality = true;
                                         }
 
-                                        PixelsSplit pixelsSplit = new PixelsSplit(
+                                        PixelsFileSplit pixelsSplit = new PixelsFileSplit(
                                                 transHandle.getTransId(), splitId++, connectorId,
                                                 tableHandle.getSchemaName(), tableHandle.getTableName(),
                                                 table.getStorageScheme().name(), Arrays.asList(path),
@@ -1125,7 +1145,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             List<HostAddress> orderedAddresses = toHostAddresses(
                                     storage.getLocations(orderedFilePaths.get(firstPath)));
 
-                            PixelsSplit pixelsSplit = new PixelsSplit(
+                            PixelsFileSplit pixelsSplit = new PixelsFileSplit(
                                     transHandle.getTransId(), splitId++, connectorId,
                                     tableHandle.getSchemaName(), tableHandle.getTableName(),
                                     table.getStorageScheme().name(), paths,
@@ -1152,7 +1172,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             {
                                 List<HostAddress> compactAddresses = toHostAddresses(storage.getLocations(path));
 
-                                PixelsSplit pixelsSplit = new PixelsSplit(
+                                PixelsFileSplit pixelsSplit = new PixelsFileSplit(
                                         transHandle.getTransId(), splitId++, connectorId,
                                         tableHandle.getSchemaName(), tableHandle.getTableName(),
                                         table.getStorageScheme().name(), Arrays.asList(path),
@@ -1176,11 +1196,43 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return pixelsSplits;
     }
 
-    public static TableScanFilter createTableScanFilter(
-            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
-    {
+
+    private List<PixelsBufferSplit> getBufferSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
+                                            PixelsTableHandle tableHandle, long splitId) throws MetadataException, RetinaException {
+        List<PixelsBufferSplit> pixelsBufferSplits = new ArrayList<>();
+
+        // Do not use constraint_ in the parameters, it is always TupleDomain.all().
+        TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
+        List<PixelsColumnHandle> desiredColumns = getIncludeColumns(tableHandle);
+
+        String schemaName = tableHandle.getSchemaName();
+        String tableName = tableHandle.getTableName();
+
+        int originColumnCnt = metadataProxy.getMetadataService().getColumns(schemaName, tableName, false).size();
+        // The address is not used to dispatch Pixels splits, so we use set it the localhost.
+        HostAddress address = HostAddress.fromString("localhost:8080");
+
+        List<String> columnOrder = ImmutableList.of();
+        TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
+                columnHandle -> (PixelsColumnHandle) columnHandle);
+
+        PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
+                schemaName, tableName,
+                "minio",
+                List.of(address),
+                columnOrder, emptyConstraint, // maybe useless
+                originColumnCnt
+                );
+        pixelsBufferSplits.add(split);
+
+        return pixelsBufferSplits;
+    }
+
+
+    public static SortedMap<Integer, ColumnFilter> getColumnFilters(
+            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint) {
         SortedMap<Integer, ColumnFilter> columnFilters = new TreeMap<>();
-        TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
+        
         Map<String, Integer> colToCid = new HashMap<>(includeCols.length);
         for (int i = 0; i < includeCols.length; ++i)
         {
@@ -1203,7 +1255,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 }
             }
         }
+        return columnFilters;
+    }
 
+    public static TableScanFilter createTableScanFilter(
+            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
+    {
+        SortedMap<Integer, ColumnFilter> columnFilters = getColumnFilters(schemaName, tableName, includeCols, constraint);
+        TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
         return tableScanFilter;
     }
 

@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNull;
  */
 public class IntermediateFileCleaner implements Runnable
 {
-    private static final Logger logger = Logger.get(PixelsPageSource.class);
+    private static final Logger logger = Logger.get(IntermediateFileCleaner.class);
     private static final ExecutorService cleanerService = Executors.newSingleThreadExecutor();
     private static final IntermediateFileCleaner cleaner = new IntermediateFileCleaner();
 
