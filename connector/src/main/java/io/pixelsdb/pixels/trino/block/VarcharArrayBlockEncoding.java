@@ -104,7 +104,7 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
         // destinationIndex should be 0, because we do not need 0 to be the first item in lengths.
         sliceInput.readInts(lengths, 0, positionCount);
 
-        boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).get();
+        boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).orElse(new boolean[positionCount]);
 
         // int blockSize = sliceInput.readInt();
         byte[][] values = new byte[positionCount][];

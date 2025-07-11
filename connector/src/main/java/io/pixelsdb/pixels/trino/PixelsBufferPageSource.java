@@ -115,7 +115,10 @@ public class PixelsBufferPageSource implements PixelsPageSource {
                     includeCols, split.getConstraint());
         }
 
-        columnFilters.put(split.getOriginColumnSize(), getTimeStampColumnFilter(transactionHandle.getTimestamp()));
+        if(transactionHandle.getTimestamp() >= 0L) {
+            columnFilters.put(split.getOriginColumnSize(), getTimeStampColumnFilter(transactionHandle.getTimestamp()));
+        }
+
         this.filter = Optional.of(new TableScanFilter(split.getSchemaName(), split.getTableName(), columnFilters));
         initWriterBuffer();
         this.blocked = NOT_BLOCKED;
@@ -290,7 +293,7 @@ public class PixelsBufferPageSource implements PixelsPageSource {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static ColumnFilter<Long> getTimeStampColumnFilter(long timeStamp) {
         Bound<Long> lowerBound = new Bound<Long>(Bound.Type.UNBOUNDED, -1L); // UNBOUNDED
-        Bound<Long> upperBound = new Bound<Long>(Bound.Type.EXCLUDED, timeStamp);
+        Bound<Long> upperBound = new Bound<Long>(Bound.Type.INCLUDED, timeStamp);
         Range range = new Range(lowerBound, upperBound);
         TypeDescription.Category columnType = TypeDescription.Category.LONG;
         Class<?> filterJavaType = columnType.getInternalJavaType();
