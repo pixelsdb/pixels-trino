@@ -39,14 +39,14 @@ public class PixelsRecordSet implements RecordSet
     private final PixelsSplit split;
     private final List<PixelsColumnHandle> columnHandles;
     private final Storage storage;
-    private final MemoryMappedFile cacheFile;
-    private final MemoryMappedFile indexFile;
+    private final List<MemoryMappedFile> cacheFile;
+    private final List<MemoryMappedFile> indexFile;
     private final PixelsFooterCache footerCache;
     private final String connectorId;
     private final List<Type> columnTypes;
 
     public PixelsRecordSet(PixelsSplit split, List<PixelsColumnHandle> columnHandles, Storage storage,
-                           MemoryMappedFile cacheFile, MemoryMappedFile indexFile, PixelsFooterCache footerCache,
+                           List<MemoryMappedFile> cacheFile, List<MemoryMappedFile> indexFile, PixelsFooterCache footerCache,
                            String connectorId)
     {
         this.split = requireNonNull(split, "split is null");

@@ -92,7 +92,7 @@ class PixelsPageSource implements ConnectorPageSource
     private int batchId;
 
     public PixelsPageSource(PixelsSplit split, List<PixelsColumnHandle> columnHandles, PixelsTransactionHandle transactionHandle,
-                            Storage storage, MemoryMappedFile cacheFile, MemoryMappedFile indexFile,
+                            Storage storage, List<MemoryMappedFile> cacheFile, List<MemoryMappedFile> indexFile,
                             PixelsFooterCache pixelsFooterCache)
     {
         this.split = split;
@@ -123,7 +123,8 @@ class PixelsPageSource implements ConnectorPageSource
         this.cacheReader = PixelsCacheReader
                 .newBuilder()
                 .setCacheFile(cacheFile)
-                .setIndexFile(indexFile)
+                .setIndexFile(indexFile.isEmpty() ? null : indexFile.subList(0, indexFile.size() - 1))
+                .setGlobalIndexFile(indexFile.isEmpty() ? null : indexFile.get(indexFile.size() - 1))
                 .build();
 
         if (split.getFromServerlessOutput())

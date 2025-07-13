@@ -46,8 +46,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     private static final Logger logger = Logger.get(PixelsPageSourceProvider.class);
 
     private final String connectorId;
-    private final MemoryMappedFile cacheFile;
-    private final MemoryMappedFile indexFile;
+    private final List<MemoryMappedFile> cacheFile;
+    private final List<MemoryMappedFile> indexFile;
     private final PixelsFooterCache pixelsFooterCache;
     private final PixelsTrinoConfig config;
 
@@ -60,16 +60,24 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         if (config.getConfigFactory().getProperty("cache.enabled").equalsIgnoreCase("true"))
         {
             // NOTICE: creating a MemoryMappedFile is efficient, usually cost tens of us.
-            this.cacheFile = new MemoryMappedFile(
-                    config.getConfigFactory().getProperty("cache.location"),
-                    Long.parseLong(config.getConfigFactory().getProperty("cache.size")));
-            this.indexFile = new MemoryMappedFile(
-                    config.getConfigFactory().getProperty("index.location"),
-                    Long.parseLong(config.getConfigFactory().getProperty("index.size")));
+            int zoneNum = Integer.parseInt(config.getConfigFactory().getProperty("cache.zone.num"));
+            int swapZoneNum = Integer.parseInt(config.getConfigFactory().getProperty("cache.zone.swap.num"));
+            long zoneSize = Long.parseLong(config.getConfigFactory().getProperty("cache.size")) / (zoneNum - swapZoneNum);
+            long zoneIndexSize = Long.parseLong(config.getConfigFactory().getProperty("index.size")) / (zoneNum - swapZoneNum);
+            String zoneLocationPrefix = config.getConfigFactory().getProperty("cache.location");
+            String indexLocationPrefix = config.getConfigFactory().getProperty("index.location");
+            this.cacheFile = new java.util.ArrayList<>();
+            this.indexFile = new java.util.ArrayList<>();
+            for (int i = 0; i < zoneNum; i++) 
+            {
+                this.cacheFile.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
+                this.indexFile.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
+            }
+            this.indexFile.add(new MemoryMappedFile(indexLocationPrefix, zoneIndexSize));
         } else
         {
-            this.cacheFile = null;
-            this.indexFile = null;
+            this.cacheFile = new java.util.ArrayList<>();
+            this.indexFile = new java.util.ArrayList<>();
         }
         this.pixelsFooterCache = new PixelsFooterCache();
     }
