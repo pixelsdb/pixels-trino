@@ -962,7 +962,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 Compact compact = layout.getCompact();
                 int cacheBorder = compact.getCacheBorder();
-                List<String> cacheColumnChunkOrders = compact.getColumnChunkOrder().subList(0, cacheBorder);
+                List<String> cacheColumnChunkOrders = compact.getColumnChunkOrder();//.subList(0, cacheBorder);
                 String cacheVersion;
                 EtcdUtil etcdUtil = EtcdUtil.Instance();
                 KeyValue keyValue = etcdUtil.getKeyValue(Constants.CACHE_VERSION_LITERAL);
