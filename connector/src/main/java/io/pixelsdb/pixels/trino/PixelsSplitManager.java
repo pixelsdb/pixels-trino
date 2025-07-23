@@ -101,8 +101,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private final boolean cacheEnabled;
     private final boolean multiSplitForOrdered;
     private final boolean projectionReadEnabled;
-    private final String cacheSchema;
-    private final String cacheTable;
+    private String cacheSchema;
+    private String cacheTable;
     private final int fixedSplitSize;
 
     @Inject
@@ -856,6 +856,18 @@ public class PixelsSplitManager implements ConnectorSplitManager
         boolean usingCache = false;
         if (this.cacheEnabled)
         {
+            KeyValue keyValue = EtcdUtil.Instance().getKeyValue(Constants.LAYOUT_VERSION_LITERAL);
+            if (keyValue != null)
+            {
+                String value = keyValue.getValue().toString(StandardCharsets.UTF_8);
+                // PIXELS-636: get schema and table name from etcd instead of config file.
+                String[] splits = value.split(":");
+                checkArgument(splits.length == 2, "invalid value for key '" +
+                        Constants.LAYOUT_VERSION_LITERAL + "' in etcd: " + value);
+                SchemaTableName schemaTableName = new SchemaTableName(splits[0]);
+                this.cacheSchema = schemaTableName.getSchemaName();
+                this.cacheTable = schemaTableName.getTableName();
+            }
             if (schemaName.equalsIgnoreCase(this.cacheSchema) &&
                     tableName.equalsIgnoreCase(this.cacheTable))
             {
@@ -964,7 +976,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 Compact compact = layout.getCompact();
                 int cacheBorder = compact.getCacheBorder();
-                List<String> cacheColumnChunkOrders = compact.getColumnChunkOrder().subList(0, cacheBorder);
+                List<String> cacheColumnChunkOrders = compact.getColumnChunkOrder();//.subList(0, cacheBorder);
                 String cacheVersion;
                 EtcdUtil etcdUtil = EtcdUtil.Instance();
                 KeyValue keyValue = etcdUtil.getKeyValue(Constants.CACHE_VERSION_LITERAL);
