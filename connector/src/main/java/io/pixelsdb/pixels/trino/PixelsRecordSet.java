@@ -39,21 +39,21 @@ public class PixelsRecordSet implements RecordSet
     private final PixelsSplit split;
     private final List<PixelsColumnHandle> columnHandles;
     private final Storage storage;
-    private final List<MemoryMappedFile> cacheFile;
-    private final List<MemoryMappedFile> indexFile;
+    private final List<MemoryMappedFile> cacheFiles;
+    private final List<MemoryMappedFile> indexFiles;
     private final PixelsFooterCache footerCache;
     private final String connectorId;
     private final List<Type> columnTypes;
 
     public PixelsRecordSet(PixelsSplit split, List<PixelsColumnHandle> columnHandles, Storage storage,
-                           List<MemoryMappedFile> cacheFile, List<MemoryMappedFile> indexFile, PixelsFooterCache footerCache,
+                           List<MemoryMappedFile> cacheFiles, List<MemoryMappedFile> indexFiles, PixelsFooterCache footerCache,
                            String connectorId)
     {
         this.split = requireNonNull(split, "split is null");
         this.columnHandles = requireNonNull(columnHandles, "columnHandles is null");
         this.storage = requireNonNull(storage, "storage is null");
-        this.cacheFile = cacheFile;
-        this.indexFile = indexFile;
+        this.cacheFiles = cacheFiles;
+        this.indexFiles = indexFiles;
         this.footerCache = requireNonNull(footerCache, "footerCache is null");
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.columnTypes = new ArrayList<>(columnHandles.size());
@@ -73,6 +73,6 @@ public class PixelsRecordSet implements RecordSet
     public RecordCursor cursor()
     {
         return new PixelsRecordCursor(this.split, this.columnHandles, this.storage,
-                this.cacheFile, this.indexFile, this.footerCache, this.connectorId);
+                this.cacheFiles, this.indexFiles, this.footerCache, this.connectorId);
     }
 }

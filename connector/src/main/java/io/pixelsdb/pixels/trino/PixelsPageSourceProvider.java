@@ -46,8 +46,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     private static final Logger logger = Logger.get(PixelsPageSourceProvider.class);
 
     private final String connectorId;
-    private final List<MemoryMappedFile> cacheFile;
-    private final List<MemoryMappedFile> indexFile;
+    private final List<MemoryMappedFile> cacheFiles;
+    private final List<MemoryMappedFile> indexFiles;
     private final PixelsFooterCache pixelsFooterCache;
     private final PixelsTrinoConfig config;
 
@@ -66,18 +66,18 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             long zoneIndexSize = Long.parseLong(config.getConfigFactory().getProperty("index.size")) / (zoneNum - swapZoneNum);
             String zoneLocationPrefix = config.getConfigFactory().getProperty("cache.location");
             String indexLocationPrefix = config.getConfigFactory().getProperty("index.location");
-            this.cacheFile = new java.util.ArrayList<>();
-            this.indexFile = new java.util.ArrayList<>();
+            this.cacheFiles = new java.util.ArrayList<>();
+            this.indexFiles = new java.util.ArrayList<>();
             for (int i = 0; i < zoneNum; i++) 
             {
-                this.cacheFile.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
-                this.indexFile.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
+                this.cacheFiles.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
+                this.indexFiles.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
             }
-            this.indexFile.add(new MemoryMappedFile(indexLocationPrefix, zoneIndexSize));
+            this.indexFiles.add(new MemoryMappedFile(indexLocationPrefix, zoneIndexSize));
         } else
         {
-            this.cacheFile = new java.util.ArrayList<>();
-            this.indexFile = new java.util.ArrayList<>();
+            this.cacheFiles = new java.util.ArrayList<>();
+            this.indexFiles = new java.util.ArrayList<>();
         }
         this.pixelsFooterCache = new PixelsFooterCache();
     }
@@ -103,13 +103,13 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             {
                 IntermediateFileCleaner.Instance().registerStorage(storage);
                 return new PixelsPageSource(pixelsSplit, pixelsColumns, pixelsTransactionHandle, storage,
-                        cacheFile, indexFile, pixelsFooterCache);
+                        cacheFiles, indexFiles, pixelsFooterCache);
             } else
             {
                 // perform scan push down.
                 List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
                 return new PixelsPageSource(pixelsSplit, withFilterColumns, pixelsTransactionHandle, storage,
-                        cacheFile, indexFile, pixelsFooterCache);
+                        cacheFiles, indexFiles, pixelsFooterCache);
             }
         } catch (IOException e)
         {

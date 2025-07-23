@@ -44,8 +44,8 @@ import static java.util.stream.Collectors.toList;
 public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
 {
     private final String connectorId;
-    private final List<MemoryMappedFile> cacheFile;
-    private final List<MemoryMappedFile> indexFile;
+    private final List<MemoryMappedFile> cacheFiles;
+    private final List<MemoryMappedFile> indexFiles;
     private final PixelsFooterCache pixelsFooterCache;
     private final PixelsTrinoConfig config;
 
@@ -63,18 +63,18 @@ public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
             long zoneIndexSize = Long.parseLong(config.getConfigFactory().getProperty("index.size")) / (zoneNum - swapZoneNum);
             String zoneLocationPrefix = config.getConfigFactory().getProperty("cache.location");
             String indexLocationPrefix = config.getConfigFactory().getProperty("index.location");
-            this.cacheFile = new java.util.ArrayList<>();
-            this.indexFile = new java.util.ArrayList<>();
+            this.cacheFiles = new java.util.ArrayList<>();
+            this.indexFiles = new java.util.ArrayList<>();
             for (int i = 0; i < zoneNum; i++) 
             {
-                this.cacheFile.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
-                this.indexFile.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
+                this.cacheFiles.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
+                this.indexFiles.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
             }
-            this.indexFile.add(new MemoryMappedFile(indexLocationPrefix, zoneIndexSize));
+            this.indexFiles.add(new MemoryMappedFile(indexLocationPrefix, zoneIndexSize));
         } else
         {
-            this.cacheFile = new java.util.ArrayList<>();
-            this.indexFile = new java.util.ArrayList<>();
+            this.cacheFiles = new java.util.ArrayList<>();
+            this.indexFiles = new java.util.ArrayList<>();
         }
         this.pixelsFooterCache = new PixelsFooterCache();
         this.config = config;
@@ -104,6 +104,6 @@ public class PixelsRecordSetProvider implements ConnectorRecordSetProvider
             throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
         }
 
-        return new PixelsRecordSet(pixelsSplit, pixelsColumns, storage, cacheFile, indexFile, pixelsFooterCache, connectorId);
+        return new PixelsRecordSet(pixelsSplit, pixelsColumns, storage, cacheFiles, indexFiles, pixelsFooterCache, connectorId);
     }
 }
