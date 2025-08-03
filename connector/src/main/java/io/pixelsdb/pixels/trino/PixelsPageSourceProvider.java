@@ -108,13 +108,13 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 if (pixelsFileSplit.getFromServerlessOutput())
                 {
                     IntermediateFileCleaner.Instance().registerStorage(storage);
-                    return new PixelsPageSource(pixelsFileSplit, pixelsColumns, pixelsTransactionHandle, storage,
+                    return new PixelsFilePageSource(pixelsFileSplit, pixelsColumns, pixelsTransactionHandle, storage,
                             cacheFiles, indexFiles, pixelsFooterCache);
                 } else
                 {
                     // perform scan push down.
                     List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
-                    return new PixelsPageSource(pixelsFileSplit, withFilterColumns, pixelsTransactionHandle, storage,
+                    return new PixelsFilePageSource(pixelsFileSplit, withFilterColumns, pixelsTransactionHandle, storage,
                             cacheFiles, indexFiles, pixelsFooterCache);
                 }
             }
