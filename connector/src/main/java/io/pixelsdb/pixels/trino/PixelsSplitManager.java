@@ -1226,12 +1226,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
         TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
                 columnHandle -> (PixelsColumnHandle) columnHandle);
 
+        TypeDescription schema = metadataProxy.getSchema(schemaName, tableName);
         PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
                 schemaName, tableName,
                 "minio",
                 List.of(address),
                 columnOrder, emptyConstraint, // maybe useless
-                originColumnCnt
+                originColumnCnt,
+                schema
                 );
         pixelsBufferSplits.add(split);
 

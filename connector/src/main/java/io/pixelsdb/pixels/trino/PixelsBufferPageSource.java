@@ -27,12 +27,15 @@ import io.pixelsdb.pixels.common.physical.PhysicalReaderUtil;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.retina.RetinaService;
 import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
+import io.pixelsdb.pixels.core.reader.PixelsRecordReaderBufferImpl;
 import io.pixelsdb.pixels.core.utils.Bitmap;
 import io.pixelsdb.pixels.core.vector.ColumnVector;
 import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
 import io.pixelsdb.pixels.executor.predicate.*;
 import io.pixelsdb.pixels.retina.RetinaProto;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
+import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.split.PixelsBufferSplit;
 import io.trino.spi.Page;
@@ -67,7 +70,6 @@ public class PixelsBufferPageSource implements PixelsPageSource {
     private long memoryUsage = 0L;
     private int batchId;
     private final Storage storage;
-
     private byte[] data;
 
     private List<Long> fileIds;
@@ -78,7 +80,8 @@ public class PixelsBufferPageSource implements PixelsPageSource {
     private long totalReadTimeNanos;
 
     private final RetinaService retinaService;
-
+    private PixelsReaderOption option;
+    private PixelsRecordReaderBufferImpl reader;
     public PixelsBufferPageSource(PixelsBufferSplit split, List<PixelsColumnHandle> columnHandles,
                                   PixelsTransactionHandle transactionHandle,
                                   Storage storage) {
@@ -115,7 +118,6 @@ public class PixelsBufferPageSource implements PixelsPageSource {
                     includeCols, split.getConstraint());
         }
 
-        columnFilters.put(split.getOriginColumnSize(), getTimeStampColumnFilter(transactionHandle.getTimestamp()));
         this.filter = Optional.of(new TableScanFilter(split.getSchemaName(), split.getTableName(), columnFilters));
         initWriterBuffer();
         this.blocked = NOT_BLOCKED;
@@ -126,38 +128,30 @@ public class PixelsBufferPageSource implements PixelsPageSource {
      */
     private void initWriterBuffer() {
         try {
-            RetinaProto.GetSuperVersionResponse response = retinaService.getSuperVersion(split.getSchemaName(), split.getTableName());
+            RetinaProto.GetWriterBufferResponse response = retinaService.getWriterBuffer(split.getSchemaName(), split.getTableName());
             byte[] activeMemtableData = response.getData().toByteArray();
 
-            if(activeMemtableData == null || activeMemtableData.length == 0) {
-                activeMemtableRead = true; // we do not need to read active memory table
-            } else {
-                data = activeMemtableData;
-            }
+            this.option = new PixelsReaderOption();
+            this.option.skipCorruptRecords(true);
+            this.option.tolerantSchemaEvolution(true);
+            this.option.enableEncodedColumnVector(true);
+            this.option.readIntColumnAsIntVector(true);
+            this.option.includeCols(includeCols);
+            this.option.transId(split.getTransId());
+            this.option.transTimestamp(transactionHandle.getTimestamp());
 
-            this.fileIds = response.getIdsList();
-        } catch (RetinaException e) {
+            this.reader = new PixelsRecordReaderBufferImpl(
+                    option,
+                    activeMemtableData, response.getIdsList(),
+                    response.getBitmapsList(),
+                    storage,
+                    split.getSchemaName(), split.getTableName(),
+                    split.getOriginSchema()
+            );
+        } catch (RetinaException | IOException e) {
             throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
                     "Can't get super version of: " + split.getSchemaName() + "/" + split.getTableName(), e);
         }
-    }
-
-    /**
-     * @return true: fetch data to read; false: No more data to read
-     */
-    public boolean readNextData() {
-        if (!activeMemtableRead) {
-            activeMemtableRead = true;
-            return true;
-        }
-
-        if (fileIdIndex >= fileIds.size()) {
-            return false;
-        }
-
-        String path = getMinioPathFromId(fileIdIndex++);
-        getMemtableDataFromMinio(path);
-        return true;
     }
 
     @Override
@@ -174,16 +168,15 @@ public class PixelsBufferPageSource implements PixelsPageSource {
             if (this.closed) {
                 return null;
             }
-            if (!readNextData()) {
+
+
+            VectorizedRowBatch rowBatch = reader.readBatch();
+            if (rowBatch.endOfFile) {
                 this.close();
                 return null;
             }
             this.batchId++;
-
-            // String testMd5sum = md5Hex(this.data);
-            VectorizedRowBatch rowBatch = VectorizedRowBatch.deserialize(data);
             int rowBatchSize;
-
             Block[] blocks = new Block[this.numColumnToRead];
 
             if (this.filter.isPresent()) {
@@ -204,7 +197,7 @@ public class PixelsBufferPageSource implements PixelsPageSource {
 
             completedBytes += data.length;
             return new Page(rowBatchSize, blocks);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | IOException e) {
             throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR, "Can't Read Retina Data", e);
         } finally {
             totalReadTimeNanos += System.nanoTime() - startTimeNanos;
@@ -248,37 +241,6 @@ public class PixelsBufferPageSource implements PixelsPageSource {
         }
 
         closed = true;
-    }
-
-    private String getMinioPathFromId(Integer id) {
-        return split.getSchemaName() + '/' + split.getTableName() + '/' + id;
-    }
-
-    private void getMemtableDataFromMinio(String path) {
-        // Firstly, if the id is an immutable memtable,
-        // we need to wait for it to be flushed to the storage
-        // (currently implemented using minio)
-        boolean fileExists = false;
-        try {
-            while (!fileExists) {
-                fileExists = storage.exists(path);
-                if (fileExists) {
-                    break;
-                }
-                Thread.sleep(pollIntervalMillis);
-            }
-
-            // Create Physical Reader & read this object fully
-            PhysicalReader reader = PhysicalReaderUtil.newPhysicalReader(storage, path);
-            Integer length = (int) reader.getFileLength();
-            ByteBuffer buffer = reader.readFully(length);
-            data = buffer.array();
-        } catch (IOException e) {
-            throw new TrinoException(PixelsErrorCode.PIXELS_RETINA_ERROR,
-                    "Can't create the reader of retina storage.", e);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
     }
 
     /**
