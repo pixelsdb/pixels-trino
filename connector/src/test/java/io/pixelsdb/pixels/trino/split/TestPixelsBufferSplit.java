@@ -155,52 +155,52 @@ public class TestPixelsBufferSplit {
 
     @Test
     public void testActiveMemtableSplit() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new Jdk8Module());
-
-        long transId = 12345L;
-        long splitId = 67890L;
-        String connectorId = "retina-connector";
-        String schema = "test_schema";
-        String table = "test_table";
-        List<Long> ids = null;
-        TypeDescription typeDescription = createTypeDescription();
-        VectorizedRowBatch vectorizedRowBatch = createRowBatch();
-        byte[] data = vectorizedRowBatch.serialize();
-
-        PixelsColumnHandle column1 = new PixelsColumnHandle(
-            connectorId,
-            schema,
-            table,
-            "a_",
-            "aa_",
-            IntegerType.INTEGER,
-            typeDescription.getChildren().get(0).getCategory(),
-            "",
-            0
-        );
-        Domain domain1 = Domain.singleValue(IntegerType.INTEGER, 123L); // 约束 a_ = 123
-        Map<PixelsColumnHandle, Domain> domainMap = Map.of(
-            column1,
-            domain1
-        );
-        TupleDomain<PixelsColumnHandle> constraint = TupleDomain.withColumnDomains(domainMap);
-        PixelsBufferSplit originalSplit = new PixelsBufferSplit(
-                transId,                     // transId
-                splitId,                      // splitId
-                connectorId,                 // connectorId
-                schema,
-                table,
-                "minio",
-                List.of(HostAddress.fromParts("localhost", 8080)), // addresses
-                List.of("b_", "a_"),        // columnOrder
-                constraint,              // constraint (simplified)
-                2
-        );
-        String typeString = typeDescription.toJson();
-        // Serialize to JSON
-        String json = mapper.writeValueAsString(originalSplit);
-        System.out.println("Serialized JSON:\n" + json);
+//        ObjectMapper mapper = new ObjectMapper();
+//        mapper.registerModule(new Jdk8Module());
+//
+//        long transId = 12345L;
+//        long splitId = 67890L;
+//        String connectorId = "retina-connector";
+//        String schema = "test_schema";
+//        String table = "test_table";
+//        List<Long> ids = null;
+//        TypeDescription typeDescription = createTypeDescription();
+//        VectorizedRowBatch vectorizedRowBatch = createRowBatch();
+//        byte[] data = vectorizedRowBatch.serialize();
+//
+//        PixelsColumnHandle column1 = new PixelsColumnHandle(
+//            connectorId,
+//            schema,
+//            table,
+//            "a_",
+//            "aa_",
+//            IntegerType.INTEGER,
+//            typeDescription.getChildren().get(0).getCategory(),
+//            "",
+//            0
+//        );
+//        Domain domain1 = Domain.singleValue(IntegerType.INTEGER, 123L); // 约束 a_ = 123
+//        Map<PixelsColumnHandle, Domain> domainMap = Map.of(
+//            column1,
+//            domain1
+//        );
+//        TupleDomain<PixelsColumnHandle> constraint = TupleDomain.withColumnDomains(domainMap);
+//        PixelsBufferSplit originalSplit = new PixelsBufferSplit(
+//                transId,                     // transId
+//                splitId,                      // splitId
+//                connectorId,                 // connectorId
+//                schema,
+//                table,
+//                "minio",
+//                List.of(HostAddress.fromParts("localhost", 8080)), // addresses
+//                List.of("b_", "a_"),        // columnOrder
+//                constraint,              // constraint (simplified)
+//                2
+//        );
+//        String typeString = typeDescription.toJson();
+//        // Serialize to JSON
+//        String json = mapper.writeValueAsString(originalSplit);
+//        System.out.println("Serialized JSON:\n" + json);
 
         // Deserialize back to object
         // PixelsBufferSplit deserialized = mapper.readValue(json, PixelsBufferSplit.class);

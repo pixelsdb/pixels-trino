@@ -22,15 +22,17 @@ package io.pixelsdb.pixels.trino.split;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
 import io.trino.spi.predicate.TupleDomain;
 
+import java.lang.reflect.Type;
 import java.util.List;
 
 public final class PixelsBufferSplit extends PixelsSplit {
     private final int originColumnSize;
-
+    private final TypeDescription originSchema;
     @JsonCreator
     public PixelsBufferSplit(
             @JsonProperty("transId") long transId,
@@ -42,9 +44,16 @@ public final class PixelsBufferSplit extends PixelsSplit {
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
-            @JsonProperty("originColumnSize") int originColumnSize) {
+            @JsonProperty("originColumnSize") int originColumnSize,
+            @JsonProperty("originSchema")TypeDescription originSchema) {
         super(transId, splitId, connectorId, schemaName, tableName, storageScheme, addresses, columnOrder, constraint);
         this.originColumnSize = originColumnSize;
+        this.originSchema = originSchema;
+    }
+
+    @JsonProperty
+    public TypeDescription getOriginSchema() {
+        return originSchema;
     }
 
     @JsonProperty
