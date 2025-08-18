@@ -233,4 +233,17 @@ public class PixelsMetadataProxy
     {
         return metadataService.existSchema(schemaName);
     }
+
+    public boolean dropPrimaryIndex(String schemaName, String tableName) throws MetadataException
+    {
+        Table table = metadataService.getTable(schemaName, tableName);
+        SinglePointIndex primaryIndex = metadataService.getPrimaryIndex(table.getId());
+        if(primaryIndex != null)
+        {
+            return metadataService.dropSinglePointIndex(primaryIndex.getId());
+        } else
+        {
+            return false;
+        }
+    }
 }
