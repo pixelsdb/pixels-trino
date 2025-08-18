@@ -70,7 +70,6 @@ public class PixelsBufferPageSource implements PixelsPageSource {
     private long memoryUsage = 0L;
     private int batchId;
     private final Storage storage;
-    private byte[] data;
 
     private List<Long> fileIds;
     private int fileIdIndex = 0;
@@ -132,9 +131,6 @@ public class PixelsBufferPageSource implements PixelsPageSource {
      */
     private void initWriterBuffer() {
         try {
-            RetinaProto.GetWriterBufferResponse response = retinaService.getWriterBuffer(split.getSchemaName(), split.getTableName());
-            byte[] activeMemtableData = response.getData().toByteArray();
-
             this.option = new PixelsReaderOption();
             this.option.skipCorruptRecords(true);
             this.option.tolerantSchemaEvolution(true);
@@ -143,14 +139,18 @@ public class PixelsBufferPageSource implements PixelsPageSource {
             this.option.includeCols(includeCols);
             this.option.transId(split.getTransId());
             this.option.transTimestamp(transactionHandle.getTimestamp());
+            TypeDescription schema = TypeDescription.fromString(split.getOriginSchemaString());
 
+            RetinaProto.GetWriterBufferResponse response =
+                    retinaService.getWriterBuffer(split.getSchemaName(), split.getTableName(), option.getTransTimestamp());
+            byte[] activeMemtableData = response.getData().toByteArray();
             this.reader = new PixelsRecordReaderBufferImpl(
                     option,
                     activeMemtableData, response.getIdsList(),
                     response.getBitmapsList(),
                     storage,
                     split.getSchemaName(), split.getTableName(),
-                    split.getOriginSchema()
+                    schema
             );
         } catch (RetinaException | IOException e) {
             throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
@@ -199,7 +199,7 @@ public class PixelsBufferPageSource implements PixelsPageSource {
                         this, vector, type, typeCategory, rowBatchSize));
             }
 
-            completedBytes += data.length;
+            completedBytes += reader.getCompletedBytes();
             return new Page(rowBatchSize, blocks);
         } catch (RuntimeException | IOException e) {
             throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR, "Can't Read Retina Data", e);
@@ -211,10 +211,7 @@ public class PixelsBufferPageSource implements PixelsPageSource {
 
     @Override
     public long getCompletedBytes() {
-        if (closed) {
-            return this.completedBytes;
-        }
-        return this.completedBytes + (data != null ? data.length : 0);
+        return this.completedBytes;
     }
 
     @Override
@@ -228,11 +225,9 @@ public class PixelsBufferPageSource implements PixelsPageSource {
     }
 
     @Override
-    public long getMemoryUsage() {
-        if (closed) {
-            return memoryUsage;
-        }
-        return this.memoryUsage + (data != null ? data.length : 0);
+    public long getMemoryUsage()
+    {
+        return this.memoryUsage;
     }
 
     /**

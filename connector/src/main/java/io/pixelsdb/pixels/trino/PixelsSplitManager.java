@@ -1233,7 +1233,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 List.of(address),
                 columnOrder, emptyConstraint, // maybe useless
                 originColumnCnt,
-                schema
+                schema.toString()
                 );
         pixelsBufferSplits.add(split);
 

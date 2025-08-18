@@ -22,17 +22,27 @@ package io.pixelsdb.pixels.trino.split;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
 import io.trino.spi.predicate.TupleDomain;
 
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.List;
 
 public final class PixelsBufferSplit extends PixelsSplit {
     private final int originColumnSize;
-    private final TypeDescription originSchema;
+    private final String originSchemaString;
+
     @JsonCreator
     public PixelsBufferSplit(
             @JsonProperty("transId") long transId,
@@ -45,15 +55,15 @@ public final class PixelsBufferSplit extends PixelsSplit {
             @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("originColumnSize") int originColumnSize,
-            @JsonProperty("originSchema")TypeDescription originSchema) {
+            @JsonProperty("originSchemaString") String originSchemaString) {
         super(transId, splitId, connectorId, schemaName, tableName, storageScheme, addresses, columnOrder, constraint);
         this.originColumnSize = originColumnSize;
-        this.originSchema = originSchema;
+        this.originSchemaString = originSchemaString;
     }
 
     @JsonProperty
-    public TypeDescription getOriginSchema() {
-        return originSchema;
+    public String getOriginSchemaString() {
+        return originSchemaString;
     }
 
     @JsonProperty
