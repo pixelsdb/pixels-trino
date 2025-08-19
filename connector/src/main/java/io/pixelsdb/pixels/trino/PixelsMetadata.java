@@ -19,19 +19,42 @@
  */
 package io.pixelsdb.pixels.trino;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import static java.util.Objects.requireNonNull;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import static java.util.stream.Collectors.toList;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Verify.verify;
+import static com.google.common.base.Verify.verifyNotNull;
 import com.google.common.collect.ImmutableList;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.InvalidProtocolBufferException;
+
 import io.airlift.json.JsonCodec;
 import io.airlift.json.JsonCodecFactory;
 import io.airlift.json.ObjectMapperProvider;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.MetadataService;
-import io.pixelsdb.pixels.common.metadata.domain.*;
+import io.pixelsdb.pixels.common.metadata.domain.Column;
+import io.pixelsdb.pixels.common.metadata.domain.KeyColumns;
+import io.pixelsdb.pixels.common.metadata.domain.Layout;
+import io.pixelsdb.pixels.common.metadata.domain.SinglePointIndex;
+import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.core.PixelsProto;
@@ -44,8 +67,34 @@ import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
+import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.PATHS;
+import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.PRIMARY_KEY;
+import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.PRIMARY_KEY_SCHEME;
+import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.STORAGE;
 import io.trino.spi.TrinoException;
-import io.trino.spi.connector.*;
+import io.trino.spi.connector.AggregateFunction;
+import io.trino.spi.connector.AggregationApplicationResult;
+import io.trino.spi.connector.Assignment;
+import io.trino.spi.connector.ColumnHandle;
+import io.trino.spi.connector.ColumnMetadata;
+import io.trino.spi.connector.ConnectorMetadata;
+import io.trino.spi.connector.ConnectorSession;
+import io.trino.spi.connector.ConnectorTableHandle;
+import io.trino.spi.connector.ConnectorTableMetadata;
+import io.trino.spi.connector.ConnectorTableVersion;
+import io.trino.spi.connector.ConnectorViewDefinition;
+import io.trino.spi.connector.Constraint;
+import io.trino.spi.connector.ConstraintApplicationResult;
+import io.trino.spi.connector.JoinApplicationResult;
+import io.trino.spi.connector.JoinCondition;
+import io.trino.spi.connector.JoinStatistics;
+import io.trino.spi.connector.JoinType;
+import io.trino.spi.connector.LimitApplicationResult;
+import io.trino.spi.connector.ProjectionApplicationResult;
+import io.trino.spi.connector.SaveMode;
+import io.trino.spi.connector.SchemaTableName;
+import io.trino.spi.connector.SchemaTablePrefix;
+import io.trino.spi.connector.TableNotFoundException;
 import io.trino.spi.expression.ConnectorExpression;
 import io.trino.spi.expression.Variable;
 import io.trino.spi.predicate.TupleDomain;
@@ -54,17 +103,6 @@ import io.trino.spi.statistics.ColumnStatistics;
 import io.trino.spi.statistics.DoubleRange;
 import io.trino.spi.statistics.Estimate;
 import io.trino.spi.statistics.TableStatistics;
-
-import java.nio.ByteBuffer;
-import java.util.*;
-
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Verify.verify;
-import static com.google.common.base.Verify.verifyNotNull;
-import static com.google.common.collect.ImmutableList.toImmutableList;
-import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.*;
-import static java.util.Objects.requireNonNull;
-import static java.util.stream.Collectors.toList;
 
 /**
  * @author tao
@@ -370,7 +408,6 @@ public class PixelsMetadata implements ConnectorMetadata
                 throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_PARSING_ERROR,
                         "Index scheme must be specified with the property 'pk_scheme' when creating a primary key.");
             }
-
         }
         
         Storage.Scheme storageScheme = Storage.Scheme.from(storage);
@@ -423,9 +460,9 @@ public class PixelsMetadata implements ConnectorMetadata
             try
             {
                 MetadataService metadataService = this.metadataProxy.getMetadataService();
-                io.pixelsdb.pixels.common.metadata.domain.Table table = metadataService.getTable( schemaName, tableName);
+                io.pixelsdb.pixels.common.metadata.domain.Table table = metadataService.getTable(schemaName, tableName);
                 List<Column> pixelsColumns = metadataService.getColumns(schemaName, tableName, false);
-                Layout layout = metadataService.getLatestLayout(schemaName, tableName);
+                // Layout layout = metadataService.getLatestLayout(schemaName, tableName);
                 String keyColumnsString = getKeyColumnsString(pkColNames, pixelsColumns, schemaTableName);
                 MetadataProto.SinglePointIndex.Builder singlePointIndexbuilder = MetadataProto.SinglePointIndex.newBuilder();
                 singlePointIndexbuilder
@@ -433,8 +470,8 @@ public class PixelsMetadata implements ConnectorMetadata
                         .setPrimary(true)
                         .setUnique(true)
                         .setIndexScheme(pkScheme)
-                        .setTableId(table.getId())
-                        .setSchemaVersionId(layout.getSchemaVersionId());
+                        .setTableId(table.getId());
+                        // .setSchemaVersionId(layout.getSchemaVersionId());
                 SinglePointIndex singlePointIndex = new SinglePointIndex(singlePointIndexbuilder.build());
                 metadataService.createSinglePointIndex(singlePointIndex);
             } catch (MetadataException | JsonProcessingException e)
@@ -445,7 +482,8 @@ public class PixelsMetadata implements ConnectorMetadata
         }
     }
 
-    private static String getKeyColumnsString(List<String> pkColNames, List<Column> pixelsColumns, SchemaTableName schemaTableName) throws JsonProcessingException
+    private static String getKeyColumnsString
+        (List<String> pkColNames, List<Column> pixelsColumns, SchemaTableName schemaTableName) throws JsonProcessingException
     {
         KeyColumns keyColumns = new KeyColumns();
         for(String pkColumnName: pkColNames)
