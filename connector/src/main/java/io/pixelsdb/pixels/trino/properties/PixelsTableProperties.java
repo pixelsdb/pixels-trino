@@ -40,7 +40,8 @@ public class PixelsTableProperties
 {
     public static final String STORAGE = "storage";
     public static final String PATHS = "paths";
-
+    public static final String PRIMARY_KEY = "pk";
+    public static final String PRIMARY_KEY_SCHEME = "pk_scheme";
     private final List<PropertyMetadata<?>> tableProperties;
 
     @Inject
@@ -52,7 +53,12 @@ public class PixelsTableProperties
         PropertyMetadata<String> s2 = stringProperty(
                 PATHS, "The storage paths of the table.", null, false);
 
-        tableProperties = ImmutableList.of(s1, s2);
+        PropertyMetadata<String> s3 = stringProperty(
+                PRIMARY_KEY, "The primary key of the table.", null, false);
+
+        PropertyMetadata<String> s4 = stringProperty(
+                PRIMARY_KEY_SCHEME, "The primary key index scheme of the table.", "rocksdb", false);
+        tableProperties = ImmutableList.of(s1, s2, s3, s4);
     }
 
     public List<PropertyMetadata<?>> getTableProperties()
