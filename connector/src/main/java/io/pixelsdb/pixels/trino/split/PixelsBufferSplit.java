@@ -1,45 +1,35 @@
 /*
-* Copyright 2025 PixelsDB.
-*
-* This file is part of Pixels.
-*
-* Pixels is free software: you can redistribute it and/or modify
-* it under the terms of the Affero GNU General Public License as
-* published by the Free Software Foundation, either version 3 of
-* the License, or (at your option) any later version.
-*
-* Pixels is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* Affero GNU General Public License for more details.
-*
-* You should have received a copy of the Affero GNU General Public
-* License along with Pixels.  If not, see
-* <https://www.gnu.org/licenses/>.
-*/
+ * Copyright 2025 PixelsDB.
+ *
+ * This file is part of Pixels.
+ *
+ * Pixels is free software: you can redistribute it and/or modify
+ * it under the terms of the Affero GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Pixels is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * Affero GNU General Public License for more details.
+ *
+ * You should have received a copy of the Affero GNU General Public
+ * License along with Pixels.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
 
 package io.pixelsdb.pixels.trino.split;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.trino.PixelsColumnHandle;
 import io.trino.spi.HostAddress;
 import io.trino.spi.predicate.TupleDomain;
 
-import java.io.IOException;
-import java.lang.reflect.Type;
 import java.util.List;
 
-public final class PixelsBufferSplit extends PixelsSplit {
+public final class PixelsBufferSplit extends PixelsSplit
+{
     private final int originColumnSize;
     private final String originSchemaString;
 
@@ -55,19 +45,22 @@ public final class PixelsBufferSplit extends PixelsSplit {
             @JsonProperty("columnOrder") List<String> columnOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("originColumnSize") int originColumnSize,
-            @JsonProperty("originSchemaString") String originSchemaString) {
+            @JsonProperty("originSchemaString") String originSchemaString)
+    {
         super(transId, splitId, connectorId, schemaName, tableName, storageScheme, addresses, columnOrder, constraint);
         this.originColumnSize = originColumnSize;
         this.originSchemaString = originSchemaString;
     }
 
     @JsonProperty
-    public String getOriginSchemaString() {
+    public String getOriginSchemaString()
+    {
         return originSchemaString;
     }
 
     @JsonProperty
-    public int getOriginColumnSize() {
+    public int getOriginColumnSize()
+    {
         return originColumnSize;
     }
 }

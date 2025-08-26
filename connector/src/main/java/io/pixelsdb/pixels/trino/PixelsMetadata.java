@@ -21,31 +21,10 @@ package io.pixelsdb.pixels.trino;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import static java.util.Objects.requireNonNull;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import static java.util.stream.Collectors.toList;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Verify.verify;
-import static com.google.common.base.Verify.verifyNotNull;
 import com.google.common.collect.ImmutableList;
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.InvalidProtocolBufferException;
-
 import io.airlift.json.JsonCodec;
 import io.airlift.json.JsonCodecFactory;
 import io.airlift.json.ObjectMapperProvider;
@@ -53,12 +32,6 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.metadata.MetadataService;
 import io.pixelsdb.pixels.common.metadata.domain.*;
-import io.pixelsdb.pixels.common.metadata.MetadataService;
-import io.pixelsdb.pixels.common.metadata.domain.Column;
-import io.pixelsdb.pixels.common.metadata.domain.KeyColumns;
-import io.pixelsdb.pixels.common.metadata.domain.Layout;
-import io.pixelsdb.pixels.common.metadata.domain.SinglePointIndex;
-import io.pixelsdb.pixels.common.metadata.domain.View;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.core.PixelsProto;
@@ -71,34 +44,8 @@ import io.pixelsdb.pixels.planner.plan.logical.Table;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
-import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.PATHS;
-import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.PRIMARY_KEY;
-import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.PRIMARY_KEY_SCHEME;
-import static io.pixelsdb.pixels.trino.properties.PixelsTableProperties.STORAGE;
 import io.trino.spi.TrinoException;
-import io.trino.spi.connector.AggregateFunction;
-import io.trino.spi.connector.AggregationApplicationResult;
-import io.trino.spi.connector.Assignment;
-import io.trino.spi.connector.ColumnHandle;
-import io.trino.spi.connector.ColumnMetadata;
-import io.trino.spi.connector.ConnectorMetadata;
-import io.trino.spi.connector.ConnectorSession;
-import io.trino.spi.connector.ConnectorTableHandle;
-import io.trino.spi.connector.ConnectorTableMetadata;
-import io.trino.spi.connector.ConnectorTableVersion;
-import io.trino.spi.connector.ConnectorViewDefinition;
-import io.trino.spi.connector.Constraint;
-import io.trino.spi.connector.ConstraintApplicationResult;
-import io.trino.spi.connector.JoinApplicationResult;
-import io.trino.spi.connector.JoinCondition;
-import io.trino.spi.connector.JoinStatistics;
-import io.trino.spi.connector.JoinType;
-import io.trino.spi.connector.LimitApplicationResult;
-import io.trino.spi.connector.ProjectionApplicationResult;
-import io.trino.spi.connector.SaveMode;
-import io.trino.spi.connector.SchemaTableName;
-import io.trino.spi.connector.SchemaTablePrefix;
-import io.trino.spi.connector.TableNotFoundException;
+import io.trino.spi.connector.*;
 import io.trino.spi.expression.ConnectorExpression;
 import io.trino.spi.expression.Variable;
 import io.trino.spi.predicate.TupleDomain;
@@ -142,6 +89,49 @@ public class PixelsMetadata implements ConnectorMetadata
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.config = requireNonNull(config, "config is null");
         this.transHandle = requireNonNull(transHandle, "transHandle is null");
+    }
+
+    private static String getKeyColumnsString
+            (List<String> pkColNames, List<Column> pixelsColumns, SchemaTableName schemaTableName) throws JsonProcessingException
+    {
+        KeyColumns keyColumns = new KeyColumns();
+        for (String pkColumnName : pkColNames)
+        {
+            boolean find = false;
+            for (Column column : pixelsColumns)
+            {
+                if (column.getName().equalsIgnoreCase(pkColumnName))
+                {
+                    find = true;
+                    keyColumns.addKeyColumnIds((int) column.getId());
+                    break;
+                }
+            }
+            if (!find)
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                        "Table '" + schemaTableName + "' doesn't have column: '" + pkColumnName + "'");
+            }
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.writeValueAsString(keyColumns);
+    }
+
+    private static Optional<PixelsColumnHandle> getVariableColumnHandle(
+            Map<String, ColumnHandle> assignments, ConnectorExpression expression)
+    {
+        requireNonNull(assignments, "assignments is null");
+        requireNonNull(expression, "expression is null");
+        if (!(expression instanceof Variable))
+        {
+            return Optional.empty();
+        }
+
+        String name = ((Variable) expression).getName();
+        ColumnHandle columnHandle = assignments.get(name);
+        verifyNotNull(columnHandle, "No assignment for %s", name);
+        return Optional.of(((PixelsColumnHandle) columnHandle));
     }
 
     @Override
@@ -243,8 +233,7 @@ public class PixelsMetadata implements ConnectorMetadata
         {
             List<PixelsColumnHandle> columnHandleList = tableHandle.getColumns();
             columns = columnHandleList.stream().map(PixelsColumnHandle::getColumnMetadata).collect(toImmutableList());
-        }
-        else
+        } else
         {
             columns = getColumnsMetadata(tableHandle.getSchemaName(), tableHandle.getTableName());
         }
@@ -255,8 +244,7 @@ public class PixelsMetadata implements ConnectorMetadata
             properties.put("paths", String.join(";", tableHandle.getStoragePaths()));
             return new ConnectorTableMetadata(
                     new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns, properties);
-        }
-        else
+        } else
         {
             return new ConnectorTableMetadata(
                     new SchemaTableName(tableHandle.getSchemaName(), tableHandle.getTableName()), columns);
@@ -328,8 +316,7 @@ public class PixelsMetadata implements ConnectorMetadata
         if (((PixelsTableHandle) tableHandle).getColumns() != null)
         {
             columnHandleList = ((PixelsTableHandle) tableHandle).getColumns();
-        }
-        else
+        } else
         {
             try
             {
@@ -415,10 +402,10 @@ public class PixelsMetadata implements ConnectorMetadata
                     "Unsupported storage scheme '" + storage + "'.");
         }
 
-        if(pks != null && !pks.isEmpty())
+        if (pks != null && !pks.isEmpty())
         {
             pkColNames = Arrays.asList(pks.split(","));
-            if(pkScheme == null)
+            if (pkScheme == null)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_PARSING_ERROR,
                         "Index scheme must be specified with the property 'pk_scheme' when creating a primary key.");
@@ -433,8 +420,7 @@ public class PixelsMetadata implements ConnectorMetadata
             if (scheme == null)
             {
                 basePathUris[i] = storageScheme + "://" + basePathUris[i];
-            }
-            else if (scheme != storageScheme)
+            } else if (scheme != storageScheme)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_QUERY_PARSING_ERROR,
                         "The storage schemes in 'paths' are inconsistent with 'storage'.");
@@ -462,7 +448,7 @@ public class PixelsMetadata implements ConnectorMetadata
                     Arrays.asList(basePathUris), columns);
             if (!res && saveMode != SaveMode.IGNORE)
             {
-                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Table '" + schemaTableName + "' might already exist, failed to create it.");
             }
         } catch (MetadataException e)
@@ -470,7 +456,7 @@ public class PixelsMetadata implements ConnectorMetadata
             throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         }
 
-        if(pkColNames != null && !pkColNames.isEmpty())
+        if (pkColNames != null && !pkColNames.isEmpty())
         {
             try
             {
@@ -486,7 +472,7 @@ public class PixelsMetadata implements ConnectorMetadata
                         .setUnique(true)
                         .setIndexScheme(pkScheme)
                         .setTableId(table.getId());
-                        // .setSchemaVersionId(layout.getSchemaVersionId());
+                // .setSchemaVersionId(layout.getSchemaVersionId());
                 SinglePointIndex singlePointIndex = new SinglePointIndex(singlePointIndexbuilder.build());
                 metadataService.createSinglePointIndex(singlePointIndex);
             } catch (MetadataException | JsonProcessingException e)
@@ -495,33 +481,6 @@ public class PixelsMetadata implements ConnectorMetadata
                         "Table '" + schemaTableName + "' can't create primary index: '" + pks);
             }
         }
-    }
-
-    private static String getKeyColumnsString
-        (List<String> pkColNames, List<Column> pixelsColumns, SchemaTableName schemaTableName) throws JsonProcessingException
-    {
-        KeyColumns keyColumns = new KeyColumns();
-        for(String pkColumnName: pkColNames)
-        {
-            boolean find = false;
-            for(Column column : pixelsColumns)
-            {
-                if(column.getName().equalsIgnoreCase(pkColumnName))
-                {
-                    find = true;
-                    keyColumns.addKeyColumnIds((int)column.getId());
-                    break;
-                }
-            }
-            if(!find)
-            {
-                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
-                        "Table '" + schemaTableName + "' doesn't have column: '" + pkColumnName + "'");
-            }
-        }
-
-        ObjectMapper mapper = new ObjectMapper();
-        return mapper.writeValueAsString(keyColumns);
     }
 
     @Override
@@ -537,7 +496,7 @@ public class PixelsMetadata implements ConnectorMetadata
             boolean res = this.metadataProxy.dropTable(schemaName, tableName);
             if (!res)
             {
-                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Table " + schemaName + "." + tableName + " does not exist.");
             }
         } catch (MetadataException e)
@@ -555,7 +514,7 @@ public class PixelsMetadata implements ConnectorMetadata
             boolean res = this.metadataProxy.createSchema(schemaName);
             if (!res)
             {
-                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Schema " + schemaName + " already exists.");
             }
         } catch (MetadataException e)
@@ -581,8 +540,7 @@ public class PixelsMetadata implements ConnectorMetadata
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
             }
-        }
-        else
+        } else
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, "drop schema non-cascade is not supported");
         }
@@ -609,15 +567,14 @@ public class PixelsMetadata implements ConnectorMetadata
 
         TupleDomain<PixelsColumnHandle> oldDomain = tableHandle.getConstraint();
         TupleDomain<PixelsColumnHandle> newDomain = oldDomain.intersect(constraint.getSummary()
-            .transformKeys(PixelsColumnHandle.class::cast));
+                .transformKeys(PixelsColumnHandle.class::cast));
         TupleDomain<ColumnHandle> remainingFilter;
 
         if (newDomain.isNone())
         {
             // all is the default constraint.
             remainingFilter = TupleDomain.all();
-        }
-        else
+        } else
         {
             remainingFilter = TupleDomain.withColumnDomains(new HashMap<>());
         }
@@ -667,7 +624,7 @@ public class PixelsMetadata implements ConnectorMetadata
         logger.debug("projection push down on table " + tableHandle.getTableName());
         return Optional.of(new ProjectionApplicationResult<>(
                 new PixelsTableHandle(connectorId, tableHandle.getSchemaName(),
-                        tableHandle.getTableName(),tableHandle.getTableAlias(),
+                        tableHandle.getTableName(), tableHandle.getTableAlias(),
                         newColumns, tableHandle.getConstraint(), tableHandle.getTableType(),
                         tableHandle.getJoinHandle(), tableHandle.getAggrHandle(),
                         tableHandle.getStorageScheme(), tableHandle.getStoragePaths()),
@@ -999,22 +956,6 @@ public class PixelsMetadata implements ConnectorMetadata
                 false));
     }
 
-    private static Optional<PixelsColumnHandle> getVariableColumnHandle(
-            Map<String, ColumnHandle> assignments, ConnectorExpression expression)
-    {
-        requireNonNull(assignments, "assignments is null");
-        requireNonNull(expression, "expression is null");
-        if (!(expression instanceof Variable))
-        {
-            return Optional.empty();
-        }
-
-        String name = ((Variable) expression).getName();
-        ColumnHandle columnHandle = assignments.get(name);
-        verifyNotNull(columnHandle, "No assignment for %s", name);
-        return Optional.of(((PixelsColumnHandle) columnHandle));
-    }
-
     @Override
     public void validateScan(ConnectorSession session, ConnectorTableHandle handle)
     {
@@ -1040,7 +981,7 @@ public class PixelsMetadata implements ConnectorMetadata
                     viewName.getSchemaName(), viewName.getTableName(), viewData, replace);
             if (!res)
             {
-                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "Failed to create view '" + viewName + "'.");
             }
         } catch (MetadataException e)
@@ -1057,7 +998,7 @@ public class PixelsMetadata implements ConnectorMetadata
             boolean res = this.metadataProxy.dropView(viewName.getSchemaName(), viewName.getTableName());
             if (!res)
             {
-                throw  new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
+                throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "View '" + viewName.getSchemaName() + "." + viewName.getTableName() + "' does not exist.");
             }
         } catch (MetadataException e)
@@ -1133,7 +1074,7 @@ public class PixelsMetadata implements ConnectorMetadata
      * This optional method may be implemented by connectors that can support fetching
      * view data in bulk. It is used to implement {@code information_schema.views}.
      *
-     * @param session the connector session.
+     * @param session      the connector session.
      * @param filterSchema get all the views in the connector if not present.
      */
     @Override
@@ -1160,8 +1101,7 @@ public class PixelsMetadata implements ConnectorMetadata
                         builder.put(stName, ViewCodec.fromJson(view.getData()));
                     }
                 }
-            }
-            else
+            } else
             {
                 /**
                  * Issue #6:

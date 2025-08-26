@@ -1,39 +1,37 @@
+/*
+ * Copyright 2025 PixelsDB.
+ *
+ * This file is part of Pixels.
+ *
+ * Pixels is free software: you can redistribute it and/or modify
+ * it under the terms of the Affero GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Pixels is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * Affero GNU General Public License for more details.
+ *
+ * You should have received a copy of the Affero GNU General Public
+ * License along with Pixels.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
 package io.pixelsdb.pixels.trino;
+
+import io.airlift.slice.Slices;
+import io.pixelsdb.pixels.core.TypeDescription;
+import io.pixelsdb.pixels.core.vector.*;
+import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
+import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
+import io.trino.spi.block.*;
+import io.trino.spi.type.Type;
+
+import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.trino.spi.type.DoubleType.DOUBLE;
 import static java.util.Objects.requireNonNull;
-
-import java.util.Optional;
-
-import io.airlift.slice.Slices;
-import io.pixelsdb.pixels.core.TypeDescription;
-import io.pixelsdb.pixels.core.vector.BinaryColumnVector;
-import io.pixelsdb.pixels.core.vector.ByteColumnVector;
-import io.pixelsdb.pixels.core.vector.ColumnVector;
-import io.pixelsdb.pixels.core.vector.DateColumnVector;
-import io.pixelsdb.pixels.core.vector.DecimalColumnVector;
-import io.pixelsdb.pixels.core.vector.DictionaryColumnVector;
-import io.pixelsdb.pixels.core.vector.DoubleColumnVector;
-import io.pixelsdb.pixels.core.vector.IntColumnVector;
-import io.pixelsdb.pixels.core.vector.LongColumnVector;
-import io.pixelsdb.pixels.core.vector.LongDecimalColumnVector;
-import io.pixelsdb.pixels.core.vector.TimeColumnVector;
-import io.pixelsdb.pixels.core.vector.TimestampColumnVector;
-import io.pixelsdb.pixels.core.vector.VectorColumnVector;
-import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
-import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
-import io.trino.spi.block.ArrayBlock;
-import io.trino.spi.block.Block;
-import io.trino.spi.block.BlockBuilder;
-import io.trino.spi.block.ByteArrayBlock;
-import io.trino.spi.block.DictionaryBlock;
-import io.trino.spi.block.Int128ArrayBlock;
-import io.trino.spi.block.IntArrayBlock;
-import io.trino.spi.block.LazyBlockLoader;
-import io.trino.spi.block.LongArrayBlock;
-import io.trino.spi.block.VariableWidthBlock;
-import io.trino.spi.type.Type;
 
 /**
  * Lazy Block Implementation for the Pixels
@@ -81,15 +79,12 @@ final class PixelsBlockLoader
                 block = new LongArrayBlock(batchSize, Optional.ofNullable(lcv.isNull), lcv.vector);
                 break;
             case DOUBLE:
-            case FLOAT:
-                /**
-                 * According to TypeDescription.createColumn(),
-                 * both float and double type use DoubleColumnVector, while they use
-                 * FloatColumnReader and DoubleColumnReader respectively according to
-                 * io.pixelsdb.pixels.reader.ColumnReader.newColumnReader().
-                 */
                 DoubleColumnVector dbcv = (DoubleColumnVector) vector;
                 block = new LongArrayBlock(batchSize, Optional.ofNullable(dbcv.isNull), dbcv.vector);
+                break;
+            case FLOAT:
+                FloatColumnVector dfcv = (FloatColumnVector) vector;
+                block = new IntArrayBlock(batchSize, Optional.ofNullable(dfcv.isNull), dfcv.vector);
                 break;
             case DECIMAL:
                 /**
@@ -97,12 +92,10 @@ final class PixelsBlockLoader
                  * Presto reads the unscaled values for decimal type here.
                  * The precision and scale of decimal are automatically processed by Presto.
                  */
-                if (vector instanceof DecimalColumnVector)
+                if (vector instanceof DecimalColumnVector dccv)
                 {
-                    DecimalColumnVector dccv = (DecimalColumnVector) vector;
                     block = new LongArrayBlock(batchSize, Optional.ofNullable(dccv.isNull), dccv.vector);
-                }
-                else
+                } else
                 {
                     LongDecimalColumnVector ldccv = (LongDecimalColumnVector) vector;
                     block = new Int128ArrayBlock(batchSize, Optional.ofNullable(ldccv.isNull), ldccv.vector);
@@ -113,12 +106,10 @@ final class PixelsBlockLoader
             case STRING:
             case BINARY:
             case VARBINARY:
-                if (vector instanceof BinaryColumnVector)
+                if (vector instanceof BinaryColumnVector scv)
                 {
-                    BinaryColumnVector scv = (BinaryColumnVector) vector;
                     block = new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, !scv.noNulls, scv.isNull);
-                }
-                else
+                } else
                 {
                     DictionaryColumnVector dscv = (DictionaryColumnVector) vector;
                     Block dictionary = new VariableWidthBlock(dscv.dictOffsets.length - 1,
@@ -175,9 +166,9 @@ final class PixelsBlockLoader
                 VectorColumnVector vcv = (VectorColumnVector) vector;
                 // builder that simply concatenate all double arrays
                 BlockBuilder allDoublesBuilder = DOUBLE.createBlockBuilder(null, batchSize * vcv.dimension);
-                int[] offsets = new int[batchSize+1];
+                int[] offsets = new int[batchSize + 1];
                 // build a block into which we put a double array
-                for (int i = 0 ; i < batchSize; i++)
+                for (int i = 0; i < batchSize; i++)
                 {
                     offsets[i] = i * vcv.dimension;
                     for (int j = 0; j < vcv.dimension; j++)

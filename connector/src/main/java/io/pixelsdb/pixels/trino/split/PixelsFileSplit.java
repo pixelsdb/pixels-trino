@@ -38,15 +38,15 @@ import static java.util.Objects.requireNonNull;
  */
 public final class PixelsFileSplit extends PixelsSplit
 {
+    private final boolean ensureLocality;
+    private final boolean readSynthColumns;
     private List<String> paths;
     private List<Integer> rgStarts;
     private List<Integer> rgLengths;
     private int pathIndex;
-    private boolean cached;
-    private final boolean ensureLocality;
-    private List<String> cacheOrder;
-    private boolean fromServerlessOutput;
-    private final boolean readSynthColumns;
+    private final boolean cached;
+    private final List<String> cacheOrder;
+    private final boolean fromServerlessOutput;
 
     @JsonCreator
     public PixelsFileSplit(
@@ -66,7 +66,8 @@ public final class PixelsFileSplit extends PixelsSplit
             @JsonProperty("cacheOrder") List<String> cacheOrder,
             @JsonProperty("constraint") TupleDomain<PixelsColumnHandle> constraint,
             @JsonProperty("fromServerlessOutput") boolean fromServerlessOutput,
-            @JsonProperty("readSynthColumns") boolean readSynthColumns) {
+            @JsonProperty("readSynthColumns") boolean readSynthColumns)
+    {
         super(transId, splitId, connectorId, schemaName, tableName, storageScheme, addresses, columnOrder, constraint);
         this.paths = requireNonNull(paths, "paths is null");
         checkArgument(!paths.isEmpty(), "paths is empty");
@@ -90,6 +91,7 @@ public final class PixelsFileSplit extends PixelsSplit
      * The serverless worker may write fewer files than expected (this is possible for scan workers). But it will
      * always use the first n paths in the split for the output files, thus we can simply trim the paths in the split
      * by the number of files written by the serverless worker.
+     *
      * @param numOutputs the number of output paths (files) that are actually written by the serverless worker
      */
     public void trimForServerlessOutput(int numOutputs)
@@ -107,7 +109,8 @@ public final class PixelsFileSplit extends PixelsSplit
     }
 
     @JsonProperty
-    public String getSchemaName(){
+    public String getSchemaName()
+    {
         return schemaName;
     }
 
@@ -179,12 +182,11 @@ public final class PixelsFileSplit extends PixelsSplit
 
     public boolean nextPath()
     {
-        if (this.pathIndex+1 < this.paths.size())
+        if (this.pathIndex + 1 < this.paths.size())
         {
             this.pathIndex++;
             return true;
-        }
-        else
+        } else
         {
             return false;
         }
@@ -224,6 +226,7 @@ public final class PixelsFileSplit extends PixelsSplit
 
     /**
      * Get the physical column order of the file to read.
+     *
      * @return the physical column order, or empty is the column order is not present
      */
     @JsonProperty

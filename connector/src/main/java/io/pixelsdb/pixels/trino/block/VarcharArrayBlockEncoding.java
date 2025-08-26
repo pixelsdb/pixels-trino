@@ -34,7 +34,7 @@ import static io.pixelsdb.pixels.trino.block.EncoderUtil.encodeNullsAsBits;
 
 /**
  * This class is derived from io.trino.spi.block.VariableWidthBlockEncoding
- *
+ * <p>
  * We reimplemented writeBlock and readBlock
  *
  * @author hank
@@ -118,7 +118,6 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
     }
 
     /**
-     *
      * ISSUE-902: Trino expects standard block types like {@code VariableWidthBlock} for
      * Varchar values when serializing query results. However, {@code VarcharArrayBlock}
      * causes {@link ClassCastException} in paths such as {@code JsonEncodingUtils}. This method provides
@@ -130,14 +129,16 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
     @Override
     public Optional<Block> replacementBlockForWrite(Block block)
     {
-        if (!(block instanceof VarcharArrayBlock varcharBlock)) {
+        if (!(block instanceof VarcharArrayBlock varcharBlock))
+        {
             return Optional.empty();
         }
 
         int positionCount = varcharBlock.getPositionCount();
 
         int totalLength = 0;
-        for (int i = 0; i < positionCount; ++i) {
+        for (int i = 0; i < positionCount; ++i)
+        {
             totalLength += varcharBlock.getSliceLength(i);
         }
 
@@ -145,10 +146,12 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
         int[] offsets = new int[positionCount + 1];
         int curOffset = 0;
 
-        for (int i = 0; i < positionCount; ++i) {
+        for (int i = 0; i < positionCount; ++i)
+        {
             offsets[i] = curOffset;
             int len = varcharBlock.getSliceLength(i);
-            if (!varcharBlock.isNull(i)) {
+            if (!varcharBlock.isNull(i))
+            {
                 System.arraycopy(
                         varcharBlock.getRawValue(i),
                         varcharBlock.getPositionOffset(i),

@@ -68,7 +68,8 @@ public class PixelsMetadataProxy
     {
         List<String> schemaList = new ArrayList<String>();
         List<Schema> schemas = metadataService.getSchemas();
-        for (Schema s : schemas) {
+        for (Schema s : schemas)
+        {
             schemaList.add(s.getName());
         }
         return schemaList;
@@ -78,7 +79,8 @@ public class PixelsMetadataProxy
     {
         List<String> tableList = new ArrayList<String>();
         List<Table> tables = metadataService.getTables(schemaName);
-        for (Table t : tables) {
+        for (Table t : tables)
+        {
             tableList.add(t.getName());
         }
         return tableList;
@@ -88,7 +90,8 @@ public class PixelsMetadataProxy
     {
         List<String> viewList = new ArrayList<String>();
         List<View> views = metadataService.getViews(schemaName);
-        for (View t : views) {
+        for (View t : views)
+        {
             viewList.add(t.getName());
         }
         return viewList;
@@ -102,9 +105,9 @@ public class PixelsMetadataProxy
      * <p>The metadata cache isolates the cached metadata for each transaction. Thus concurrent queries
      * do not interfere with each other. The cached metadata is dropped when the transaction terminates.</p>
      *
-     * @param transId  the transaction id
+     * @param transId    the transaction id
      * @param schemaName the schema name of the table
-     * @param tableName the table name of the table
+     * @param tableName  the table name of the table
      * @throws MetadataException
      */
     public void refreshCachedTableAndColumns(long transId, String schemaName, String tableName) throws MetadataException
@@ -172,64 +175,64 @@ public class PixelsMetadataProxy
         return MetadataCache.Instance().getTableColumns(transId, new SchemaTableName(schemaName, tableName));
     }
 
-    public List<Layout> getDataLayouts (String schemaName, String tableName) throws MetadataException
+    public List<Layout> getDataLayouts(String schemaName, String tableName) throws MetadataException
     {
         return metadataService.getLayouts(schemaName, tableName);
     }
 
-    public boolean createSchema (String schemaName) throws MetadataException
+    public boolean createSchema(String schemaName) throws MetadataException
     {
         return metadataService.createSchema(schemaName);
     }
 
-    public boolean dropSchema (String schemaName) throws MetadataException
+    public boolean dropSchema(String schemaName) throws MetadataException
     {
         return metadataService.dropSchema(schemaName);
     }
 
-    public boolean createTable (String schemaName, String tableName, Storage.Scheme storageScheme,
-                                List<String> basePathUris, List<Column> columns) throws MetadataException
+    public boolean createTable(String schemaName, String tableName, Storage.Scheme storageScheme,
+                               List<String> basePathUris, List<Column> columns) throws MetadataException
     {
         return metadataService.createTable(schemaName, tableName, storageScheme, basePathUris, columns);
     }
 
-    public boolean dropTable (String schemaName, String tableName) throws MetadataException
+    public boolean dropTable(String schemaName, String tableName) throws MetadataException
     {
         return metadataService.dropTable(schemaName, tableName);
     }
 
-    public boolean existTable (String schemaName, String tableName) throws MetadataException
+    public boolean existTable(String schemaName, String tableName) throws MetadataException
     {
         return metadataService.existTable(schemaName, tableName);
     }
 
-    public boolean createView (String schemaName, String viewName, String viewData,
-                               boolean updateIfExists) throws MetadataException
+    public boolean createView(String schemaName, String viewName, String viewData,
+                              boolean updateIfExists) throws MetadataException
     {
         return metadataService.createView(schemaName, viewName, viewData, updateIfExists);
     }
 
-    public boolean dropView (String schemaName, String viewName) throws MetadataException
+    public boolean dropView(String schemaName, String viewName) throws MetadataException
     {
         return metadataService.dropView(schemaName, viewName);
     }
 
-    public boolean existView (String schemaName, String viewName) throws MetadataException
+    public boolean existView(String schemaName, String viewName) throws MetadataException
     {
         return metadataService.existView(schemaName, viewName);
     }
 
-    public View getView (String schemaName, String viewName, boolean returnNullIfNotExists) throws MetadataException
+    public View getView(String schemaName, String viewName, boolean returnNullIfNotExists) throws MetadataException
     {
         return metadataService.getView(schemaName, viewName, returnNullIfNotExists);
     }
 
-    public List<View> getViews (String schemaName) throws MetadataException
+    public List<View> getViews(String schemaName) throws MetadataException
     {
         return metadataService.getViews(schemaName);
     }
 
-    public boolean existSchema (String schemaName) throws MetadataException
+    public boolean existSchema(String schemaName) throws MetadataException
     {
         return metadataService.existSchema(schemaName);
     }
@@ -238,7 +241,7 @@ public class PixelsMetadataProxy
     {
         Table table = metadataService.getTable(schemaName, tableName);
         SinglePointIndex primaryIndex = metadataService.getPrimaryIndex(table.getId());
-        if(primaryIndex != null)
+        if (primaryIndex != null)
         {
             return metadataService.dropSinglePointIndex(primaryIndex.getId());
         } else

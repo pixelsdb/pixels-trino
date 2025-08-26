@@ -21,7 +21,6 @@ package io.pixelsdb.pixels.trino;
 
 import com.alibaba.fastjson.JSON;
 import io.airlift.log.Logger;
-import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
@@ -35,18 +34,17 @@ import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
 import io.pixelsdb.pixels.core.utils.Bitmap;
-import io.pixelsdb.pixels.core.vector.*;
+import io.pixelsdb.pixels.core.vector.ColumnVector;
+import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
-import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
-import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.impl.PixelsTupleDomainPredicate;
 import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
 import io.trino.spi.Page;
 import io.trino.spi.TrinoException;
-import io.trino.spi.block.*;
-import io.trino.spi.connector.ConnectorPageSource;
+import io.trino.spi.block.Block;
+import io.trino.spi.block.LazyBlock;
 import io.trino.spi.predicate.Domain;
 import io.trino.spi.type.Type;
 
@@ -57,8 +55,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
-import static com.google.common.base.Preconditions.checkState;
-import static io.trino.spi.type.DoubleType.DOUBLE;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -75,9 +71,6 @@ class PixelsFilePageSource implements PixelsPageSource
     private final PixelsTransactionHandle transactionHandle;
     private final String[] includeCols;
     private final Storage storage;
-    private boolean closed;
-    private PixelsReader pixelsReader;
-    private PixelsRecordReader recordReader;
     private final PixelsCacheReader cacheReader;
     private final PixelsFooterCache footerCache;
     private final CompletableFuture<?> blocked;
@@ -85,6 +78,9 @@ class PixelsFilePageSource implements PixelsPageSource
     private final Optional<TableScanFilter> filter;
     private final Bitmap filtered;
     private final Bitmap tmp;
+    private boolean closed;
+    private PixelsReader pixelsReader;
+    private PixelsRecordReader recordReader;
     private long completedBytes = 0L;
     private long readTimeNanos = 0L;
     private long memoryUsage = 0L;
@@ -92,22 +88,21 @@ class PixelsFilePageSource implements PixelsPageSource
     private int batchId;
 
     public PixelsFilePageSource(PixelsFileSplit split, List<PixelsColumnHandle> columnHandles, PixelsTransactionHandle transactionHandle,
-                            Storage storage, List<MemoryMappedFile> cacheFiles, List<MemoryMappedFile> indexFiles, int swapZoneNum,
-                            PixelsFooterCache pixelsFooterCache)
+                                Storage storage, List<MemoryMappedFile> cacheFiles, List<MemoryMappedFile> indexFiles, int swapZoneNum,
+                                PixelsFooterCache pixelsFooterCache)
     {
         this.split = split;
         this.transactionHandle = transactionHandle;
         this.storage = storage;
         this.columns = columnHandles;
-        this.includeCols =  new String[columns.size()];
+        this.includeCols = new String[columns.size()];
         for (int i = 0; i < includeCols.length; ++i)
         {
             if (split.getReadSynthColumns())
             {
                 // Use the synthetic column name to access the join or aggregation result.
                 includeCols[i] = columns.get(i).getSynthColumnName();
-            }
-            else
+            } else
             {
                 includeCols[i] = columns.get(i).getColumnName();
             }
@@ -134,7 +129,8 @@ class PixelsFilePageSource implements PixelsPageSource
             String stateKey = PixelsTrinoConfig.getOutputStateKeyPrefix(
                     split.getTransId(), Optional.of(split.getSchemaTableName())) + split.getSplitId();
             StateWatcher stateWatcher = new StateWatcher(stateKey);
-            stateWatcher.onStateUpdateOrExist((key, value) -> {
+            stateWatcher.onStateUpdateOrExist((key, value) ->
+            {
                 SimpleOutput simpleOutput = requireNonNull(
                         JSON.parseObject(value, SimpleOutput.class), "output is null");
                 if (!simpleOutput.isSuccessful())
@@ -153,8 +149,7 @@ class PixelsFilePageSource implements PixelsPageSource
                     logger.debug("cloud function request " + simpleOutput.getRequestId() + " is successful");
                 }
             });
-        }
-        else
+        } else
         {
             if (split.getConstraint().getDomains().isPresent())
             {
@@ -248,7 +243,7 @@ class PixelsFilePageSource implements PixelsPageSource
         }
     }
 
-    private synchronized boolean readNextPath ()
+    private synchronized boolean readNextPath()
     {
         try
         {
@@ -408,8 +403,7 @@ class PixelsFilePageSource implements PixelsPageSource
                 closeWithSuppression(e);
                 throw new TrinoException(PixelsErrorCode.PIXELS_BAD_DATA, "read row batch error.", e);
             }
-        }
-        else
+        } else
         {
             // No column to read.
             try
@@ -502,7 +496,8 @@ class PixelsFilePageSource implements PixelsPageSource
     }
 
     @Override
-    public int getBatchId() {
+    public int getBatchId()
+    {
         return batchId;
     }
 }

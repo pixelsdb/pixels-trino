@@ -221,7 +221,7 @@ public class VarcharArrayBlock implements ValueBlock
             if (positions[i])
             {
                 usedPositionCount++;
-                sizeInBytes += lengths[arrayOffset+i];
+                sizeInBytes += lengths[arrayOffset + i];
             }
         }
         return sizeInBytes + (Integer.BYTES * 2 + Byte.BYTES) * (long) usedPositionCount;
@@ -296,8 +296,7 @@ public class VarcharArrayBlock implements ValueBlock
             {
                 newValueIsNull[i] = true;
                 newHasNull = true;
-            }
-            else
+            } else
             {
                 // we only copy the valid part of each value.
                 int from = offsets[position + arrayOffset];
@@ -506,15 +505,15 @@ public class VarcharArrayBlock implements ValueBlock
     @Override
     public String toString()
     {
-        StringBuilder sb = new StringBuilder("VarcharArrayBlock{");
-        sb.append("positionCount=").append(getPositionCount());
-        sb.append(", size=").append(sizeInBytes);
-        sb.append(", retainedSize=").append(retainedSizeInBytes);
-        sb.append('}');
-        return sb.toString();
+        String sb = "VarcharArrayBlock{" + "positionCount=" + getPositionCount() +
+                ", size=" + sizeInBytes +
+                ", retainedSize=" + retainedSizeInBytes +
+                '}';
+        return sb;
     }
 
-    public boolean[] getValueIsNull() {
+    public boolean[] getValueIsNull()
+    {
         return valueIsNull;
     }
 }

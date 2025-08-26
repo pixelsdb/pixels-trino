@@ -64,7 +64,6 @@ import io.pixelsdb.pixels.planner.plan.physical.domain.OutputInfo;
 import io.pixelsdb.pixels.planner.plan.physical.input.AggregationInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.JoinInput;
 import io.pixelsdb.pixels.planner.plan.physical.input.ScanInput;
-import io.pixelsdb.pixels.retina.RetinaProto;
 import io.pixelsdb.pixels.trino.exception.CacheException;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsMetadataProxy;
@@ -106,13 +105,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private final boolean cacheEnabled;
     private final boolean multiSplitForOrdered;
     private final boolean projectionReadEnabled;
+    private final int fixedSplitSize;
     private String cacheSchema;
     private String cacheTable;
-    private final int fixedSplitSize;
 
     @Inject
     public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
-                              PixelsTrinoConfig config) {
+                              PixelsTrinoConfig config)
+    {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.config = requireNonNull(config, "config is null");
@@ -134,8 +134,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             SchemaTableName schemaTableName = new SchemaTableName(splits[0]);
             this.cacheSchema = schemaTableName.getSchemaName();
             this.cacheTable = schemaTableName.getTableName();
-        }
-        else
+        } else
         {
             this.cacheSchema = null;
             this.cacheTable = null;
@@ -163,6 +162,182 @@ public class PixelsSplitManager implements ConnectorSplitManager
             }
         }
         return builder.build();
+    }
+
+    public static Pair<Integer, InputSplit> getInputSplit(PixelsFileSplit split)
+    {
+        ArrayList<InputInfo> inputInfos = new ArrayList<>();
+        int splitSize = 0;
+        List<String> paths = split.getPaths();
+        List<Integer> rgStarts = split.getRgStarts();
+        List<Integer> rgLengths = split.getRgLengths();
+
+        for (int i = 0; i < paths.size(); ++i)
+        {
+            inputInfos.add(new InputInfo(paths.get(i), rgStarts.get(i), rgLengths.get(i)));
+            splitSize += rgLengths.get(i);
+        }
+        return new Pair<>(splitSize, new InputSplit(inputInfos));
+    }
+
+    public static SortedMap<Integer, ColumnFilter> getColumnFilters(
+            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
+    {
+        SortedMap<Integer, ColumnFilter> columnFilters = new TreeMap<>();
+
+        Map<String, Integer> colToCid = new HashMap<>(includeCols.length);
+        for (int i = 0; i < includeCols.length; ++i)
+        {
+            colToCid.put(includeCols[i], i);
+        }
+        if (constraint.getDomains().isPresent())
+        {
+            Map<PixelsColumnHandle, Domain> domains = constraint.getDomains().get();
+            for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
+            {
+                ColumnFilter<?> columnFilter = createColumnFilter(entry.getKey(), entry.getValue());
+                if (colToCid.containsKey(entry.getKey().getColumnName()))
+                {
+                    columnFilters.put(colToCid.get(entry.getKey().getColumnName()), columnFilter);
+                } else
+                {
+                    throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR,
+                            "column '" + entry.getKey().getColumnName() + "' does not exist in the includeCols");
+                }
+            }
+        }
+        return columnFilters;
+    }
+
+    public static TableScanFilter createTableScanFilter(
+            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
+    {
+        SortedMap<Integer, ColumnFilter> columnFilters = getColumnFilters(schemaName, tableName, includeCols, constraint);
+        TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
+        return tableScanFilter;
+    }
+
+    private static <T extends Comparable<T>> ColumnFilter<T> createColumnFilter(
+            PixelsColumnHandle columnHandle, Domain domain)
+    {
+        Type prestoType = domain.getType();
+        String columnName = columnHandle.getColumnName();
+        TypeDescription.Category columnType = columnHandle.getTypeCategory();
+        Class<?> filterJavaType = columnType.getInternalJavaType() == byte[].class ?
+                String.class : columnType.getInternalJavaType();
+        boolean isAll = domain.isAll();
+        boolean isNone = domain.isNone();
+        boolean allowNull = domain.isNullAllowed();
+        boolean onlyNull = domain.isOnlyNull();
+
+        Filter<T> filter = domain.getValues().getValuesProcessor().transform(
+                ranges ->
+                {
+                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
+                    if (ranges.getRangeCount() > 0)
+                    {
+                        ranges.getOrderedRanges().forEach(range ->
+                        {
+                            if (range.isSingleValue())
+                            {
+                                Bound<?> bound = createBound(prestoType, Bound.Type.INCLUDED,
+                                        range.getSingleValue());
+                                res.addDiscreteValue((Bound<T>) bound);
+                            } else
+                            {
+                                Bound.Type lowerBoundType = range.isLowInclusive() ?
+                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                                Bound.Type upperBoundType = range.isHighInclusive() ?
+                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                                Object lowerBoundValue = null, upperBoundValue = null;
+                                if (range.isLowUnbounded())
+                                {
+                                    lowerBoundType = Bound.Type.UNBOUNDED;
+                                } else
+                                {
+                                    lowerBoundValue = range.getLowBoundedValue();
+                                }
+                                if (range.isHighUnbounded())
+                                {
+                                    upperBoundType = Bound.Type.UNBOUNDED;
+                                } else
+                                {
+                                    upperBoundValue = range.getHighBoundedValue();
+                                }
+                                Bound<?> lowerBound = createBound(prestoType, lowerBoundType, lowerBoundValue);
+                                Bound<?> upperBound = createBound(prestoType, upperBoundType, upperBoundValue);
+                                res.addRange((Bound<T>) lowerBound, (Bound<T>) upperBound);
+                            }
+                        });
+                    }
+                    return res;
+                },
+                discreteValues ->
+                {
+                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
+                    Bound.Type boundType = discreteValues.isInclusive() ?
+                            Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
+                    discreteValues.getValues().forEach(value ->
+                    {
+                        if (value == null)
+                        {
+                            throw new TrinoException(PixelsErrorCode.PIXELS_INVALID_METADATA,
+                                    "discrete value is null");
+                        } else
+                        {
+                            Bound<?> bound = createBound(prestoType, boundType, value);
+                            res.addDiscreteValue((Bound<T>) bound);
+                        }
+                    });
+                    return res;
+                },
+                allOrNone -> new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull)
+        );
+        return new ColumnFilter<>(columnName, columnType, filter);
+    }
+
+    private static Bound<?> createBound(Type prestoType, Bound.Type boundType, Object value)
+    {
+        Class<?> javaType = prestoType.getJavaType();
+        Bound<?> bound = null;
+        if (boundType == Bound.Type.UNBOUNDED)
+        {
+            bound = new Bound<>(boundType, null);
+        } else
+        {
+            requireNonNull(value, "the value of the bound is null");
+            if (javaType == long.class)
+            {
+                switch (prestoType.getTypeSignature().getBase())
+                {
+                    case StandardTypes.DATE:
+                    case StandardTypes.TIME:
+                        bound = new Bound<>(boundType, ((Long) value).intValue());
+                        break;
+                    default:
+                        bound = new Bound<>(boundType, (Long) value);
+                        break;
+                }
+            } else if (javaType == int.class)
+            {
+                bound = new Bound<>(boundType, (Integer) value);
+            } else if (javaType == double.class)
+            {
+                bound = new Bound<>(boundType, Double.doubleToLongBits((Double) value));
+            } else if (javaType == boolean.class)
+            {
+                bound = new Bound<>(boundType, (byte) ((Boolean) value ? 1 : 0));
+            } else if (javaType == Slice.class)
+            {
+                bound = new Bound<>(boundType, ((Slice) value).toString(StandardCharsets.UTF_8).trim());
+            } else
+            {
+                throw new TrinoException(PixelsErrorCode.PIXELS_DATA_TYPE_ERROR,
+                        "unsupported data type for filter bound: " + javaType.getName());
+            }
+        }
+
+        return bound;
     }
 
     @Override
@@ -226,7 +401,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         PixelsFileSplit split = new PixelsFileSplit(transHandle.getTransId(), splitId++, connectorId,
                                 root.getSchemaName(), root.getTableName(), config.getOutputStorageScheme().name(), outputPaths,
                                 Collections.nCopies(outputPaths.size(), 0), Collections.nCopies(outputPaths.size(), -1),
-                                false, false, Arrays.asList(address), columnOrder, cacheOrder,
+                                false, false, List.of(address), columnOrder, cacheOrder,
                                 // we do not use synthetic columns for scan operator
                                 emptyConstraint, true, false);
                         splitsBuilder.add(split);
@@ -236,7 +411,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         PlanCoordinatorFactory.Instance().createPlanCoordinator(transHandle.getTransId(), scanOperator);
                     }
                     // logger.debug("scan operator: " + JSON.toJSONString(scanOperator));
-                    scanOperator.execute().thenAccept(scanOutputs -> {
+                    scanOperator.execute().thenAccept(scanOutputs ->
+                    {
                         for (int i = 0; i < scanOutputs.length; ++i)
                         {
                             setServerlessWorkerState(scanOutputs[i], stateKeyPrefix, i);
@@ -273,17 +449,17 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     List<PixelsFileSplit> pixelsFileSplits = getScanSplits(transHandle, session, tableHandle);
                     Collections.shuffle(pixelsFileSplits);
                     pixelsSplits = pixelsFileSplits.stream()
-                        .map(split -> (PixelsSplit) split)
-                        .collect(Collectors.toList());
+                            .map(split -> (PixelsSplit) split)
+                            .collect(Collectors.toList());
                 }
-                
+
                 {
                     List<PixelsBufferSplit> pixelsBufferSplits = getBufferSplits(transHandle, session, tableHandle,
-                            (long) pixelsSplits.size());
+                            pixelsSplits.size());
                     pixelsSplits.addAll(
-                        pixelsBufferSplits.stream()
-                        .map(split -> (PixelsSplit) split)
-                        .toList()
+                            pixelsBufferSplits.stream()
+                                    .map(split -> (PixelsSplit) split)
+                                    .toList()
                     );
                 }
 
@@ -293,10 +469,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR,
                         "failed to get scan splits", e);
             }
-            
+
             return new PixelsSplitSource(pixelsSplits);
-        }
-        else if (tableHandle.getTableType() == TableType.JOINED)
+        } else if (tableHandle.getTableType() == TableType.JOINED)
         {
             // The table type is joined, means cloud function has been enabled.
             JoinedTable root = parseJoinPlan(transHandle.getTransId(), tableHandle);
@@ -326,12 +501,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             config.getOutputStorageScheme().name(), MultiOutputInfo.generateOutputPaths(output),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), 0),
                             Collections.nCopies(joinInput.getOutput().getFileNames().size(), -1),
-                            false, false, Arrays.asList(address), columnOrder,
+                            false, false, List.of(address), columnOrder,
                             cacheOrder, emptyConstraint, true, true);
                     splitsBuilder.add(split);
                 }
                 // logger.debug("join operator: " + JSON.toJSONString(joinOperator));
-                joinOperator.execute().thenAccept(joinOutputs -> {
+                joinOperator.execute().thenAccept(joinOutputs ->
+                {
                     for (int i = 0; i < joinOutputs.length; ++i)
                     {
                         setServerlessWorkerState(joinOutputs[i], stateKeyPrefix, i);
@@ -367,8 +543,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
             }
-        }
-        else if (tableHandle.getTableType() == TableType.AGGREGATED)
+        } else if (tableHandle.getTableType() == TableType.AGGREGATED)
         {
             AggregatedTable root = parseAggregatePlan(transHandle.getTransId(), tableHandle);
 
@@ -394,13 +569,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     PixelsFileSplit split = new PixelsFileSplit(
                             transHandle.getTransId(), splitId++, connectorId, root.getSchemaName(), root.getTableName(),
                             config.getOutputStorageScheme().name(), ImmutableList.of(output.getPath()), ImmutableList.of(0),
-                            ImmutableList.of(-1), false, false, Arrays.asList(address), columnOrder,
+                            ImmutableList.of(-1), false, false, List.of(address), columnOrder,
                             cacheOrder, emptyConstraint, true, true);
                     splitsBuilder.add(split);
                 }
 
                 // logger.debug("aggregation operator: " + JSON.toJSONString(aggrOperator));
-                aggrOperator.execute().thenAccept(aggrOutputs -> {
+                aggrOperator.execute().thenAccept(aggrOutputs ->
+                {
                     for (int i = 0; i < aggrOutputs.length; ++i)
                     {
                         setServerlessWorkerState(aggrOutputs[i], stateKeyPrefix, i);
@@ -436,8 +612,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
             }
-        }
-        else
+        } else
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR, "table type is not supported");
         }
@@ -445,14 +620,16 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
     /**
      * Set the state for the output (response) of a serverless worker in etcd.
+     *
      * @param workerOutputFuture the completable future of the serverless worker's output
-     * @param stateKeyPrefix the prefix of state key to be set in etcd
-     * @param workerId the id of the serverless worker, should be unique in a query
+     * @param stateKeyPrefix     the prefix of state key to be set in etcd
+     * @param workerId           the id of the serverless worker, should be unique in a query
      */
     private void setServerlessWorkerState(CompletableFuture<? extends Output> workerOutputFuture,
                                           String stateKeyPrefix, int workerId)
     {
-        workerOutputFuture.thenAccept(output -> {
+        workerOutputFuture.thenAccept(output ->
+        {
             // PIXELS-506: set the state in etcd
             StateManager stateManager = new StateManager(stateKeyPrefix + workerId);
             stateManager.setState(JSON.toJSONString(output.toSimpleOutput()));
@@ -465,7 +642,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
      * to read the join result, and are generated from the column name plus the logical ordinary id
      * of the columns from the left and right tables.
      *
-     * @param transId the transaction id
+     * @param transId     the transaction id
      * @param tableHandle the joined table handle
      * @return the parsed join plan
      */
@@ -495,8 +672,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             leftTable = new BaseTable(leftHandle.getSchemaName(), leftHandle.getTableName(),
                     leftHandle.getTableAlias(), leftColumns, createTableScanFilter(leftHandle.getSchemaName(),
                     leftHandle.getTableName(), leftColumns, leftHandle.getConstraint()));
-        }
-        else
+        } else
         {
             checkArgument(joinHandle.getLeftTable().getTableType() == TableType.JOINED,
                     "left table is not a base or joined table, can not parse");
@@ -531,8 +707,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             rightTable = new BaseTable(rightHandle.getSchemaName(), rightHandle.getTableName(),
                     rightHandle.getTableAlias(), rightColumns, createTableScanFilter(rightHandle.getSchemaName(),
                     rightHandle.getTableName(), rightColumns, rightHandle.getConstraint()));
-        }
-        else
+        } else
         {
             checkArgument(joinHandle.getRightTable().getTableType() == TableType.JOINED,
                     "right table is not a base or joined table, can not parse");
@@ -654,8 +829,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
              * of join execution.
              */
             rotateLeftRight = true;
-        }
-        else if (leftHandle.getTableType() == TableType.JOINED &&
+        } else if (leftHandle.getTableType() == TableType.JOINED &&
                 rightHandle.getTableType() == TableType.JOINED &&
                 joinEndian == JoinEndian.LARGE_LEFT)
         {
@@ -672,8 +846,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             join = new Join(rightTable, leftTable, rightJoinedColumns, leftJoinedColumns,
                     rightKeyColumnIds, leftKeyColumnIds, rightProjection, leftProjection,
                     joinEndian.flip(), joinHandle.getJoinType().flip(), joinAlgo);
-        }
-        else
+        } else
         {
             join = new Join(leftTable, rightTable, leftJoinedColumns, rightJoinedColumns,
                     leftKeyColumnIds, rightKeyColumnIds, leftProjection, rightProjection,
@@ -716,14 +889,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             outputColumnMap.put(outputColumn, outputColumn);
             if (groupKeyColumnMap.containsKey(outputColumn))
             {
-                if (newColumns.contains(outputColumn))
-                {
-                    groupKeyColumnProj[j] = true;
-                }
-                else
-                {
-                    groupKeyColumnProj[j] = false;
-                }
+                groupKeyColumnProj[j] = newColumns.contains(outputColumn);
                 ++j;
             }
         }
@@ -781,8 +947,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
         if (originTableHandle.getTableType() == TableType.JOINED)
         {
             originTable = parseJoinPlan(transId, originTableHandle);
-        }
-        else
+        } else
         {
             originTable = parseBaseTable(originTableHandle);
         }
@@ -812,24 +977,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 tableHandle.getTableName(), columns, tableHandle.getConstraint()));
     }
 
-    public static Pair<Integer, InputSplit> getInputSplit(PixelsFileSplit split)
-    {
-        ArrayList<InputInfo> inputInfos = new ArrayList<>();
-        int splitSize = 0;
-        List<String> paths = split.getPaths();
-        List<Integer> rgStarts = split.getRgStarts();
-        List<Integer> rgLengths = split.getRgLengths();
-
-        for (int i = 0; i < paths.size(); ++i)
-        {
-            inputInfos.add(new InputInfo(paths.get(i), rgStarts.get(i), rgLengths.get(i)));
-            splitSize += rgLengths.get(i);
-        }
-        return new Pair<>(splitSize, new InputSplit(inputInfos));
-    }
-
     private List<PixelsFileSplit> getScanSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
-                                            PixelsTableHandle tableHandle) throws MetadataException
+                                                PixelsTableHandle tableHandle) throws MetadataException
     {
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
         TupleDomain<PixelsColumnHandle> constraint = tableHandle.getConstraint();
@@ -856,8 +1005,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 transHandle.addScanBytes(nameToColumnMap.get(desiredColumn.getColumnName()).getSize());
             }
-        }
-        catch (MetadataException e)
+        } catch (MetadataException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_METADATA_ERROR, e);
         } catch (IOException e)
@@ -919,8 +1067,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
             if (this.fixedSplitSize > 0)
             {
                 splitSize = this.fixedSplitSize;
-            }
-            else
+            } else
             {
                 // log.info("columns to be accessed: " + columnSet.toString());
                 SplitsIndex splitsIndex = IndexFactory.Instance().getSplitsIndex(schemaTableName);
@@ -929,8 +1076,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     logger.debug("splits index not exist in factory, building index...");
                     splitsIndex = buildSplitsIndex(transHandle.getTransId(),
                             version, ordered, splits, schemaTableName);
-                }
-                else
+                } else
                 {
                     long indexVersion = splitsIndex.getVersion();
                     if (indexVersion < version)
@@ -957,8 +1103,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 {
                     logger.debug("projections index not exist in factory, building index...");
                     projectionsIndex = buildProjectionsIndex(ordered, projections, schemaTableName);
-                }
-                else
+                } else
                 {
                     int indexVersion = projectionsIndex.getVersion();
                     if (indexVersion < version)
@@ -978,19 +1123,17 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     {
                         compactPaths.add(projectionPaths.get(projectionPathId));
                     }
-                }
-                else
+                } else
                 {
                     compactPaths = layout.getCompactPaths();
                 }
-            }
-            else
+            } else
             {
                 compactPaths = layout.getCompactPaths();
             }
 
             long splitId = 0;
-            if(usingCache)
+            if (usingCache)
             {
                 Compact compact = layout.getCompact();
                 int cacheBorder = compact.getCacheBorder();
@@ -998,7 +1141,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 String cacheVersion;
                 EtcdUtil etcdUtil = EtcdUtil.Instance();
                 KeyValue keyValue = etcdUtil.getKeyValue(Constants.CACHE_VERSION_LITERAL);
-                if(keyValue != null)
+                if (keyValue != null)
                 {
                     // 1. get version
                     String value = keyValue.getValue().toString(StandardCharsets.UTF_8);
@@ -1010,7 +1153,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                     // 2. get the cached files of each node
                     List<KeyValue> nodeFiles = etcdUtil.getKeyValuesByPrefix(
                             Constants.CACHE_LOCATION_LITERAL + cacheVersion);
-                    if(!nodeFiles.isEmpty())
+                    if (!nodeFiles.isEmpty())
                     {
                         Map<String, String> fileToNodeMap = new HashMap<>();
                         for (KeyValue kv : nodeFiles)
@@ -1018,7 +1161,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             String node = PixelsCacheUtil.getHostnameFromCacheLocationLiteral(
                                     kv.getKey().toString(StandardCharsets.UTF_8));
                             String[] files = kv.getValue().toString(StandardCharsets.UTF_8).split(";");
-                            for(String file : files)
+                            for (String file : files)
                             {
                                 fileToNodeMap.put(file, node);
                                 // log.info("cache location: {file='" + file + "', node='" + node + "'");
@@ -1096,8 +1239,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                         PixelsFileSplit pixelsSplit = new PixelsFileSplit(
                                                 transHandle.getTransId(), splitId++, connectorId,
                                                 tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                                table.getStorageScheme().name(), Arrays.asList(path),
-                                                Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
+                                                table.getStorageScheme().name(), Collections.singletonList(path),
+                                                List.of(curFileRGIdx), List.of(splitSize),
                                                 true, ensureLocality, compactAddresses, ordered.getColumnOrder(),
                                                 cacheColumnChunkOrders, constraint, false, false);
                                         pixelsSplits.add(pixelsSplit);
@@ -1106,26 +1249,22 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     }
                                 }
                             }
-                        }
-                        catch (IOException e)
+                        } catch (IOException e)
                         {
                             throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
                         }
-                    }
-                    else
+                    } else
                     {
                         logger.error("Get caching files error when version is " + cacheVersion);
                         throw new TrinoException(PixelsErrorCode.PIXELS_CACHE_NODE_FILE_ERROR,
                                 new CacheException("Get caching files error when version is " + cacheVersion));
                     }
-                }
-                else
+                } else
                 {
                     throw new TrinoException(PixelsErrorCode.PIXELS_CACHE_VERSION_ERROR,
                             new CacheException("Failed to get cache version from etcd"));
                 }
-            }
-            else
+            } else
             {
                 logger.debug("cache is disabled or no cache available on this table");
                 try
@@ -1185,8 +1324,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                 PixelsFileSplit pixelsSplit = new PixelsFileSplit(
                                         transHandle.getTransId(), splitId++, connectorId,
                                         tableHandle.getSchemaName(), tableHandle.getTableName(),
-                                        table.getStorageScheme().name(), Arrays.asList(path),
-                                        Arrays.asList(curFileRGIdx), Arrays.asList(splitSize),
+                                        table.getStorageScheme().name(), Collections.singletonList(path),
+                                        List.of(curFileRGIdx), List.of(splitSize),
                                         false, storage.hasLocality(), compactAddresses,
                                         ordered.getColumnOrder(), new ArrayList<>(0),
                                         constraint, false, false);
@@ -1195,8 +1334,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             }
                         }
                     }
-                }
-                catch (IOException e)
+                } catch (IOException e)
                 {
                     throw new TrinoException(PixelsErrorCode.PIXELS_STORAGE_ERROR, e);
                 }
@@ -1206,9 +1344,9 @@ public class PixelsSplitManager implements ConnectorSplitManager
         return pixelsSplits;
     }
 
-
     private List<PixelsBufferSplit> getBufferSplits(PixelsTransactionHandle transHandle, ConnectorSession session,
-                                            PixelsTableHandle tableHandle, long splitId) throws MetadataException, RetinaException {
+                                                    PixelsTableHandle tableHandle, long splitId) throws MetadataException, RetinaException
+    {
         List<PixelsBufferSplit> pixelsBufferSplits = new ArrayList<>();
 
         // Do not use constraint_ in the parameters, it is always TupleDomain.all().
@@ -1234,175 +1372,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
                 columnOrder, emptyConstraint, // maybe useless
                 originColumnCnt,
                 schema.toString()
-                );
+        );
         pixelsBufferSplits.add(split);
 
         return pixelsBufferSplits;
-    }
-
-
-    public static SortedMap<Integer, ColumnFilter> getColumnFilters(
-            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint) {
-        SortedMap<Integer, ColumnFilter> columnFilters = new TreeMap<>();
-        
-        Map<String, Integer> colToCid = new HashMap<>(includeCols.length);
-        for (int i = 0; i < includeCols.length; ++i)
-        {
-            colToCid.put(includeCols[i], i);
-        }
-        if (constraint.getDomains().isPresent())
-        {
-            Map<PixelsColumnHandle, Domain> domains = constraint.getDomains().get();
-            for (Map.Entry<PixelsColumnHandle, Domain> entry : domains.entrySet())
-            {
-                ColumnFilter<?> columnFilter = createColumnFilter(entry.getKey(), entry.getValue());
-                if (colToCid.containsKey(entry.getKey().getColumnName()))
-                {
-                    columnFilters.put(colToCid.get(entry.getKey().getColumnName()), columnFilter);
-                }
-                else
-                {
-                    throw new TrinoException(PixelsErrorCode.PIXELS_CONNECTOR_ERROR,
-                            "column '" + entry.getKey().getColumnName() + "' does not exist in the includeCols");
-                }
-            }
-        }
-        return columnFilters;
-    }
-
-    public static TableScanFilter createTableScanFilter(
-            String schemaName, String tableName, String[] includeCols, TupleDomain<PixelsColumnHandle> constraint)
-    {
-        SortedMap<Integer, ColumnFilter> columnFilters = getColumnFilters(schemaName, tableName, includeCols, constraint);
-        TableScanFilter tableScanFilter = new TableScanFilter(schemaName, tableName, columnFilters);
-        return tableScanFilter;
-    }
-
-    private static  <T extends Comparable<T>> ColumnFilter<T> createColumnFilter(
-            PixelsColumnHandle columnHandle, Domain domain)
-    {
-        Type prestoType = domain.getType();
-        String columnName = columnHandle.getColumnName();
-        TypeDescription.Category columnType = columnHandle.getTypeCategory();
-        Class<?> filterJavaType = columnType.getInternalJavaType() == byte[].class ?
-                String.class : columnType.getInternalJavaType();
-        boolean isAll = domain.isAll();
-        boolean isNone = domain.isNone();
-        boolean allowNull = domain.isNullAllowed();
-        boolean onlyNull = domain.isOnlyNull();
-
-        Filter<T> filter = domain.getValues().getValuesProcessor().transform(
-                ranges -> {
-                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
-                    if (ranges.getRangeCount() > 0)
-                    {
-                        ranges.getOrderedRanges().forEach(range ->
-                        {
-                            if (range.isSingleValue())
-                            {
-                                Bound<?> bound = createBound(prestoType, Bound.Type.INCLUDED,
-                                        range.getSingleValue());
-                                res.addDiscreteValue((Bound<T>) bound);
-                            } else
-                            {
-                                Bound.Type lowerBoundType = range.isLowInclusive() ?
-                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
-                                Bound.Type upperBoundType = range.isHighInclusive() ?
-                                        Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
-                                Object lowerBoundValue = null, upperBoundValue = null;
-                                if (range.isLowUnbounded())
-                                {
-                                    lowerBoundType = Bound.Type.UNBOUNDED;
-                                } else
-                                {
-                                    lowerBoundValue = range.getLowBoundedValue();
-                                }
-                                if (range.isHighUnbounded())
-                                {
-                                    upperBoundType = Bound.Type.UNBOUNDED;
-                                } else
-                                {
-                                    upperBoundValue = range.getHighBoundedValue();
-                                }
-                                Bound<?> lowerBound = createBound(prestoType, lowerBoundType, lowerBoundValue);
-                                Bound<?> upperBound = createBound(prestoType, upperBoundType, upperBoundValue);
-                                res.addRange((Bound<T>) lowerBound, (Bound<T>) upperBound);
-                            }
-                        });
-                    }
-                    return res;
-                },
-                discreteValues -> {
-                    Filter<T> res = new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull);
-                    Bound.Type boundType = discreteValues.isInclusive() ?
-                            Bound.Type.INCLUDED : Bound.Type.EXCLUDED;
-                    discreteValues.getValues().forEach(value ->
-                    {
-                        if (value == null)
-                        {
-                            throw new TrinoException(PixelsErrorCode.PIXELS_INVALID_METADATA,
-                                    "discrete value is null");
-                        } else
-                        {
-                            Bound<?> bound = createBound(prestoType, boundType, value);
-                            res.addDiscreteValue((Bound<T>) bound);
-                        }
-                    });
-                    return res;
-                },
-                allOrNone -> new Filter<>(filterJavaType, isAll, isNone, allowNull, onlyNull)
-        );
-        return new ColumnFilter<>(columnName, columnType, filter);
-    }
-
-    private static Bound<?> createBound(Type prestoType, Bound.Type boundType, Object value)
-    {
-        Class<?> javaType = prestoType.getJavaType();
-        Bound<?> bound = null;
-        if (boundType == Bound.Type.UNBOUNDED)
-        {
-            bound = new Bound<>(boundType, null);
-        }
-        else
-        {
-            requireNonNull(value, "the value of the bound is null");
-            if (javaType == long.class)
-            {
-                switch (prestoType.getTypeSignature().getBase())
-                {
-                    case StandardTypes.DATE:
-                    case StandardTypes.TIME:
-                        bound = new Bound<>(boundType, ((Long) value).intValue());
-                        break;
-                    default:
-                        bound = new Bound<>(boundType, (Long) value);
-                        break;
-                }
-            }
-            else if (javaType == int.class)
-            {
-                bound = new Bound<>(boundType, (Integer) value);
-            }
-            else if (javaType == double.class)
-            {
-                bound = new Bound<>(boundType, Double.doubleToLongBits((Double) value));
-            }
-            else if (javaType == boolean.class)
-            {
-                bound = new Bound<>(boundType, (byte) ((Boolean) value ? 1 : 0));
-            }
-            else if (javaType == Slice.class)
-            {
-                bound = new Bound<>(boundType, ((Slice) value).toString(StandardCharsets.UTF_8).trim());
-            }
-            else
-            {
-                throw new TrinoException(PixelsErrorCode.PIXELS_DATA_TYPE_ERROR,
-                        "unsupported data type for filter bound: " + javaType.getName());
-            }
-        }
-
-        return bound;
     }
 
     private List<HostAddress> toHostAddresses(List<Location> locations)

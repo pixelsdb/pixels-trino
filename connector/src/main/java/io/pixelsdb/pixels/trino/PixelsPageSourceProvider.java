@@ -72,7 +72,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             String indexLocationPrefix = config.getConfigFactory().getProperty("index.location");
             this.cacheFiles = new java.util.ArrayList<>();
             this.indexFiles = new java.util.ArrayList<>();
-            for (int i = 0; i < zoneNum; i++) 
+            for (int i = 0; i < zoneNum; i++)
             {
                 this.cacheFiles.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
                 this.indexFiles.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
@@ -91,7 +91,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     public ConnectorPageSource createPageSource(ConnectorTransactionHandle transactionHandle,
                                                 ConnectorSession session, ConnectorSplit split,
                                                 ConnectorTableHandle table, List<ColumnHandle> columns,
-                                                DynamicFilter dynamicFilter) {
+                                                DynamicFilter dynamicFilter)
+    {
         requireNonNull(table, "table is null");
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;
         requireNonNull(split, "split is null");
@@ -104,8 +105,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         try
         {
             Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
-            if(pixelsSplit instanceof PixelsFileSplit) {
-                PixelsFileSplit pixelsFileSplit = (PixelsFileSplit) pixelsSplit;
+            if (pixelsSplit instanceof PixelsFileSplit pixelsFileSplit)
+            {
 
                 if (pixelsFileSplit.getFromServerlessOutput())
                 {
@@ -121,12 +122,12 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 }
             }
 
-            if(pixelsSplit instanceof PixelsBufferSplit) {
-                PixelsBufferSplit pixelsBufferSplit = (PixelsBufferSplit) pixelsSplit;
+            if (pixelsSplit instanceof PixelsBufferSplit pixelsBufferSplit)
+            {
                 return new PixelsBufferPageSource(pixelsBufferSplit, pixelsColumns, pixelsTransactionHandle, storage);
             }
 
-            throw new TrinoException(PixelsErrorCode.PIXELS_SPLIT_TYPE_ERROR,"Unknown Pixels Split Type");
+            throw new TrinoException(PixelsErrorCode.PIXELS_SPLIT_TYPE_ERROR, "Unknown Pixels Split Type");
 
         } catch (IOException e)
         {
