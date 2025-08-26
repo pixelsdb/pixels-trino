@@ -19,18 +19,9 @@
  */
 package io.pixelsdb.pixels.trino;
 
-import static java.util.Objects.requireNonNull;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-
 import com.alibaba.fastjson.JSON;
-
 import io.airlift.log.Logger;
+import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.cache.PixelsCacheReader;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
@@ -44,19 +35,31 @@ import io.pixelsdb.pixels.core.predicate.PixelsPredicate;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReader;
 import io.pixelsdb.pixels.core.utils.Bitmap;
-import io.pixelsdb.pixels.core.vector.ColumnVector;
-import io.pixelsdb.pixels.core.vector.VectorizedRowBatch;
+import io.pixelsdb.pixels.core.vector.*;
 import io.pixelsdb.pixels.executor.predicate.TableScanFilter;
+import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
+import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.impl.PixelsTupleDomainPredicate;
 import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
 import io.trino.spi.Page;
 import io.trino.spi.TrinoException;
-import io.trino.spi.block.Block;
-import io.trino.spi.block.LazyBlock;
+import io.trino.spi.block.*;
+import io.trino.spi.connector.ConnectorPageSource;
 import io.trino.spi.predicate.Domain;
 import io.trino.spi.type.Type;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
+import static com.google.common.base.Preconditions.checkState;
+import static io.trino.spi.type.DoubleType.DOUBLE;
+import static java.util.Objects.requireNonNull;
 
 /**
  * @author hank
@@ -86,10 +89,10 @@ class PixelsFilePageSource implements PixelsPageSource
     private long readTimeNanos = 0L;
     private long memoryUsage = 0L;
     private PixelsReaderOption option;
-    int batchId;
+    private int batchId;
 
     public PixelsFilePageSource(PixelsFileSplit split, List<PixelsColumnHandle> columnHandles, PixelsTransactionHandle transactionHandle,
-                                Storage storage, List<MemoryMappedFile> cacheFiles, List<MemoryMappedFile> indexFiles,
+                            Storage storage, List<MemoryMappedFile> cacheFiles, List<MemoryMappedFile> indexFiles, int swapZoneNum,
                             PixelsFooterCache pixelsFooterCache)
     {
         this.split = split;
@@ -119,9 +122,9 @@ class PixelsFilePageSource implements PixelsPageSource
 
         this.cacheReader = PixelsCacheReader
                 .newBuilder()
-                .setCacheFile(cacheFiles)
-                .setIndexFile(indexFiles.isEmpty() ? null : indexFiles.subList(0, indexFiles.size() - 1))
-                .setGlobalIndexFile(indexFiles.isEmpty() ? null : indexFiles.get(indexFiles.size() - 1))
+                .setCacheFiles(cacheFiles, swapZoneNum)
+                .setIndexFiles(indexFiles.isEmpty() ? null : indexFiles.subList(0, indexFiles.size() - 1),
+                        indexFiles.isEmpty() ? null : indexFiles.get(indexFiles.size() - 1))
                 .build();
 
         if (split.getFromServerlessOutput())

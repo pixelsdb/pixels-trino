@@ -23,4 +23,4 @@ import io.trino.spi.connector.ConnectorPageSource;
 
 public interface PixelsPageSource extends ConnectorPageSource{
     public int getBatchId();
-} 
+}

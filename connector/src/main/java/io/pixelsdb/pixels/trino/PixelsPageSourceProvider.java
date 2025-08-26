@@ -52,6 +52,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     private final List<MemoryMappedFile> cacheFiles;
     private final List<MemoryMappedFile> indexFiles;
     private final PixelsFooterCache pixelsFooterCache;
+    private final int swapZoneNum;
     private final PixelsTrinoConfig config;
 
     @Inject
@@ -64,14 +65,14 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         {
             // NOTICE: creating a MemoryMappedFile is efficient, usually cost tens of us.
             int zoneNum = Integer.parseInt(config.getConfigFactory().getProperty("cache.zone.num"));
-            int swapZoneNum = Integer.parseInt(config.getConfigFactory().getProperty("cache.zone.swap.num"));
+            this.swapZoneNum = Integer.parseInt(config.getConfigFactory().getProperty("cache.zone.swap.num"));
             long zoneSize = Long.parseLong(config.getConfigFactory().getProperty("cache.size")) / (zoneNum - swapZoneNum);
             long zoneIndexSize = Long.parseLong(config.getConfigFactory().getProperty("index.size")) / (zoneNum - swapZoneNum);
             String zoneLocationPrefix = config.getConfigFactory().getProperty("cache.location");
             String indexLocationPrefix = config.getConfigFactory().getProperty("index.location");
             this.cacheFiles = new java.util.ArrayList<>();
             this.indexFiles = new java.util.ArrayList<>();
-            for (int i = 0; i < zoneNum; i++)
+            for (int i = 0; i < zoneNum; i++) 
             {
                 this.cacheFiles.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
                 this.indexFiles.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
@@ -81,6 +82,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         {
             this.cacheFiles = new java.util.ArrayList<>();
             this.indexFiles = new java.util.ArrayList<>();
+            this.swapZoneNum = 0;
         }
         this.pixelsFooterCache = new PixelsFooterCache();
     }
@@ -109,13 +111,13 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
                 {
                     IntermediateFileCleaner.Instance().registerStorage(storage);
                     return new PixelsFilePageSource(pixelsFileSplit, pixelsColumns, pixelsTransactionHandle, storage,
-                            cacheFiles, indexFiles, pixelsFooterCache);
+                            cacheFiles, indexFiles, swapZoneNum, pixelsFooterCache);
                 } else
                 {
                     // perform scan push down.
                     List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
                     return new PixelsFilePageSource(pixelsFileSplit, withFilterColumns, pixelsTransactionHandle, storage,
-                            cacheFiles, indexFiles, pixelsFooterCache);
+                            cacheFiles, indexFiles, swapZoneNum, pixelsFooterCache);
                 }
             }
 
