@@ -19,6 +19,7 @@
  */
 package io.pixelsdb.pixels.trino;
 
+import io.pixelsdb.pixels.trino.split.PixelsSplit;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.connector.ConnectorSplitSource;
 
@@ -49,7 +50,7 @@ public class PixelsSplitSource implements ConnectorSplitSource
         int remainingSplits = splits.size() - offset;
         int size = Math.min(remainingSplits, maxSize);
         List<ConnectorSplit> results = new ArrayList<>(size);
-        for (int i = offset; i < offset+size; ++i)
+        for (int i = offset; i < offset + size; ++i)
         {
             results.add(splits.get(i));
         }

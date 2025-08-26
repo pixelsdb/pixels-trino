@@ -21,16 +21,20 @@ package io.pixelsdb.pixels.trino.block;
 
 import io.airlift.slice.SliceInput;
 import io.airlift.slice.SliceOutput;
+import io.airlift.slice.Slices;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.BlockEncoding;
 import io.trino.spi.block.BlockEncodingSerde;
+import io.trino.spi.block.VariableWidthBlock;
+
+import java.util.Optional;
 
 import static io.pixelsdb.pixels.trino.block.EncoderUtil.decodeNullBits;
 import static io.pixelsdb.pixels.trino.block.EncoderUtil.encodeNullsAsBits;
 
 /**
  * This class is derived from io.trino.spi.block.VariableWidthBlockEncoding
- *
+ * <p>
  * We reimplemented writeBlock and readBlock
  *
  * @author hank
@@ -100,7 +104,7 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
         // destinationIndex should be 0, because we do not need 0 to be the first item in lengths.
         sliceInput.readInts(lengths, 0, positionCount);
 
-        boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).get();
+        boolean[] valueIsNull = decodeNullBits(sliceInput, positionCount).orElse(new boolean[positionCount]);
 
         // int blockSize = sliceInput.readInt();
         byte[][] values = new byte[positionCount][];
@@ -111,5 +115,62 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
         }
 
         return new VarcharArrayBlock(positionCount, values, offsets, lengths, hasNull, valueIsNull);
+    }
+
+    /**
+     * PIXELS-902: Trino expects standard block types like {@code VariableWidthBlock} for
+     * Varchar values when serializing query results. However, {@code VarcharArrayBlock}
+     * causes {@link ClassCastException} in paths such as {@code JsonEncodingUtils}. This method provides
+     * a fallback replacement to ensure compatibility by converting the {@code VarcharArrayBlock} into a supported format.
+     *
+     * @param block
+     * @return
+     */
+    @Override
+    public Optional<Block> replacementBlockForWrite(Block block)
+    {
+        if (!(block instanceof VarcharArrayBlock varcharBlock))
+        {
+            return Optional.empty();
+        }
+
+        int positionCount = varcharBlock.getPositionCount();
+
+        int totalLength = 0;
+        for (int i = 0; i < positionCount; ++i)
+        {
+            totalLength += varcharBlock.getSliceLength(i);
+        }
+
+        byte[] content = new byte[totalLength];
+        int[] offsets = new int[positionCount + 1];
+        int curOffset = 0;
+
+        for (int i = 0; i < positionCount; ++i)
+        {
+            offsets[i] = curOffset;
+            int len = varcharBlock.getSliceLength(i);
+            if (!varcharBlock.isNull(i))
+            {
+                System.arraycopy(
+                        varcharBlock.getRawValue(i),
+                        varcharBlock.getPositionOffset(i),
+                        content,
+                        curOffset,
+                        len
+                );
+            }
+            curOffset += len;
+        }
+        offsets[positionCount] = totalLength;
+
+        VariableWidthBlock newBlock = new VariableWidthBlock(
+                positionCount,
+                Slices.wrappedBuffer(content),
+                offsets,
+                Optional.of(varcharBlock.getValueIsNull())
+        );
+
+        return Optional.of(newBlock);
     }
 }

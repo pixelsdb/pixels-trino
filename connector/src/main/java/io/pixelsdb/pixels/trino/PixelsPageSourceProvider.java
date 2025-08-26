@@ -27,6 +27,9 @@ import io.pixelsdb.pixels.common.physical.natives.MemoryMappedFile;
 import io.pixelsdb.pixels.core.PixelsFooterCache;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
+import io.pixelsdb.pixels.trino.split.PixelsBufferSplit;
+import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
+import io.pixelsdb.pixels.trino.split.PixelsSplit;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 
@@ -69,7 +72,7 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
             String indexLocationPrefix = config.getConfigFactory().getProperty("index.location");
             this.cacheFiles = new java.util.ArrayList<>();
             this.indexFiles = new java.util.ArrayList<>();
-            for (int i = 0; i < zoneNum; i++) 
+            for (int i = 0; i < zoneNum; i++)
             {
                 this.cacheFiles.add(new MemoryMappedFile(zoneLocationPrefix + "." + i, zoneSize));
                 this.indexFiles.add(new MemoryMappedFile(indexLocationPrefix + "." + i, zoneIndexSize));
@@ -88,7 +91,8 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
     public ConnectorPageSource createPageSource(ConnectorTransactionHandle transactionHandle,
                                                 ConnectorSession session, ConnectorSplit split,
                                                 ConnectorTableHandle table, List<ColumnHandle> columns,
-                                                DynamicFilter dynamicFilter) {
+                                                DynamicFilter dynamicFilter)
+    {
         requireNonNull(table, "table is null");
         PixelsTableHandle tableHandle = (PixelsTableHandle) table;
         requireNonNull(split, "split is null");
@@ -101,18 +105,30 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         try
         {
             Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
-            if (pixelsSplit.getFromServerlessOutput())
+            if (pixelsSplit instanceof PixelsFileSplit pixelsFileSplit)
             {
-                IntermediateFileCleaner.Instance().registerStorage(storage);
-                return new PixelsPageSource(pixelsSplit, pixelsColumns, pixelsTransactionHandle, storage,
-                        cacheFiles, indexFiles, swapZoneNum, pixelsFooterCache);
-            } else
-            {
-                // perform scan push down.
-                List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
-                return new PixelsPageSource(pixelsSplit, withFilterColumns, pixelsTransactionHandle, storage,
-                        cacheFiles, indexFiles, swapZoneNum, pixelsFooterCache);
+
+                if (pixelsFileSplit.getFromServerlessOutput())
+                {
+                    IntermediateFileCleaner.Instance().registerStorage(storage);
+                    return new PixelsFilePageSource(pixelsFileSplit, pixelsColumns, pixelsTransactionHandle, storage,
+                            cacheFiles, indexFiles, swapZoneNum, pixelsFooterCache);
+                } else
+                {
+                    // perform scan push down.
+                    List<PixelsColumnHandle> withFilterColumns = getIncludeColumns(pixelsColumns, tableHandle);
+                    return new PixelsFilePageSource(pixelsFileSplit, withFilterColumns, pixelsTransactionHandle, storage,
+                            cacheFiles, indexFiles, swapZoneNum, pixelsFooterCache);
+                }
             }
+
+            if (pixelsSplit instanceof PixelsBufferSplit pixelsBufferSplit)
+            {
+                return new PixelsBufferPageSource(pixelsBufferSplit, pixelsColumns, pixelsTransactionHandle, storage);
+            }
+
+            throw new TrinoException(PixelsErrorCode.PIXELS_SPLIT_TYPE_ERROR, "Unknown Pixels Split Type");
+
         } catch (IOException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_SQL_EXECUTE_ERROR, e);
