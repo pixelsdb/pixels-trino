@@ -118,7 +118,7 @@ public class VarcharArrayBlockEncoding implements BlockEncoding
     }
 
     /**
-     * ISSUE-902: Trino expects standard block types like {@code VariableWidthBlock} for
+     * PIXELS-902: Trino expects standard block types like {@code VariableWidthBlock} for
      * Varchar values when serializing query results. However, {@code VarcharArrayBlock}
      * causes {@link ClassCastException} in paths such as {@code JsonEncodingUtils}. This method provides
      * a fallback replacement to ensure compatibility by converting the {@code VarcharArrayBlock} into a supported format.
