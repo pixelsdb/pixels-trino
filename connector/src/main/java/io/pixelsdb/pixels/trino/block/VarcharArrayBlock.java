@@ -24,6 +24,7 @@ import io.airlift.slice.Slices;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.ByteArrayBlock;
 import io.trino.spi.block.ValueBlock;
+import io.trino.spi.block.VariableWidthBlock;
 import org.openjdk.jol.info.ClassLayout;
 
 import java.util.*;
@@ -66,7 +67,7 @@ public class VarcharArrayBlock implements ValueBlock
      */
     private final long retainedSizeOfValues;
     private final long sizeInBytes;
-
+    private Optional<Block> alternativeBlock;
     public VarcharArrayBlock(int positionCount, byte[][] values, int[] offsets, int[] lengths, boolean hasNull, boolean[] valueIsNull)
     {
         this(0, positionCount, values, offsets, lengths, hasNull, valueIsNull);
@@ -458,6 +459,15 @@ public class VarcharArrayBlock implements ValueBlock
     @Override
     public ValueBlock getUnderlyingValueBlock()
     {
+        //TODO better way to adapt block APPEND operation?
+        if(alternativeBlock == null)
+        {
+            alternativeBlock = VarcharArrayBlockEncoding.Instance().replacementBlockForWrite(this);
+        }
+        if(alternativeBlock.isPresent())
+        {
+            return alternativeBlock.get().getUnderlyingValueBlock();
+        }
         return this;
     }
 
