@@ -115,12 +115,18 @@ class PixelsFilePageSource implements PixelsPageSource
         this.filtered = new Bitmap(this.BatchSize, true);
         this.tmp = new Bitmap(this.BatchSize, false);
 
-        this.cacheReader = PixelsCacheReader
-                .newBuilder()
-                .setCacheFiles(cacheFiles, swapZoneNum)
-                .setIndexFiles(indexFiles.isEmpty() ? null : indexFiles.subList(0, indexFiles.size() - 1),
-                        indexFiles.isEmpty() ? null : indexFiles.get(indexFiles.size() - 1))
-                .build();
+        if(!cacheFiles.isEmpty())
+        {
+            this.cacheReader = PixelsCacheReader
+                    .newBuilder()
+                    .setCacheFiles(cacheFiles, swapZoneNum)
+                    .setIndexFiles(indexFiles.isEmpty() ? null : indexFiles.subList(0, indexFiles.size() - 1),
+                            indexFiles.isEmpty() ? null : indexFiles.get(indexFiles.size() - 1))
+                    .build();
+        } else
+        {
+            this.cacheReader = null;
+        }
 
         if (split.getFromServerlessOutput())
         {
