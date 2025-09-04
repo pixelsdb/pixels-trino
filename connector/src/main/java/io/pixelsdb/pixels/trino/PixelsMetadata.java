@@ -463,7 +463,7 @@ public class PixelsMetadata implements ConnectorMetadata
                 MetadataService metadataService = this.metadataProxy.getMetadataService();
                 io.pixelsdb.pixels.common.metadata.domain.Table table = metadataService.getTable(schemaName, tableName);
                 List<Column> pixelsColumns = metadataService.getColumns(schemaName, tableName, false);
-                // Layout layout = metadataService.getLatestLayout(schemaName, tableName);
+                Layout layout = metadataService.getLatestLayout(schemaName, tableName);
                 String keyColumnsString = getKeyColumnsString(pkColNames, pixelsColumns, schemaTableName);
                 MetadataProto.SinglePointIndex.Builder singlePointIndexbuilder = MetadataProto.SinglePointIndex.newBuilder();
                 singlePointIndexbuilder
@@ -471,8 +471,8 @@ public class PixelsMetadata implements ConnectorMetadata
                         .setPrimary(true)
                         .setUnique(true)
                         .setIndexScheme(pkScheme)
-                        .setTableId(table.getId());
-                // .setSchemaVersionId(layout.getSchemaVersionId());
+                        .setTableId(table.getId())
+                        .setSchemaVersionId(layout.getSchemaVersionId());
                 SinglePointIndex singlePointIndex = new SinglePointIndex(singlePointIndexbuilder.build());
                 metadataService.createSinglePointIndex(singlePointIndex);
             } catch (MetadataException | JsonProcessingException e)
