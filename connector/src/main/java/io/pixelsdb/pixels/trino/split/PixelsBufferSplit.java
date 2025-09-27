@@ -32,6 +32,7 @@ public final class PixelsBufferSplit extends PixelsSplit
 {
     private final int originColumnSize;
     private final String originSchemaString;
+    private final long tableId;
 
     @JsonCreator
     public PixelsBufferSplit(
@@ -40,6 +41,7 @@ public final class PixelsBufferSplit extends PixelsSplit
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
+            @JsonProperty("tableId") long tableId,
             @JsonProperty("storageScheme") String storageScheme,
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("columnOrder") List<String> columnOrder,
@@ -50,6 +52,7 @@ public final class PixelsBufferSplit extends PixelsSplit
         super(transId, splitId, connectorId, schemaName, tableName, storageScheme, addresses, columnOrder, constraint);
         this.originColumnSize = originColumnSize;
         this.originSchemaString = originSchemaString;
+        this.tableId = tableId;
     }
 
     @JsonProperty
@@ -62,5 +65,11 @@ public final class PixelsBufferSplit extends PixelsSplit
     public int getOriginColumnSize()
     {
         return originColumnSize;
+    }
+
+    @JsonProperty
+    public long getTableId()
+    {
+        return tableId;
     }
 }

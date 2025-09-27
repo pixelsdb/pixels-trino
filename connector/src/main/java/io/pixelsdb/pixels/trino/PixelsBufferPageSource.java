@@ -60,8 +60,6 @@ public class PixelsBufferPageSource implements PixelsPageSource
     private final CompletableFuture<?> blocked;
     private final int numColumnToRead;
     private final Optional<TableScanFilter> filter;
-    private final Bitmap filtered;
-    private final Bitmap tmp;
     private final Storage storage;
     private final RetinaService retinaService;
     private boolean closed;
@@ -93,9 +91,6 @@ public class PixelsBufferPageSource implements PixelsPageSource
         this.numColumnToRead = columnHandles.size();
         this.batchId = 0;
         this.closed = false;
-        int batchSize = PixelsTrinoConfig.getBatchSize();
-        this.filtered = new Bitmap(batchSize, true);
-        this.tmp = new Bitmap(batchSize, false);
 
         /**
          * TODO(Li Zinuo): The Host and Port of RetinaService can be stored in Metadata
@@ -192,7 +187,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
                     activeMemtableData, response.getIdsList(),
                     response.getBitmapsList(),
                     storage,
-                    split.getSchemaName(), split.getTableName(),
+                    split.getTableId(),
                     schema
             );
         } catch (RetinaException | IOException e)
@@ -232,11 +227,17 @@ public class PixelsBufferPageSource implements PixelsPageSource
             this.batchId++;
             int rowBatchSize;
             Block[] blocks = new Block[this.numColumnToRead];
-
+            int batchSize = rowBatch.size;
+            if(batchSize == 0)
+            {
+                return new Page(0);
+            }
+            Bitmap filtered = new Bitmap(batchSize, true);
+            Bitmap tmp = new Bitmap(batchSize, false);
             if (this.filter.isPresent())
             {
-                this.filter.get().doFilter(rowBatch, this.filtered, this.tmp);
-                rowBatch.applyFilter(this.filtered);
+                this.filter.get().doFilter(rowBatch, filtered, tmp);
+                rowBatch.applyFilter(filtered);
             }
 
             rowBatchSize = rowBatch.size;
