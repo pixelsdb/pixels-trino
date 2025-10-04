@@ -153,7 +153,7 @@ public class PixelsConnector implements Connector
             {
                 this.toDoBeforeTransTermination(handle);
                 // commit the transaction
-                this.transService.commitTrans(handle.getTransId(), handle.getTimestamp());
+                this.transService.commitTrans(handle.getTransId());
             } catch (TransException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
