@@ -152,7 +152,7 @@ public class PixelsConnector implements Connector
             {
                 this.toDoBeforeTransTermination(handle);
                 // commit the transaction
-                this.transService.commitTrans(handle.getTransId());
+                this.transService.commitTrans(handle.getTransId(), handle.isReadOnly());
             } catch (TransException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
@@ -186,7 +186,7 @@ public class PixelsConnector implements Connector
             {
                 this.toDoBeforeTransTermination(handle);
                 // rollback the transaction
-                this.transService.rollbackTrans(handle.getTransId());
+                this.transService.rollbackTrans(handle.getTransId(), handle.isReadOnly());
             } catch (TransException e)
             {
                 throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
