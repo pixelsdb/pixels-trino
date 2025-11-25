@@ -24,6 +24,7 @@ import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.inject.Inject;
+import com.google.protobuf.Empty;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
@@ -35,6 +36,7 @@ import io.pixelsdb.pixels.common.layout.*;
 import io.pixelsdb.pixels.common.metadata.SchemaTableName;
 import io.pixelsdb.pixels.common.metadata.domain.*;
 import io.pixelsdb.pixels.common.metadata.domain.Table;
+import io.pixelsdb.pixels.common.node.NodeService;
 import io.pixelsdb.pixels.common.physical.Location;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.physical.StorageFactory;
@@ -45,6 +47,7 @@ import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.utils.Pair;
+import io.pixelsdb.pixels.daemon.NodeProto;
 import io.pixelsdb.pixels.executor.aggregation.FunctionType;
 import io.pixelsdb.pixels.executor.join.JoinAlgorithm;
 import io.pixelsdb.pixels.executor.predicate.Bound;
@@ -1357,8 +1360,6 @@ public class PixelsSplitManager implements ConnectorSplitManager
         String tableName = tableHandle.getTableName();
 
         int originColumnCnt = metadataProxy.getMetadataService().getColumns(schemaName, tableName, false).size();
-        // The address is not used to dispatch Pixels splits, so we use set it the localhost.
-        HostAddress address = HostAddress.fromString("localhost:8080");
 
         List<String> columnOrder = ImmutableList.of();
         TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
@@ -1367,16 +1368,25 @@ public class PixelsSplitManager implements ConnectorSplitManager
         long tableId = metadataProxy.getTable(transHandle.getTransId(), schemaName, tableName).getId();
 
         TypeDescription schema = metadataProxy.getSchema(schemaName, tableName);
-        PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
-                schemaName, tableName, tableId,
-                "minio",
-                List.of(address),
-                columnOrder, emptyConstraint, // maybe useless
-                originColumnCnt,
-                schema.toString()
-        );
-        pixelsBufferSplits.add(split);
 
+        NodeService nodeService = NodeService.Instance();
+        List<NodeProto.NodeInfo> retinaAddresses = nodeService.getRetinaList();
+
+        String retinaPort = config.getConfigFactory().getProperty("retina.server.port");
+
+        for(NodeProto.NodeInfo retinaAddress : retinaAddresses)
+        {
+            HostAddress address = HostAddress.fromString(retinaAddress + ":" + retinaPort);
+            PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
+                    schemaName, tableName, tableId,
+                    "minio",
+                    List.of(address),
+                    columnOrder, emptyConstraint, // maybe useless
+                    originColumnCnt,
+                    schema.toString()
+            );
+            pixelsBufferSplits.add(split);
+        }
         return pixelsBufferSplits;
     }
 
