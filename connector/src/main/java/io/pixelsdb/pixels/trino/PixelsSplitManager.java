@@ -1376,7 +1376,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
         for(NodeProto.NodeInfo retinaAddress : retinaAddresses)
         {
-            HostAddress address = HostAddress.fromString(retinaAddress + ":" + retinaPort);
+            HostAddress address = HostAddress.fromString(retinaAddress.getAddress() + ":" + retinaPort);
             PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
                     schemaName, tableName, tableId,
                     "minio",
