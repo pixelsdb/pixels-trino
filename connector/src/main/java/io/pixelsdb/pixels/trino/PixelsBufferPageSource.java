@@ -20,10 +20,12 @@
 
 package io.pixelsdb.pixels.trino;
 
+import io.airlift.configuration.testing.ConfigAssertions;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.retina.RetinaService;
+import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReaderBufferImpl;
@@ -63,6 +65,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
     private final Optional<TableScanFilter> filter;
     private final Storage storage;
     private final RetinaService retinaService;
+    private final String retinaServiceHost;
     private boolean closed;
     private long completedBytes = 0L;
     private final long memoryUsage = 0L;
@@ -96,10 +99,12 @@ public class PixelsBufferPageSource implements PixelsPageSource
         if(split.getAddresses().isEmpty())
         {
             this.retinaService = RetinaService.Instance();
+            this.retinaServiceHost = ConfigFactory.Instance().getProperty("retina.server.host");
         } else
         {
             HostAddress retinaAddress = split.getAddresses().getFirst();
             this.retinaService = RetinaService.CreateInstance(retinaAddress.getHostText(), retinaAddress.getPort());
+            this.retinaServiceHost = retinaAddress.getHostText();
         }
 
         TupleDomain<PixelsColumnHandle> tupleDomain = split.getConstraint();
@@ -185,6 +190,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
             byte[] activeMemtableData = response.getData().toByteArray();
             this.reader = new PixelsRecordReaderBufferImpl(
                     option,
+                    retinaServiceHost,
                     activeMemtableData, response.getIdsList(),
                     response.getBitmapsList(),
                     storage,
