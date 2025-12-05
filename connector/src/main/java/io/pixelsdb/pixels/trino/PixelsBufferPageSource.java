@@ -50,7 +50,6 @@ import java.util.concurrent.CompletableFuture;
 
 public class PixelsBufferPageSource implements PixelsPageSource
 {
-
     private static final Logger logger = Logger.get(PixelsBufferPageSource.class);
     private static final Long pollIntervalMillis = 200L;
     private final PixelsBufferSplit split;
@@ -179,8 +178,8 @@ public class PixelsBufferPageSource implements PixelsPageSource
             this.option.transTimestamp(transactionHandle.getTimestamp());
             TypeDescription schema = TypeDescription.fromString(split.getOriginSchemaString());
 
-            RetinaProto.GetWriterBufferResponse response =
-                    retinaService.getWriterBuffer(split.getSchemaName(), split.getTableName(), option.getTransTimestamp());
+            RetinaProto.GetWriteBufferResponse response =
+                    retinaService.getWriteBuffer(split.getSchemaName(), split.getTableName(), option.getTransTimestamp());
             byte[] activeMemtableData = response.getData().toByteArray();
             this.reader = new PixelsRecordReaderBufferImpl(
                     option,
