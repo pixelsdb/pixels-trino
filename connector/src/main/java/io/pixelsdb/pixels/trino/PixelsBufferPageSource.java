@@ -53,7 +53,6 @@ import java.util.concurrent.CompletableFuture;
 
 public class PixelsBufferPageSource implements PixelsPageSource
 {
-
     private static final Logger logger = Logger.get(PixelsBufferPageSource.class);
     private static final Long pollIntervalMillis = 200L;
     private final PixelsBufferSplit split;
