@@ -92,10 +92,10 @@ public class PixelsOffloadDetector
         {
             try
             {
-                this.retinaService.unregisterOffload(transId, context.getTimestamp());
+                this.retinaService.unregisterOffload(context.getTimestamp());
             } catch (RetinaException e)
             {
-                logger.error(e, "Failed to unregister offload for transId=%d", transId);
+                logger.error("Failed to unregister offload for timestamp={}", context.getTimestamp(), e);
             }
         }
     }
@@ -120,7 +120,7 @@ public class PixelsOffloadDetector
                 try
                 {
                     // 1. Register offload with Retina - this creates the checkpoint
-                    this.retinaService.registerOffload(context.getTransId(), context.getTimestamp());
+                    this.retinaService.registerOffload(context.getTimestamp());
                     
                     // 2. Notify TransService to mark the transaction as offloaded on daemon side
                     this.transService.markTransOffloaded(context.getTransId());
@@ -132,7 +132,7 @@ public class PixelsOffloadDetector
                             context.getTransId(), runningTime/1000);
                 } catch (RetinaException e)
                 {
-                    logger.error(e, "Failed to register offload for transId=%d", context.getTransId());
+                    logger.error("Failed to register offload for timestamp={}", context.getTimestamp(), e);
                 } catch (TransException e)
                 {
                     logger.error(e, "Failed to mark transaction as offloaded or push watermark for transId=%d", context.getTransId());
