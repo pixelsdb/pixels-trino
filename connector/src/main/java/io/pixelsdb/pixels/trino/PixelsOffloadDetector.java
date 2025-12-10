@@ -23,6 +23,7 @@ import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.exception.TransException;
 import io.pixelsdb.pixels.common.retina.RetinaService;
+import io.pixelsdb.pixels.common.transaction.TransContext;
 import io.pixelsdb.pixels.common.transaction.TransService;
 import io.pixelsdb.pixels.common.utils.ConfigFactory;
 
@@ -45,7 +46,7 @@ public class PixelsOffloadDetector
     private final TransService transService;
     private final long offloadThreshold;
     private final ScheduledExecutorService scheduler;
-    private final Map<Long, PixelsTransactionHandle> activeQueries;
+    private final Map<Long, TransContext> activeQueries;
 
     public PixelsOffloadDetector()
     {
@@ -71,11 +72,11 @@ public class PixelsOffloadDetector
     /**
      * Register a query for long-running detection.
      * 
-     * @param handle the transaction handle
+     * @param context
      */
-    public void registerQuery(PixelsTransactionHandle handle)
+    public void registerQuery(TransContext context)
     {
-        this.activeQueries.put(handle.getTransId(), handle);
+        this.activeQueries.put(context.getTransId(), context);
     }
 
     /**
@@ -86,12 +87,12 @@ public class PixelsOffloadDetector
      */
     public void unregisterQuery(long transId)
     {
-        PixelsTransactionHandle handle = this.activeQueries.remove(transId);
-        if (handle != null && handle.isOffloaded())
+        TransContext context = this.activeQueries.remove(transId);
+        if (context != null && context.isOffloaded())
         {
             try
             {
-                this.retinaService.unregisterOffload(transId, handle.getTimestamp());
+                this.retinaService.unregisterOffload(transId, context.getTimestamp());
             } catch (RetinaException e)
             {
                 logger.error(e, "Failed to unregister offload for transId=%d", transId);
@@ -105,36 +106,36 @@ public class PixelsOffloadDetector
     private void detectAndOffload()
     {
         long now = System.currentTimeMillis();
-        for (PixelsTransactionHandle handle : activeQueries.values())
+        for (TransContext context : activeQueries.values())
         {
-            // Skip if already offloaded or not read-only
-            if (handle.isOffloaded() || !handle.isReadOnly())
+            // Skip if already offloaded
+            if (context.isOffloaded())
             {
                 continue;
             }
 
-            long runningTime = now - handle.getStartTime();
+            long runningTime = now - context.getStartTime();
             if (runningTime > offloadThreshold)
             {
                 try
                 {
                     // 1. Register offload with Retina - this creates the checkpoint
-                    this.retinaService.registerOffload(handle.getTransId(), handle.getTimestamp());
+                    this.retinaService.registerOffload(context.getTransId(), context.getTimestamp());
                     
                     // 2. Notify TransService to mark the transaction as offloaded on daemon side
-                    this.transService.markTransOffloaded(handle.getTransId());
+                    this.transService.markTransOffloaded(context.getTransId());
                     
                     // 3. Mark as offloaded locally
-                    handle.setOffloaded(true);
+                    context.setOffloaded(true);
                     
                     logger.info("Offloaded long-running query: transId=%d, running time=%d s",
-                            handle.getTransId(), runningTime/1000);
+                            context.getTransId(), runningTime/1000);
                 } catch (RetinaException e)
                 {
-                    logger.error(e, "Failed to register offload for transId=%d", handle.getTransId());
+                    logger.error(e, "Failed to register offload for transId=%d", context.getTransId());
                 } catch (TransException e)
                 {
-                    logger.error(e, "Failed to mark transaction as offloaded or push watermark for transId=%d", handle.getTransId());
+                    logger.error(e, "Failed to mark transaction as offloaded or push watermark for transId=%d", context.getTransId());
                 }
             }
         }

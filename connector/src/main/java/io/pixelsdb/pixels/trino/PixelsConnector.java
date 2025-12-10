@@ -143,9 +143,9 @@ public class PixelsConnector implements Connector
         // readOnly in Trino is false if not explicitly set.
         // Do not use it to identify whether a transaction is an analytic query.
         PixelsTransactionHandle handle = new PixelsTransactionHandle(context.getTransId(), context.getTimestamp(), readOnly, executorType);
-        
-        // Register the query for long-running detection
-        this.offloadDetector.registerQuery(handle);
+
+        // Register the analytic query for long-running detection
+        this.offloadDetector.registerQuery(context);
         
         return handle;
     }
