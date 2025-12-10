@@ -52,16 +52,6 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
      * The cf cost spent on executing this transaction (query) if the query is executed in the cloud.
      */
     private final AtomicDouble cfCostCents;
-    /**
-     * The start time of this transaction (query) in milliseconds.
-     * Used for long-running query detection.
-     */
-    private final long startTime;
-    /**
-     * Whether this transaction has been offloaded (checkpoint created).
-     * This is volatile to ensure visibility across threads.
-     */
-    private volatile boolean offloaded;
 
     /**
      * Create a transaction handle.
@@ -82,8 +72,6 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
         this.executorType = executorType;
         this.scanBytes = new AtomicDouble(0);
         this.cfCostCents = new AtomicDouble(0);
-        this.startTime = System.currentTimeMillis();
-        this.offloaded = false;
     }
 
     @JsonProperty
@@ -133,20 +121,5 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     public double getCFCostCents()
     {
         return this.cfCostCents.get();
-    }
-
-    public long getStartTime()
-    {
-        return this.startTime;
-    }
-
-    public boolean isOffloaded()
-    {
-        return this.offloaded;
-    }
-
-    public void setOffloaded(boolean offloaded)
-    {
-        this.offloaded = offloaded;
     }
 }
