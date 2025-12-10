@@ -127,9 +127,6 @@ public class PixelsOffloadDetector
                     // 3. Mark as offloaded locally
                     handle.setOffloaded(true);
                     
-                    // 4. Push watermark to allow GC to proceed
-                    this.transService.pushWatermark(true);
-                    
                     logger.info("Offloaded long-running query: transId=%d, running time=%d s",
                             handle.getTransId(), runningTime/1000);
                 } catch (RetinaException e)
