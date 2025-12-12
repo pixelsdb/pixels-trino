@@ -128,7 +128,7 @@ public class PixelsOffloadDetector
                     // 3. Mark as offloaded locally
                     context.setOffloaded(true);
                     
-                    logger.info("Offloaded long-running query: transId=%d, running time=%d s",
+                    logger.debug("Offloaded long-running query: transId=%d, running time=%d s",
                             context.getTransId(), runningTime/1000);
                 } catch (RetinaException e)
                 {
