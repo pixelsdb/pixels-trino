@@ -1373,13 +1373,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<NodeProto.NodeInfo> retinaAddresses = nodeService.getRetinaList();
 
         String retinaPort = config.getConfigFactory().getProperty("retina.server.port");
+        String storageScheme = config.getConfigFactory().getProperty("retina.buffer.object.storage.scheme");
 
         for(NodeProto.NodeInfo retinaAddress : retinaAddresses)
         {
             HostAddress address = HostAddress.fromString(retinaAddress.getAddress() + ":" + retinaPort);
             PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
                     schemaName, tableName, tableId,
-                    "minio",
+                    storageScheme,
                     List.of(address),
                     columnOrder, emptyConstraint, // maybe useless
                     originColumnCnt,
