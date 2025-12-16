@@ -27,6 +27,7 @@ import io.trino.spi.session.PropertyMetadata;
 import java.util.List;
 
 import static io.trino.spi.session.PropertyMetadata.booleanProperty;
+import static io.trino.spi.session.PropertyMetadata.longProperty;
 
 /**
  * @author hank
@@ -36,6 +37,7 @@ public class PixelsSessionProperties
     private static final String ORDERED_PATH_ENABLED = "ordered_path_enabled";
     private static final String COMPACT_PATH_ENABLED = "compact_path_enabled";
     private static final String CLOUD_FUNCTION_ENABLED = "cloud_function_enabled";
+    private static final String QUERY_SNAPSHOT_TIMESTAMP = "query_snapshot_timestamp";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -55,7 +57,13 @@ public class PixelsSessionProperties
                 "Set true to enable cloud-function workers for query processing,",
                 false, false);
 
-        sessionProperties = ImmutableList.of(s1, s2, s3);
+        PropertyMetadata<Long> s4 = longProperty(
+                QUERY_SNAPSHOT_TIMESTAMP,
+                "Set the snapshot timestamp for the query (in milliseconds).",
+                -1L, // use transaction timestamp
+                false);
+
+        sessionProperties = ImmutableList.of(s1, s2, s3, s4);
     }
 
     public List<PropertyMetadata<?>> getSessionProperties()
@@ -76,5 +84,10 @@ public class PixelsSessionProperties
     public static boolean getCloudFunctionEnabled(ConnectorSession session)
     {
         return session.getProperty(CLOUD_FUNCTION_ENABLED, Boolean.class);
+    }
+
+    public static Long getQuerySnapshotTimestamp(ConnectorSession session)
+    {
+        return session.getProperty(QUERY_SNAPSHOT_TIMESTAMP, Long.class);
     }
 }

@@ -34,7 +34,7 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     /**
      * The timestamp that is used to get a read snapshot of the query.
      */
-    private final long timestamp;
+    private long timestamp;
     /**
      * Whether the transaction is read only.
      */
@@ -96,6 +96,11 @@ public class PixelsTransactionHandle implements ConnectorTransactionHandle
     public ExecutorType getExecutorType()
     {
         return this.executorType;
+    }
+
+    public void setTimestamp(long timestamp)
+    {
+        this.timestamp = timestamp;
     }
 
     public void setExecutorType(ExecutorType executorType)
