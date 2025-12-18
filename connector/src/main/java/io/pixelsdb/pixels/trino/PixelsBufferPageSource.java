@@ -20,10 +20,12 @@
 
 package io.pixelsdb.pixels.trino;
 
+import io.airlift.configuration.testing.ConfigAssertions;
 import io.airlift.log.Logger;
 import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.physical.Storage;
 import io.pixelsdb.pixels.common.retina.RetinaService;
+import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.reader.PixelsReaderOption;
 import io.pixelsdb.pixels.core.reader.PixelsRecordReaderBufferImpl;
@@ -35,6 +37,7 @@ import io.pixelsdb.pixels.retina.RetinaProto;
 import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.split.PixelsBufferSplit;
+import io.trino.spi.HostAddress;
 import io.trino.spi.Page;
 import io.trino.spi.TrinoException;
 import io.trino.spi.block.Block;
@@ -61,6 +64,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
     private final Optional<TableScanFilter> filter;
     private final Storage storage;
     private final RetinaService retinaService;
+    private final String retinaServiceHost;
     private boolean closed;
     private long completedBytes = 0L;
     private final long memoryUsage = 0L;
@@ -91,14 +95,16 @@ public class PixelsBufferPageSource implements PixelsPageSource
         this.batchId = 0;
         this.closed = false;
 
-        /**
-         * TODO(Li Zinuo): The Host and Port of RetinaService can be stored in Metadata
-         *  So we can support horizontal scaling of multiple RetinaService instances.
-         *
-         *  Currently, each Split is read by only one PixelsBufferPageSource,
-         *  so only a single RetinaService instance can be used.
-         */
-        this.retinaService = RetinaService.Instance();
+        if(split.getAddresses().isEmpty())
+        {
+            this.retinaService = RetinaService.Instance();
+            this.retinaServiceHost = ConfigFactory.Instance().getProperty("retina.server.host");
+        } else
+        {
+            HostAddress retinaAddress = split.getAddresses().getFirst();
+            this.retinaService = RetinaService.CreateInstance(retinaAddress.getHostText(), retinaAddress.getPort());
+            this.retinaServiceHost = retinaAddress.getHostText();
+        }
 
         TupleDomain<PixelsColumnHandle> tupleDomain = split.getConstraint();
 
@@ -183,6 +189,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
             byte[] activeMemtableData = response.getData().toByteArray();
             this.reader = new PixelsRecordReaderBufferImpl(
                     option,
+                    retinaServiceHost,
                     activeMemtableData, response.getIdsList(),
                     response.getBitmapsList(),
                     storage,

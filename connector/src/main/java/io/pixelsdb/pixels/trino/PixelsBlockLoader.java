@@ -24,6 +24,7 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.vector.*;
 import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
+import io.pixelsdb.pixels.trino.block.VarcharArrayBlockEncoding;
 import io.trino.spi.block.*;
 import io.trino.spi.type.Type;
 
@@ -108,7 +109,9 @@ final class PixelsBlockLoader
             case VARBINARY:
                 if (vector instanceof BinaryColumnVector scv)
                 {
-                    block = new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, !scv.noNulls, scv.isNull);
+                    block = VarcharArrayBlockEncoding.Instance()
+                            .replacementBlockForWrite(new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, !scv.noNulls, scv.isNull).getLoadedBlock())
+                            .get();
                 } else
                 {
                     DictionaryColumnVector dscv = (DictionaryColumnVector) vector;
