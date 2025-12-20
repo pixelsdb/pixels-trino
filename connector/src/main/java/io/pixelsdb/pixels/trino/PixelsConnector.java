@@ -61,6 +61,7 @@ public class PixelsConnector implements Connector
     private final PixelsTrinoConfig config;
     private final TransService transService;
     private final QueryScheduleService queryScheduleService;
+    private final PixelsOffloadDetector offloadDetector;
 
     @Inject
     public PixelsConnector(
@@ -83,6 +84,7 @@ public class PixelsConnector implements Connector
         this.config = requireNonNull(config, "config is null");
         requireNonNull(config, "config is null");
         this.transService = TransService.Instance();
+        this.offloadDetector = new PixelsOffloadDetector();
         try
         {
             this.queryScheduleService = new QueryScheduleService(
@@ -138,6 +140,9 @@ public class PixelsConnector implements Connector
             executorType = ExecutorType.PENDING;
         }
 
+        // Register the analytic query for long-running detection
+        this.offloadDetector.registerQuery(context);
+
         // readOnly in Trino is false if not explicitly set.
         // Do not use it to identify whether a transaction is an analytic query.
         return new PixelsTransactionHandle(context.getTransId(), context.getTimestamp(), readOnly, executorType);
@@ -150,6 +155,9 @@ public class PixelsConnector implements Connector
         {
             try
             {
+                // Unregister the query from offload detection
+                this.offloadDetector.unregisterQuery(handle.getTransId());
+                
                 this.toDoBeforeTransTermination(handle);
                 // commit the transaction
                 this.transService.commitTrans(handle.getTransId(), handle.isReadOnly());
@@ -184,6 +192,9 @@ public class PixelsConnector implements Connector
         {
             try
             {
+                // Unregister the query from offload detection
+                this.offloadDetector.unregisterQuery(handle.getTransId());
+                
                 this.toDoBeforeTransTermination(handle);
                 // rollback the transaction
                 this.transService.rollbackTrans(handle.getTransId(), handle.isReadOnly());
@@ -306,6 +317,7 @@ public class PixelsConnector implements Connector
             lifeCycleManager.stop();
             // PIXELS-715: no need to shut down the default transaction service.
             this.queryScheduleService.shutdown();
+            this.offloadDetector.shutdown();
             PixelsWorkerCoordinator.shutdown();
         } catch (Exception e)
         {
