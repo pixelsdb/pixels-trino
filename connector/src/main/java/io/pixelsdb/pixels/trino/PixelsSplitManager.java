@@ -361,6 +361,13 @@ public class PixelsSplitManager implements ConnectorSplitManager
         TupleDomain<PixelsColumnHandle> emptyConstraint = Constraint.alwaysTrue().getSummary().transformKeys(
                 columnHandle -> (PixelsColumnHandle) columnHandle);
         long splitId = 0;
+
+        long snapshotTimestamp = PixelsSessionProperties.getQuerySnapshotTimestamp(session);
+        if (snapshotTimestamp != -1)
+        {
+            transHandle.setTimestamp(snapshotTimestamp);
+        }
+
         /*
          * Start building splits.
          *
