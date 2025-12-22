@@ -185,7 +185,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
             TypeDescription schema = TypeDescription.fromString(split.getOriginSchemaString());
 
             RetinaProto.GetWriteBufferResponse response =
-                    retinaService.getWriteBuffer(split.getSchemaName(), split.getTableName(), option.getTransTimestamp());
+                    retinaService.getWriteBuffer(split.getSchemaName(), split.getTableName(), split.getvNodeId(), option.getTransTimestamp());
             byte[] activeMemtableData = response.getData().toByteArray();
             this.reader = new PixelsRecordReaderBufferImpl(
                     option,
@@ -194,6 +194,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
                     response.getBitmapsList(),
                     storage,
                     split.getTableId(),
+                    split.getvNodeId(),
                     schema
             );
         } catch (RetinaException | IOException e)
