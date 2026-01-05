@@ -43,6 +43,7 @@ import io.pixelsdb.pixels.common.physical.StorageFactory;
 import io.pixelsdb.pixels.common.state.StateManager;
 import io.pixelsdb.pixels.common.turbo.ExecutorType;
 import io.pixelsdb.pixels.common.turbo.Output;
+import io.pixelsdb.pixels.common.utils.ConfigFactory;
 import io.pixelsdb.pixels.common.utils.Constants;
 import io.pixelsdb.pixels.common.utils.EtcdUtil;
 import io.pixelsdb.pixels.core.TypeDescription;
@@ -1381,19 +1382,23 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
         String retinaPort = config.getConfigFactory().getProperty("retina.server.port");
         String storageScheme = config.getConfigFactory().getProperty("retina.buffer.object.storage.scheme");
-
+        int virtualNodeNum = Integer.parseInt(ConfigFactory.Instance().getProperty("node.virtual.num"));
         for(NodeProto.NodeInfo retinaAddress : retinaAddresses)
         {
             HostAddress address = HostAddress.fromString(retinaAddress.getAddress() + ":" + retinaPort);
-            PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
-                    schemaName, tableName, tableId,
-                    storageScheme,
-                    List.of(address),
-                    columnOrder, emptyConstraint, // maybe useless
-                    originColumnCnt,
-                    schema.toString()
-            );
-            pixelsBufferSplits.add(split);
+
+            for(int virtualNodeId = 0; virtualNodeId < virtualNodeNum; ++virtualNodeId)
+            {
+                PixelsBufferSplit split = new PixelsBufferSplit(transHandle.getTransId(), splitId++, connectorId,
+                        schemaName, tableName, tableId, virtualNodeId,
+                        storageScheme,
+                        List.of(address),
+                        columnOrder, emptyConstraint, // maybe useless
+                        originColumnCnt,
+                        schema.toString()
+                );
+                pixelsBufferSplits.add(split);
+            }
         }
         return pixelsBufferSplits;
     }
