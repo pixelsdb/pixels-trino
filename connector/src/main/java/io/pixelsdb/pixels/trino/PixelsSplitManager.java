@@ -24,7 +24,6 @@ import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.inject.Inject;
-import com.google.protobuf.Empty;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
@@ -34,8 +33,8 @@ import io.pixelsdb.pixels.common.exception.MetadataException;
 import io.pixelsdb.pixels.common.exception.RetinaException;
 import io.pixelsdb.pixels.common.layout.*;
 import io.pixelsdb.pixels.common.metadata.SchemaTableName;
-import io.pixelsdb.pixels.common.metadata.domain.*;
 import io.pixelsdb.pixels.common.metadata.domain.Table;
+import io.pixelsdb.pixels.common.metadata.domain.*;
 import io.pixelsdb.pixels.common.node.NodeService;
 import io.pixelsdb.pixels.common.physical.Location;
 import io.pixelsdb.pixels.common.physical.Storage;
@@ -464,6 +463,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
                             .collect(Collectors.toList());
                 }
 
+                String retinaEnabled = config.getConfigFactory().getProperty("retina.enable");
+                if (retinaEnabled != null && retinaEnabled.equalsIgnoreCase("true"))
                 {
                     List<PixelsBufferSplit> pixelsBufferSplits = getBufferSplits(transHandle, session, tableHandle,
                             pixelsSplits.size());
