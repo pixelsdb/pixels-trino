@@ -67,7 +67,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
     private final String retinaServiceHost;
     private boolean closed;
     private long completedBytes = 0L;
-    private final long memoryUsage = 0L;
+    private long splitMemoryUsage = 0L;
     private int batchId;
     private List<Long> fileIds;
     private final int fileIdIndex = 0;
@@ -197,6 +197,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
                     split.getvNodeId(),
                     schema
             );
+            this.splitMemoryUsage += activeMemtableData.length;
         } catch (RetinaException | IOException e)
         {
             throw new TrinoException(PixelsErrorCode.PIXELS_READER_ERROR,
@@ -292,7 +293,11 @@ public class PixelsBufferPageSource implements PixelsPageSource
     @Override
     public long getMemoryUsage()
     {
-        return this.memoryUsage;
+        if (reader == null)
+        {
+            return splitMemoryUsage;
+        }
+        return splitMemoryUsage + reader.getMemoryUsage();
     }
 
     /**
