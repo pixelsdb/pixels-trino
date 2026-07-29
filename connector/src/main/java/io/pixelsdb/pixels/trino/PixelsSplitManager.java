@@ -1382,7 +1382,14 @@ public class PixelsSplitManager implements ConnectorSplitManager
         List<NodeProto.NodeInfo> retinaAddresses = nodeService.getRetinaList();
 
         String retinaPort = config.getConfigFactory().getProperty("retina.server.port");
-        String storageScheme = config.getConfigFactory().getProperty("retina.buffer.object.storage.scheme");
+        String folder = config.getConfigFactory().getProperty("retina.buffer.object.storage.folder");
+        Storage.Scheme scheme = Storage.Scheme.fromPath(folder);
+        if (scheme == null)
+        {
+            throw new RetinaException("retina.buffer.object.storage.folder must include a storage scheme prefix, " +
+                    "e.g., s3://bucket/path/");
+        }
+        String storageScheme = scheme.name();
         int virtualNodeNum = Integer.parseInt(ConfigFactory.Instance().getProperty("node.virtual.num"));
         for(NodeProto.NodeInfo retinaAddress : retinaAddresses)
         {
