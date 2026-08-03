@@ -22,7 +22,6 @@ package io.pixelsdb.pixels.trino;
 import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.vector.*;
-import io.pixelsdb.pixels.trino.block.TimeArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlockEncoding;
 import io.trino.spi.block.*;
@@ -70,7 +69,26 @@ final class PixelsBlockLoader
         switch (typeCategory)
         {
             case BYTE:
+                ByteColumnVector bytecv = (ByteColumnVector) vector;
+                block = new ByteArrayBlock(batchSize, Optional.ofNullable(bytecv.isNull), bytecv.vector);
+                break;
             case SHORT:
+                IntColumnVector shortcv = (IntColumnVector) vector;
+                short[] shortValues = new short[batchSize];
+                for (int i = 0; i < batchSize; ++i)
+                {
+                    if (!shortcv.isNull[i])
+                    {
+                        int value = shortcv.vector[i];
+                        if (value < Short.MIN_VALUE || value > Short.MAX_VALUE)
+                        {
+                            throw new IllegalArgumentException("SMALLINT value out of range: " + value);
+                        }
+                        shortValues[i] = (short) value;
+                    }
+                }
+                block = new ShortArrayBlock(batchSize, Optional.ofNullable(shortcv.isNull), shortValues);
+                break;
             case INT:
                 IntColumnVector icv = (IntColumnVector) vector;
                 block = new IntArrayBlock(batchSize, Optional.ofNullable(icv.isNull), icv.vector);
@@ -146,12 +164,12 @@ final class PixelsBlockLoader
             case TIME:
                 // PIXELS-94: add time type.
                 TimeColumnVector tcv = (TimeColumnVector) vector;
-                /**
-                 * In Presto, LongArrayBlock is used for time type. However, in Pixels,
-                 * Time value is stored as int, so here we use TimeArrayBlock, which
-                 * accepts int values but provides getLong method same as LongArrayBlock.
-                 */
-                block = new TimeArrayBlock(batchSize, tcv.times, !tcv.noNulls, tcv.isNull);
+                long[] timeValues = new long[batchSize];
+                for (int i = 0; i < batchSize; ++i)
+                {
+                    timeValues[i] = (long) tcv.times[i] * 1_000_000_000L;
+                }
+                block = new LongArrayBlock(batchSize, Optional.ofNullable(tcv.isNull), timeValues);
                 break;
             case TIMESTAMP:
                 TimestampColumnVector tscv = (TimestampColumnVector) vector;

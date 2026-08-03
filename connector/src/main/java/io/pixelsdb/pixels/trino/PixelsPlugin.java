@@ -20,7 +20,6 @@
 package io.pixelsdb.pixels.trino;
 
 import com.google.common.collect.ImmutableList;
-import io.pixelsdb.pixels.trino.block.TimeArrayBlockEncoding;
 import io.pixelsdb.pixels.trino.block.VarcharArrayBlockEncoding;
 import io.trino.spi.Plugin;
 import io.trino.spi.block.BlockEncoding;
@@ -31,7 +30,7 @@ public class PixelsPlugin implements Plugin
     @Override
     public Iterable<BlockEncoding> getBlockEncodings()
     {
-        return ImmutableList.of(VarcharArrayBlockEncoding.Instance(), TimeArrayBlockEncoding.Instance());
+        return ImmutableList.of(VarcharArrayBlockEncoding.Instance());
     }
 
     @Override
