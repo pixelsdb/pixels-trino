@@ -22,8 +22,6 @@ package io.pixelsdb.pixels.trino;
 import io.airlift.slice.Slices;
 import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.vector.*;
-import io.pixelsdb.pixels.trino.block.VarcharArrayBlock;
-import io.pixelsdb.pixels.trino.block.VarcharArrayBlockEncoding;
 import io.trino.spi.block.*;
 import io.trino.spi.type.Type;
 
@@ -127,9 +125,31 @@ final class PixelsBlockLoader
             case VARBINARY:
                 if (vector instanceof BinaryColumnVector scv)
                 {
-                    block = VarcharArrayBlockEncoding.Instance()
-                            .replacementBlockForWrite(new VarcharArrayBlock(batchSize, scv.vector, scv.start, scv.lens, !scv.noNulls, scv.isNull).getLoadedBlock())
-                            .get();
+                    int totalLength = 0;
+                    for (int i = 0; i < batchSize; ++i)
+                    {
+                        if (!scv.noNulls && scv.isNull[i])
+                        {
+                            continue;
+                        }
+                        totalLength += scv.lens[i];
+                    }
+                    byte[] content = new byte[totalLength];
+                    int[] offsets = new int[batchSize + 1];
+                    int curOffset = 0;
+                    for (int i = 0; i < batchSize; ++i)
+                    {
+                        offsets[i] = curOffset;
+                        if (!scv.noNulls && scv.isNull[i])
+                        {
+                            continue;
+                        }
+                        int len = scv.lens[i];
+                        System.arraycopy(scv.vector[i], scv.start[i], content, curOffset, len);
+                        curOffset += len;
+                    }
+                    offsets[batchSize] = curOffset;
+                    block = new VariableWidthBlock(batchSize, Slices.wrappedBuffer(content), offsets, Optional.of(scv.isNull));
                 } else
                 {
                     DictionaryColumnVector dscv = (DictionaryColumnVector) vector;
