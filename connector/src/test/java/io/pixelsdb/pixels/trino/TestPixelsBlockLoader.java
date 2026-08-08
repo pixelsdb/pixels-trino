@@ -23,11 +23,12 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.vector.BinaryColumnVector;
 import io.pixelsdb.pixels.core.vector.ByteColumnVector;
 import io.pixelsdb.pixels.core.vector.ColumnVector;
-import io.pixelsdb.pixels.core.vector.IntColumnVector;
+import io.pixelsdb.pixels.core.vector.ShortColumnVector;
 import io.pixelsdb.pixels.core.vector.TimeColumnVector;
 import io.trino.spi.Page;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.ByteArrayBlock;
+import io.trino.spi.block.LazyBlock;
 import io.trino.spi.block.LongArrayBlock;
 import io.trino.spi.block.ShortArrayBlock;
 import io.trino.spi.block.VariableWidthBlock;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 
+import static io.pixelsdb.pixels.trino.PixelsBlockLoader.PICOSECONDS_PER_MILLISECOND;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,6 +65,9 @@ public class TestPixelsBlockLoader
         Block block = load(vector, TinyintType.TINYINT, TypeDescription.Category.BYTE, values.length + 1);
 
         assertTrue(block instanceof ByteArrayBlock);
+        assertTrue(block.mayHaveNull());
+        assertRetains(block, vector.vector);
+        assertRetains(block, vector.isNull);
         for (int i = 0; i < values.length; ++i)
         {
             assertEquals((long) values[i], TinyintType.TINYINT.getLong(block, i));
@@ -73,9 +78,9 @@ public class TestPixelsBlockLoader
     @Test
     public void testSmallintBlock()
     {
-        int[] values = {Short.MIN_VALUE, -3456, 0, 1234, Short.MAX_VALUE};
-        IntColumnVector vector = new IntColumnVector(values.length + 1);
-        for (int value : values)
+        short[] values = {Short.MIN_VALUE, -3456, 0, 1234, Short.MAX_VALUE};
+        ShortColumnVector vector = new ShortColumnVector(values.length + 1);
+        for (short value : values)
         {
             vector.add(value);
         }
@@ -84,6 +89,9 @@ public class TestPixelsBlockLoader
         Block block = load(vector, SmallintType.SMALLINT, TypeDescription.Category.SHORT, values.length + 1);
 
         assertTrue(block instanceof ShortArrayBlock);
+        assertTrue(block.mayHaveNull());
+        assertRetains(block, vector.vector);
+        assertRetains(block, vector.isNull);
         for (int i = 0; i < values.length; ++i)
         {
             assertEquals((long) values[i], SmallintType.SMALLINT.getLong(block, i));
@@ -92,34 +100,128 @@ public class TestPixelsBlockLoader
     }
 
     @Test
-    public void testSmallintRejectsOutOfRangeValue()
-    {
-        IntColumnVector vector = new IntColumnVector(1);
-        vector.add(Short.MAX_VALUE + 1);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> load(vector, SmallintType.SMALLINT, TypeDescription.Category.SHORT, 1));
-    }
-
-    @Test
     public void testTimeBlock()
     {
         int[] millis = {0, 3_723_004, 86_399_999};
         TimeColumnVector vector = new TimeColumnVector(millis.length + 1, 3);
-        for (int i = 0; i < millis.length; ++i)
+        for (int value : millis)
         {
-            vector.set(i, millis[i]);
+            vector.add(value);
         }
-        vector.setNullValue(millis.length);
+        vector.addNull();
 
         Block block = load(vector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, millis.length + 1);
 
         assertTrue(block instanceof LongArrayBlock);
+        assertTrue(block.mayHaveNull());
+        assertDoesNotRetain(block, vector.times);
+        assertRetains(block, vector.isNull);
         for (int i = 0; i < millis.length; ++i)
         {
-            assertEquals((long) millis[i] * 1_000_000_000L, TimeType.TIME_MILLIS.getLong(block, i));
+            assertEquals((long) millis[i] * PICOSECONDS_PER_MILLISECOND,
+                    TimeType.TIME_MILLIS.getLong(block, i));
         }
         assertTrue(block.isNull(millis.length));
+    }
+
+    @Test
+    public void testFixedWidthNoNullBlocksReuseReaderArrays()
+    {
+        for (int batchSize : new int[] {0, 1, 1000})
+        {
+            int capacity = batchSize + 5;
+            ByteColumnVector byteVector = new ByteColumnVector(capacity);
+            ShortColumnVector shortVector = new ShortColumnVector(capacity);
+            TimeColumnVector timeVector = new TimeColumnVector(capacity, 3);
+            for (int i = 0; i < batchSize; ++i)
+            {
+                byteVector.vector[i] = (byte) (i % 255 - 128);
+                shortVector.vector[i] = (short) (Short.MIN_VALUE + i % 65536);
+                timeVector.times[i] = i % 86_400_000;
+            }
+
+            Block byteBlock = load(
+                    byteVector, TinyintType.TINYINT, TypeDescription.Category.BYTE, batchSize);
+            Block shortBlock = load(
+                    shortVector, SmallintType.SMALLINT, TypeDescription.Category.SHORT, batchSize);
+            Block timeBlock = load(
+                    timeVector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, batchSize);
+
+            assertTrue(byteBlock instanceof ByteArrayBlock);
+            assertTrue(shortBlock instanceof ShortArrayBlock);
+            assertTrue(timeBlock instanceof LongArrayBlock);
+            assertNoNullBlock(byteBlock, byteVector.vector, byteVector.isNull, batchSize);
+            assertNoNullBlock(shortBlock, shortVector.vector, shortVector.isNull, batchSize);
+            assertEquals(batchSize, timeBlock.getPositionCount());
+            assertFalse(timeBlock.mayHaveNull());
+            assertDoesNotRetain(timeBlock, timeVector.times);
+            assertDoesNotRetain(timeBlock, timeVector.isNull);
+
+            if (batchSize > 0)
+            {
+                int last = batchSize - 1;
+                assertEquals(byteVector.vector[last],
+                        TinyintType.TINYINT.getLong(byteBlock, last));
+                assertEquals(shortVector.vector[last],
+                        SmallintType.SMALLINT.getLong(shortBlock, last));
+                assertEquals((long) timeVector.times[last] * PICOSECONDS_PER_MILLISECOND,
+                        TimeType.TIME_MILLIS.getLong(timeBlock, last));
+            }
+        }
+    }
+
+    @Test
+    public void testFixedWidthNullBitmapsAreShared()
+    {
+        for (int nullInterval : new int[] {100, 5, 1})
+        {
+            int batchSize = nullInterval == 1 ? 1 : 1000;
+            int capacity = batchSize + 5;
+            ByteColumnVector byteVector = new ByteColumnVector(capacity);
+            ShortColumnVector shortVector = new ShortColumnVector(capacity);
+            TimeColumnVector timeVector = new TimeColumnVector(capacity, 3);
+            for (int i = 0; i < batchSize; ++i)
+            {
+                byteVector.vector[i] = (byte) i;
+                shortVector.vector[i] = (short) i;
+                timeVector.times[i] = i;
+                boolean isNull = nullInterval == 1 ||
+                        i == 0 || i == batchSize - 1 || i % nullInterval == 0;
+                byteVector.isNull[i] = isNull;
+                shortVector.isNull[i] = isNull;
+                timeVector.isNull[i] = isNull;
+                if (isNull)
+                {
+                    // Null slots may contain stale values from a reused vector.
+                    byteVector.vector[i] = Byte.MAX_VALUE;
+                    shortVector.vector[i] = Short.MAX_VALUE;
+                    timeVector.times[i] = Integer.MAX_VALUE;
+                }
+            }
+            byteVector.noNulls = false;
+            shortVector.noNulls = false;
+            timeVector.noNulls = false;
+
+            Block byteBlock = load(
+                    byteVector, TinyintType.TINYINT, TypeDescription.Category.BYTE, batchSize);
+            Block shortBlock = load(
+                    shortVector, SmallintType.SMALLINT, TypeDescription.Category.SHORT, batchSize);
+            Block timeBlock = load(
+                    timeVector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, batchSize);
+
+            assertNullableBlock(byteBlock, byteVector.vector, byteVector.isNull, batchSize);
+            assertNullableBlock(shortBlock, shortVector.vector, shortVector.isNull, batchSize);
+            assertEquals(batchSize, timeBlock.getPositionCount());
+            assertTrue(timeBlock.mayHaveNull());
+            assertDoesNotRetain(timeBlock, timeVector.times);
+            assertRetains(timeBlock, timeVector.isNull);
+            for (int i = 0; i < batchSize; ++i)
+            {
+                assertEquals(byteVector.isNull[i], byteBlock.isNull(i));
+                assertEquals(shortVector.isNull[i], shortBlock.isNull(i));
+                assertEquals(timeVector.isNull[i], timeBlock.isNull(i));
+            }
+        }
     }
 
     @Test
@@ -161,6 +263,8 @@ public class TestPixelsBlockLoader
         assertTrue(block instanceof VariableWidthBlock);
         VariableWidthBlock vw = (VariableWidthBlock) block;
         assertEquals(batchSize, vw.getPositionCount());
+        assertTrue(vw.mayHaveNull());
+        assertRetains(vw, vector.isNull);
 
         assertSliceEquals(VarcharType.VARCHAR, vw, 0, hello);
         assertSliceEquals(VarcharType.VARCHAR, vw, 1, chinese);
@@ -172,6 +276,29 @@ public class TestPixelsBlockLoader
         assertEquals(0, vw.getSliceLength(4));
         assertSliceEquals(VarcharType.VARCHAR, vw, 5, afterNull);
         assertSliceEquals(VarcharType.VARCHAR, vw, 6, ascii);
+    }
+
+    @Test
+    public void testNoNullVarcharBlockOmitsBitmap()
+    {
+        int batchSize = 3;
+        BinaryColumnVector vector = new BinaryColumnVector(batchSize + 2);
+        byte[] shared = "prefixalphabetasuffix".getBytes(StandardCharsets.UTF_8);
+        byte[] alpha = "alpha".getBytes(StandardCharsets.UTF_8);
+        byte[] beta = "beta".getBytes(StandardCharsets.UTF_8);
+        vector.setRef(0, shared, indexOf(shared, alpha), alpha.length);
+        vector.setRef(1, shared, indexOf(shared, beta), beta.length);
+        vector.setRef(2, new byte[0], 0, 0);
+
+        Block block = load(
+                vector, VarcharType.VARCHAR, TypeDescription.Category.VARCHAR, batchSize);
+
+        assertTrue(block instanceof VariableWidthBlock);
+        assertFalse(block.mayHaveNull());
+        assertDoesNotRetain(block, vector.isNull);
+        assertSliceEquals(VarcharType.VARCHAR, block, 0, alpha);
+        assertSliceEquals(VarcharType.VARCHAR, block, 1, beta);
+        assertSliceEquals(VarcharType.VARCHAR, block, 2, new byte[0]);
     }
 
     @Test
@@ -199,6 +326,8 @@ public class TestPixelsBlockLoader
         assertTrue(block instanceof VariableWidthBlock);
         VariableWidthBlock vw = (VariableWidthBlock) block;
         assertEquals(batchSize, vw.getPositionCount());
+        assertTrue(vw.mayHaveNull());
+        assertRetains(vw, vector.isNull);
         assertSliceEquals(VarbinaryType.VARBINARY, vw, 0, raw);
         assertSliceEquals(VarbinaryType.VARBINARY, vw, 1, high);
         assertFalse(vw.isNull(2));
@@ -206,6 +335,61 @@ public class TestPixelsBlockLoader
         assertSliceEquals(VarbinaryType.VARBINARY, vw, 2, empty);
         assertTrue(vw.isNull(3));
         assertEquals(0, vw.getSliceLength(3));
+    }
+
+    @Test
+    public void testLazyBlockRejectsStaleBatch()
+    {
+        TestPageSource pageSource = new TestPageSource();
+        ByteColumnVector vector = new ByteColumnVector(1);
+        vector.add((byte) 42);
+        LazyBlock block = new LazyBlock(1, new PixelsBlockLoader(
+                pageSource, vector, TinyintType.TINYINT, TypeDescription.Category.BYTE, 1));
+
+        pageSource.advanceBatch();
+
+        assertThrows(IllegalStateException.class, block::getLoadedBlock);
+    }
+
+    private static void assertNoNullBlock(
+            Block block, Object values, boolean[] isNull, int positionCount)
+    {
+        assertEquals(positionCount, block.getPositionCount());
+        assertFalse(block.mayHaveNull());
+        assertRetains(block, values);
+        assertDoesNotRetain(block, isNull);
+    }
+
+    private static void assertNullableBlock(
+            Block block, Object values, boolean[] isNull, int positionCount)
+    {
+        assertEquals(positionCount, block.getPositionCount());
+        assertTrue(block.mayHaveNull());
+        assertRetains(block, values);
+        assertRetains(block, isNull);
+    }
+
+    private static void assertRetains(Block block, Object expected)
+    {
+        assertTrue(retains(block, expected), "block does not retain expected array");
+    }
+
+    private static void assertDoesNotRetain(Block block, Object unexpected)
+    {
+        assertFalse(retains(block, unexpected), "block unexpectedly retains null bitmap");
+    }
+
+    private static boolean retains(Block block, Object expected)
+    {
+        boolean[] found = {false};
+        block.retainedBytesForEachPart((part, size) ->
+        {
+            if (part == expected)
+            {
+                found[0] = true;
+            }
+        });
+        return found[0];
     }
 
     private static void assertSliceEquals(Type type, Block block, int position, byte[] expected)
@@ -239,10 +423,17 @@ public class TestPixelsBlockLoader
 
     private static class TestPageSource implements PixelsPageSource
     {
+        private int batchId;
+
+        private void advanceBatch()
+        {
+            batchId++;
+        }
+
         @Override
         public int getBatchId()
         {
-            return 0;
+            return batchId;
         }
 
         @Override

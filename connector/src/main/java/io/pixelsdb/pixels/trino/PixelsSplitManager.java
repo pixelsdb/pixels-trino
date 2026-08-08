@@ -313,6 +313,10 @@ public class PixelsSplitManager implements ConnectorSplitManager
             {
                 switch (prestoType.getTypeSignature().getBase())
                 {
+                    case StandardTypes.SMALLINT:
+                        bound = new Bound<>(boundType, ((Long) value).shortValue());
+                        break;
+                    case StandardTypes.INTEGER:
                     case StandardTypes.DATE:
                     case StandardTypes.TIME:
                         bound = new Bound<>(boundType, ((Long) value).intValue());
