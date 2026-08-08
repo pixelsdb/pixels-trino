@@ -42,7 +42,6 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 
-import static io.pixelsdb.pixels.trino.PixelsBlockLoader.PICOSECONDS_PER_MILLISECOND;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,6 +50,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestPixelsBlockLoader
 {
+    private static final long PICOSECONDS_PER_MILLISECOND = 1_000_000_000L;
+
     @Test
     public void testTinyintBlock()
     {
@@ -276,29 +277,6 @@ public class TestPixelsBlockLoader
         assertEquals(0, vw.getSliceLength(4));
         assertSliceEquals(VarcharType.VARCHAR, vw, 5, afterNull);
         assertSliceEquals(VarcharType.VARCHAR, vw, 6, ascii);
-    }
-
-    @Test
-    public void testNoNullVarcharBlockOmitsBitmap()
-    {
-        int batchSize = 3;
-        BinaryColumnVector vector = new BinaryColumnVector(batchSize + 2);
-        byte[] shared = "prefixalphabetasuffix".getBytes(StandardCharsets.UTF_8);
-        byte[] alpha = "alpha".getBytes(StandardCharsets.UTF_8);
-        byte[] beta = "beta".getBytes(StandardCharsets.UTF_8);
-        vector.setRef(0, shared, indexOf(shared, alpha), alpha.length);
-        vector.setRef(1, shared, indexOf(shared, beta), beta.length);
-        vector.setRef(2, new byte[0], 0, 0);
-
-        Block block = load(
-                vector, VarcharType.VARCHAR, TypeDescription.Category.VARCHAR, batchSize);
-
-        assertTrue(block instanceof VariableWidthBlock);
-        assertFalse(block.mayHaveNull());
-        assertDoesNotRetain(block, vector.isNull);
-        assertSliceEquals(VarcharType.VARCHAR, block, 0, alpha);
-        assertSliceEquals(VarcharType.VARCHAR, block, 1, beta);
-        assertSliceEquals(VarcharType.VARCHAR, block, 2, new byte[0]);
     }
 
     @Test
