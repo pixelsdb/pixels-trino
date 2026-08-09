@@ -23,8 +23,8 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.vector.BinaryColumnVector;
 import io.pixelsdb.pixels.core.vector.ByteColumnVector;
 import io.pixelsdb.pixels.core.vector.ColumnVector;
+import io.pixelsdb.pixels.core.vector.LongColumnVector;
 import io.pixelsdb.pixels.core.vector.ShortColumnVector;
-import io.pixelsdb.pixels.core.vector.TimeColumnVector;
 import io.trino.spi.Page;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.ByteArrayBlock;
@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 
+import static io.pixelsdb.pixels.core.utils.DatetimeUtils.PICOSECONDS_PER_MILLISECOND;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,8 +51,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestPixelsBlockLoader
 {
-    private static final long PICOSECONDS_PER_MILLISECOND = 1_000_000_000L;
-
     @Test
     public void testTinyintBlock()
     {
@@ -100,29 +99,49 @@ public class TestPixelsBlockLoader
         assertTrue(block.isNull(values.length));
     }
 
+    /**
+     * TIME loader assumes the reader already produced Trino's physical layout:
+     * {@link LongColumnVector} storing picoseconds of day. The block must share
+     * that array without allocating a copy.
+     */
     @Test
-    public void testTimeBlock()
+    public void testTimeBlockSharesPicosecondLongVector()
     {
-        int[] millis = {0, 3_723_004, 86_399_999};
-        TimeColumnVector vector = new TimeColumnVector(millis.length + 1, 3);
-        for (int value : millis)
+        long[] picos =
+        {
+                0L,
+                3_723_004L * PICOSECONDS_PER_MILLISECOND,
+                86_399_999L * PICOSECONDS_PER_MILLISECOND
+        };
+        LongColumnVector vector = new LongColumnVector(picos.length + 1);
+        for (long value : picos)
         {
             vector.add(value);
         }
         vector.addNull();
 
-        Block block = load(vector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, millis.length + 1);
+        Block block = load(vector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, picos.length + 1);
 
         assertTrue(block instanceof LongArrayBlock);
         assertTrue(block.mayHaveNull());
-        assertDoesNotRetain(block, vector.times);
+        assertRetains(block, vector.vector);
         assertRetains(block, vector.isNull);
-        for (int i = 0; i < millis.length; ++i)
+        for (int i = 0; i < picos.length; ++i)
         {
-            assertEquals((long) millis[i] * PICOSECONDS_PER_MILLISECOND,
-                    TimeType.TIME_MILLIS.getLong(block, i));
+            assertEquals(picos[i], TimeType.TIME_MILLIS.getLong(block, i));
         }
-        assertTrue(block.isNull(millis.length));
+        assertTrue(block.isNull(picos.length));
+
+        LongColumnVector noNullVector = new LongColumnVector(picos.length);
+        for (long value : picos)
+        {
+            noNullVector.add(value);
+        }
+        Block noNullBlock = load(
+                noNullVector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, picos.length);
+        assertFalse(noNullBlock.mayHaveNull());
+        assertRetains(noNullBlock, noNullVector.vector);
+        assertDoesNotRetain(noNullBlock, noNullVector.isNull);
     }
 
     @Test
@@ -133,30 +152,21 @@ public class TestPixelsBlockLoader
             int capacity = batchSize + 5;
             ByteColumnVector byteVector = new ByteColumnVector(capacity);
             ShortColumnVector shortVector = new ShortColumnVector(capacity);
-            TimeColumnVector timeVector = new TimeColumnVector(capacity, 3);
             for (int i = 0; i < batchSize; ++i)
             {
                 byteVector.vector[i] = (byte) (i % 255 - 128);
                 shortVector.vector[i] = (short) (Short.MIN_VALUE + i % 65536);
-                timeVector.times[i] = i % 86_400_000;
             }
 
             Block byteBlock = load(
                     byteVector, TinyintType.TINYINT, TypeDescription.Category.BYTE, batchSize);
             Block shortBlock = load(
                     shortVector, SmallintType.SMALLINT, TypeDescription.Category.SHORT, batchSize);
-            Block timeBlock = load(
-                    timeVector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, batchSize);
 
             assertTrue(byteBlock instanceof ByteArrayBlock);
             assertTrue(shortBlock instanceof ShortArrayBlock);
-            assertTrue(timeBlock instanceof LongArrayBlock);
             assertNoNullBlock(byteBlock, byteVector.vector, byteVector.isNull, batchSize);
             assertNoNullBlock(shortBlock, shortVector.vector, shortVector.isNull, batchSize);
-            assertEquals(batchSize, timeBlock.getPositionCount());
-            assertFalse(timeBlock.mayHaveNull());
-            assertDoesNotRetain(timeBlock, timeVector.times);
-            assertDoesNotRetain(timeBlock, timeVector.isNull);
 
             if (batchSize > 0)
             {
@@ -165,8 +175,6 @@ public class TestPixelsBlockLoader
                         TinyintType.TINYINT.getLong(byteBlock, last));
                 assertEquals(shortVector.vector[last],
                         SmallintType.SMALLINT.getLong(shortBlock, last));
-                assertEquals((long) timeVector.times[last] * PICOSECONDS_PER_MILLISECOND,
-                        TimeType.TIME_MILLIS.getLong(timeBlock, last));
             }
         }
     }
@@ -180,47 +188,35 @@ public class TestPixelsBlockLoader
             int capacity = batchSize + 5;
             ByteColumnVector byteVector = new ByteColumnVector(capacity);
             ShortColumnVector shortVector = new ShortColumnVector(capacity);
-            TimeColumnVector timeVector = new TimeColumnVector(capacity, 3);
             for (int i = 0; i < batchSize; ++i)
             {
                 byteVector.vector[i] = (byte) i;
                 shortVector.vector[i] = (short) i;
-                timeVector.times[i] = i;
                 boolean isNull = nullInterval == 1 ||
                         i == 0 || i == batchSize - 1 || i % nullInterval == 0;
                 byteVector.isNull[i] = isNull;
                 shortVector.isNull[i] = isNull;
-                timeVector.isNull[i] = isNull;
                 if (isNull)
                 {
                     // Null slots may contain stale values from a reused vector.
                     byteVector.vector[i] = Byte.MAX_VALUE;
                     shortVector.vector[i] = Short.MAX_VALUE;
-                    timeVector.times[i] = Integer.MAX_VALUE;
                 }
             }
             byteVector.noNulls = false;
             shortVector.noNulls = false;
-            timeVector.noNulls = false;
 
             Block byteBlock = load(
                     byteVector, TinyintType.TINYINT, TypeDescription.Category.BYTE, batchSize);
             Block shortBlock = load(
                     shortVector, SmallintType.SMALLINT, TypeDescription.Category.SHORT, batchSize);
-            Block timeBlock = load(
-                    timeVector, TimeType.TIME_MILLIS, TypeDescription.Category.TIME, batchSize);
 
             assertNullableBlock(byteBlock, byteVector.vector, byteVector.isNull, batchSize);
             assertNullableBlock(shortBlock, shortVector.vector, shortVector.isNull, batchSize);
-            assertEquals(batchSize, timeBlock.getPositionCount());
-            assertTrue(timeBlock.mayHaveNull());
-            assertDoesNotRetain(timeBlock, timeVector.times);
-            assertRetains(timeBlock, timeVector.isNull);
             for (int i = 0; i < batchSize; ++i)
             {
                 assertEquals(byteVector.isNull[i], byteBlock.isNull(i));
                 assertEquals(shortVector.isNull[i], shortBlock.isNull(i));
-                assertEquals(timeVector.isNull[i], timeBlock.isNull(i));
             }
         }
     }

@@ -153,13 +153,8 @@ final class PixelsBlockLoader
                 break;
             case TIME:
                 // PIXELS-94: add time type.
-                TimeColumnVector tcv = (TimeColumnVector) vector;
-                long[] timeValues = new long[batchSize];
-                for (int i = 0; i < batchSize; ++i)
-                {
-                    timeValues[i] = (long) tcv.times[i] * 1_000_000_000L;
-                }
-                block = new LongArrayBlock(batchSize, getNulls(tcv), timeValues);
+                LongColumnVector tcv = (LongColumnVector) vector;
+                block = new LongArrayBlock(batchSize, getNulls(tcv), tcv.vector);
                 break;
             case TIMESTAMP:
                 TimestampColumnVector tscv = (TimestampColumnVector) vector;
