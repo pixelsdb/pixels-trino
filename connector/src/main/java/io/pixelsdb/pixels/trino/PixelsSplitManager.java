@@ -90,7 +90,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.pixelsdb.pixels.core.utils.DatetimeUtils.PICOSECONDS_PER_MILLISECOND;
+import static io.pixelsdb.pixels.core.utils.DatetimeUtils.PICOS_PER_MILLIS;
 import static io.pixelsdb.pixels.planner.PixelsPlanner.getFilePaths;
 import static io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.getOutputStateKeyPrefix;
 import static java.util.Objects.requireNonNull;
@@ -323,7 +323,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
                         break;
                     case StandardTypes.TIME:
                         bound = new Bound<>(boundType,
-                                (int) ((Long) value / PICOSECONDS_PER_MILLISECOND));
+                                (int) ((Long) value / PICOS_PER_MILLIS));
                         break;
                     default:
                         bound = new Bound<>(boundType, (Long) value);

@@ -152,8 +152,8 @@ final class PixelsBlockLoader
                 block = new IntArrayBlock(batchSize, getNulls(dtcv), dtcv.dates);
                 break;
             case TIME:
-                // PIXELS-94: add time type.
-                LongColumnVector tcv = (LongColumnVector) vector;
+                // TIME is read as LongTimeColumnVector (picoseconds of day) for zero-copy LongArrayBlock.
+                LongTimeColumnVector tcv = (LongTimeColumnVector) vector;
                 block = new LongArrayBlock(batchSize, getNulls(tcv), tcv.vector);
                 break;
             case TIMESTAMP:

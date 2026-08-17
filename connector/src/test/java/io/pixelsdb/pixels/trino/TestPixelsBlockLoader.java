@@ -23,7 +23,7 @@ import io.pixelsdb.pixels.core.TypeDescription;
 import io.pixelsdb.pixels.core.vector.BinaryColumnVector;
 import io.pixelsdb.pixels.core.vector.ByteColumnVector;
 import io.pixelsdb.pixels.core.vector.ColumnVector;
-import io.pixelsdb.pixels.core.vector.LongColumnVector;
+import io.pixelsdb.pixels.core.vector.LongTimeColumnVector;
 import io.pixelsdb.pixels.core.vector.ShortColumnVector;
 import io.trino.spi.Page;
 import io.trino.spi.block.Block;
@@ -42,7 +42,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 
-import static io.pixelsdb.pixels.core.utils.DatetimeUtils.PICOSECONDS_PER_MILLISECOND;
+import static io.pixelsdb.pixels.core.utils.DatetimeUtils.PICOS_PER_MILLIS;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -101,7 +101,7 @@ public class TestPixelsBlockLoader
 
     /**
      * TIME loader assumes the reader already produced Trino's physical layout:
-     * {@link LongColumnVector} storing picoseconds of day. The block must share
+     * {@link LongTimeColumnVector} storing picoseconds of day. The block must share
      * that array without allocating a copy.
      */
     @Test
@@ -110,10 +110,10 @@ public class TestPixelsBlockLoader
         long[] picos =
         {
                 0L,
-                3_723_004L * PICOSECONDS_PER_MILLISECOND,
-                86_399_999L * PICOSECONDS_PER_MILLISECOND
+                3_723_004L * PICOS_PER_MILLIS,
+                86_399_999L * PICOS_PER_MILLIS
         };
-        LongColumnVector vector = new LongColumnVector(picos.length + 1);
+        LongTimeColumnVector vector = new LongTimeColumnVector(picos.length + 1, 3);
         for (long value : picos)
         {
             vector.add(value);
@@ -132,7 +132,7 @@ public class TestPixelsBlockLoader
         }
         assertTrue(block.isNull(picos.length));
 
-        LongColumnVector noNullVector = new LongColumnVector(picos.length);
+        LongTimeColumnVector noNullVector = new LongTimeColumnVector(picos.length, 3);
         for (long value : picos)
         {
             noNullVector.add(value);

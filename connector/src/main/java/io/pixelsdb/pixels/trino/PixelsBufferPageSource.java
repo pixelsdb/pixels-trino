@@ -178,7 +178,7 @@ public class PixelsBufferPageSource implements PixelsPageSource
             this.option.skipCorruptRecords(true);
             this.option.tolerantSchemaEvolution(true);
             this.option.enableEncodedColumnVector(true);
-            this.option.readTimeColumnAsLongVector(true);
+            this.option.readTimeColumnAsLongTimeVector(true);
             this.option.includeCols(includeCols);
             this.option.transId(split.getTransId());
             this.option.transTimestamp(transactionHandle.getTimestamp());
