@@ -44,6 +44,8 @@ public class PixelsModule implements Module
     @Override
     public void configure(Binder binder) {
         binder.bind(TypeManager.class).toInstance(typeManager);
+        binder.bind(io.pixelsdb.pixels.trino.write.PixelsIngestTransactions.class).in(Scopes.SINGLETON);
+        binder.bind(io.pixelsdb.pixels.trino.write.PixelsPageSinkProvider.class).in(Scopes.SINGLETON);
         binder.bind(PixelsConnector.class).in(Scopes.SINGLETON);
         binder.bind(PixelsConnectorId.class).toInstance(new PixelsConnectorId(connectorId));
         binder.bind(PixelsTypeParser.class).in(Scopes.SINGLETON);

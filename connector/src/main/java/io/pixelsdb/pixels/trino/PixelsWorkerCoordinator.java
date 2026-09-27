@@ -45,6 +45,6 @@ public class PixelsWorkerCoordinator
     }
     public static void shutdown()
     {
-        thread.interrupt();
+        if (thread != null) { thread.interrupt(); }
     }
 }

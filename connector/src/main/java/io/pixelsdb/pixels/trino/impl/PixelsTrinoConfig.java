@@ -59,6 +59,11 @@ public class PixelsTrinoConfig
 
     public enum CloudFunctionSwitch { ON, OFF, AUTO, SESSION }
 
+    private boolean insertEnabled;
+    @Config("insert.enabled")
+    public PixelsTrinoConfig setInsertEnabled(boolean value) { this.insertEnabled = value; return this; }
+    public boolean isInsertEnabled() { return insertEnabled; }
+
     private CloudFunctionSwitch cloudFunctionSwitch = CloudFunctionSwitch.AUTO;
     private boolean cleanIntermediateResult = true;
     /**

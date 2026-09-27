@@ -29,9 +29,11 @@ import io.pixelsdb.pixels.trino.exception.PixelsErrorCode;
 import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.split.PixelsBufferSplit;
 import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
+import io.pixelsdb.pixels.trino.split.PixelsPrivateSplit;
 import io.pixelsdb.pixels.trino.split.PixelsSplit;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
+import io.trino.spi.type.TypeManager;
 
 import java.io.IOException;
 import java.util.List;
@@ -48,17 +50,25 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
 {
     private static final Logger logger = Logger.get(PixelsPageSourceProvider.class);
 
+    private final io.pixelsdb.pixels.trino.write.PixelsIngestTransactions ingest;
     private final String connectorId;
     private final List<MemoryMappedFile> cacheFiles;
     private final List<MemoryMappedFile> indexFiles;
     private final PixelsFooterCache pixelsFooterCache;
     private final int swapZoneNum;
     private final PixelsTrinoConfig config;
+    private final TypeManager typeManager;
 
     @Inject
-    public PixelsPageSourceProvider(PixelsConnectorId connectorId, PixelsTrinoConfig config)
+    public PixelsPageSourceProvider(
+            PixelsConnectorId connectorId,
+            PixelsTrinoConfig config,
+            io.pixelsdb.pixels.trino.write.PixelsIngestTransactions ingest,
+            TypeManager typeManager)
             throws Exception
     {
+        this.ingest = ingest;
+        this.typeManager = requireNonNull(typeManager, "typeManager is null");
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.config = requireNonNull(config, "config is null");
         if (config.getConfigFactory().getProperty("cache.enabled").equalsIgnoreCase("true"))
@@ -102,8 +112,24 @@ public class PixelsPageSourceProvider implements ConnectorPageSourceProvider
         List<PixelsColumnHandle> pixelsColumns = columns.stream()
                 .map(PixelsColumnHandle.class::cast).collect(toList());
         PixelsTransactionHandle pixelsTransactionHandle = (PixelsTransactionHandle) transactionHandle;
+        if (ingest.enabled())
+        {
+            for (java.util.Map.Entry<String, String> token : pixelsTransactionHandle.getIngestReadTokens().entrySet())
+            {
+                ingest.client().participant(token.getKey()).renewRead(io.pixelsdb.pixels.ingest.IngestProto.ReadPin.newBuilder()
+                        .setTransactionId(pixelsTransactionHandle.getTransId()).setReadTimestamp(pixelsTransactionHandle.getTimestamp())
+                        .setToken(token.getValue()).build());
+            }
+            if (pixelsTransactionHandle.getIngestReadTokens().isEmpty())
+            { throw new TrinoException(io.trino.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR, "Missing pinned Retina read view"); }
+        }
         try
         {
+            if (pixelsSplit instanceof PixelsPrivateSplit privateSplit)
+            {
+                return new PixelsPrivatePageSource(
+                        privateSplit, pixelsColumns, ingest.client(), ingest.options(), typeManager);
+            }
             Storage storage = StorageFactory.Instance().getStorage(pixelsSplit.getStorageScheme());
             if (pixelsSplit instanceof PixelsFileSplit pixelsFileSplit)
             {

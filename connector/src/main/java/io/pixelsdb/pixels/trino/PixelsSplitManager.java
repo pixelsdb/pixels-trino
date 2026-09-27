@@ -74,7 +74,9 @@ import io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig;
 import io.pixelsdb.pixels.trino.properties.PixelsSessionProperties;
 import io.pixelsdb.pixels.trino.split.PixelsBufferSplit;
 import io.pixelsdb.pixels.trino.split.PixelsFileSplit;
+import io.pixelsdb.pixels.trino.split.PixelsPrivateSplit;
 import io.pixelsdb.pixels.trino.split.PixelsSplit;
+import io.pixelsdb.pixels.trino.write.PixelsIngestTransactions;
 import io.trino.spi.HostAddress;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
@@ -108,6 +110,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
     private final String connectorId;
     private final PixelsMetadataProxy metadataProxy;
     private final PixelsTrinoConfig config;
+    private final PixelsIngestTransactions ingest;
     private final boolean cacheEnabled;
     private final boolean multiSplitForOrdered;
     private final boolean projectionReadEnabled;
@@ -117,11 +120,12 @@ public class PixelsSplitManager implements ConnectorSplitManager
 
     @Inject
     public PixelsSplitManager(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
-                              PixelsTrinoConfig config)
+                              PixelsTrinoConfig config, PixelsIngestTransactions ingest)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
         this.config = requireNonNull(config, "config is null");
+        this.ingest = requireNonNull(ingest, "ingest is null");
         String cacheEnabled = config.getConfigFactory().getProperty("cache.enabled");
         String projectionReadEnabled = config.getConfigFactory().getProperty("projection.read.enabled");
         String multiSplit = config.getConfigFactory().getProperty("multi.split.for.ordered");
@@ -129,7 +133,8 @@ public class PixelsSplitManager implements ConnectorSplitManager
         this.cacheEnabled = Boolean.parseBoolean(cacheEnabled);
         this.projectionReadEnabled = Boolean.parseBoolean(projectionReadEnabled);
         this.multiSplitForOrdered = Boolean.parseBoolean(multiSplit);
-        KeyValue keyValue = EtcdUtil.Instance().getKeyValue(Constants.LAYOUT_VERSION_LITERAL);
+        // A disabled cache must not require the cache coordinator to be available.
+        KeyValue keyValue = this.cacheEnabled ? EtcdUtil.Instance().getKeyValue(Constants.LAYOUT_VERSION_LITERAL) : null;
         if (keyValue != null)
         {
             String value = keyValue.getValue().toString(StandardCharsets.UTF_8);
@@ -482,6 +487,43 @@ public class PixelsSplitManager implements ConnectorSplitManager
                                     .map(split -> (PixelsSplit) split)
                                     .toList()
                     );
+                }
+
+                if (ingest.enabled())
+                {
+                    Optional<PixelsIngestTransactions.PrivateReadContext> privateRead =
+                            ingest.enlistRead(
+                                    transHandle,
+                                    session.getQueryId(),
+                                    tableHandle.getSchemaName(),
+                                    tableHandle.getTableName());
+                    if (privateRead.isPresent())
+                    {
+                        PixelsIngestTransactions.PrivateReadContext context = privateRead.get();
+                        long privateSplitId = pixelsSplits.size();
+                        String encodedTable = Base64.getEncoder().encodeToString(
+                                context.table().toByteArray());
+                        for (Map.Entry<String, Long> owner
+                                : context.ownerBatchCounts().entrySet())
+                        {
+                            pixelsSplits.add(new PixelsPrivateSplit(
+                                    transHandle.getTransId(),
+                                    privateSplitId++,
+                                    connectorId,
+                                    tableHandle.getSchemaName(),
+                                    tableHandle.getTableName(),
+                                    List.of(HostAddress.fromString(owner.getKey())),
+                                    tableHandle.getConstraint(),
+                                    context.transactionId(),
+                                    context.statementId(),
+                                    context.tableId(),
+                                    context.frontier(),
+                                    owner.getKey(),
+                                    context.readTokens().get(owner.getKey()),
+                                    encodedTable,
+                                    owner.getValue()));
+                        }
+                    }
                 }
 
             } catch (MetadataException | IOException | RetinaException e)
@@ -1042,6 +1084,7 @@ public class PixelsSplitManager implements ConnectorSplitManager
          * this.cacheSchema and this.cacheTable are not null if this.cacheEnabled == true.
          */
         boolean usingCache = false;
+        if (cacheEnabled)
         {
             KeyValue keyValue = EtcdUtil.Instance().getKeyValue(Constants.LAYOUT_VERSION_LITERAL);
             if (keyValue != null)

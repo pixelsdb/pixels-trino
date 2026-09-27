@@ -57,7 +57,9 @@ public class PixelsConnectorFactory implements ConnectorFactory
                 .doNotInitializeLogging()
                 .setRequiredConfigurationProperties(requiredConfig)
                 .initialize();
-        if (context.getNodeManager().getCurrentNode().isCoordinator())
+        if (context.getNodeManager().getCurrentNode().isCoordinator()
+                && injector.getInstance(io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.class).getCloudFunctionSwitch()
+                != io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.CloudFunctionSwitch.OFF)
         {
             PixelsWorkerCoordinator.init();
         }

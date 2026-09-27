@@ -81,6 +81,47 @@ public class PixelsMetadata implements ConnectorMetadata
     private final PixelsMetadataProxy metadataProxy;
     private final PixelsTrinoConfig config;
     private final PixelsTransactionHandle transHandle;
+    private io.pixelsdb.pixels.trino.write.PixelsIngestTransactions ingest;
+
+    public PixelsMetadata(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
+                          PixelsTrinoConfig config, PixelsTransactionHandle handle,
+                          io.pixelsdb.pixels.trino.write.PixelsIngestTransactions ingest)
+    { this(connectorId, metadataProxy, config, handle); this.ingest = ingest; }
+
+    @Override
+    public ConnectorInsertTableHandle beginInsert(ConnectorSession session, ConnectorTableHandle table,
+            List<ColumnHandle> columns, RetryMode retryMode)
+    {
+        if (retryMode != RetryMode.NO_RETRIES || ingest == null || !ingest.enabled())
+        { throw new TrinoException(io.trino.spi.StandardErrorCode.NOT_SUPPORTED, "Transactional INSERT requires insert.enabled and NO_RETRIES"); }
+        PixelsTableHandle target = (PixelsTableHandle) table;
+        if (target.getTableType() != io.pixelsdb.pixels.planner.plan.logical.Table.TableType.BASE)
+        { throw new TrinoException(io.trino.spi.StandardErrorCode.NOT_SUPPORTED, "INSERT target must be a base table"); }
+        return ingest.beginInsert(
+                transHandle,
+                session.getQueryId(),
+                target,
+                columns.stream().map(PixelsColumnHandle.class::cast).toList());
+    }
+
+    @Override
+    public java.util.Optional<ConnectorOutputMetadata> finishInsert(ConnectorSession session,
+            ConnectorInsertTableHandle handle, List<ConnectorTableHandle> sourceTables, java.util.Collection<io.airlift.slice.Slice> fragments,
+            java.util.Collection<io.trino.spi.statistics.ComputedStatistics> statistics)
+    {
+        ingest.finishInsert(transHandle, (io.pixelsdb.pixels.trino.write.PixelsInsertTableHandle) handle, fragments);
+        return java.util.Optional.empty();
+    }
+
+    @Override
+    public void cleanupQuery(ConnectorSession session)
+    {
+        if (ingest != null)
+        {
+            ingest.cleanupQuery(transHandle, session.getQueryId());
+        }
+    }
+
 
     public PixelsMetadata(PixelsConnectorId connectorId, PixelsMetadataProxy metadataProxy,
                           PixelsTrinoConfig config, PixelsTransactionHandle transHandle)

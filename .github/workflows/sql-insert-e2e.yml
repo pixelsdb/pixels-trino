@@ -1,0 +1,231 @@
+name: Transactional INSERT end-to-end
+
+on:
+  push:
+    branches: [feat/trino-insert-180]
+    paths:
+      - 'connector/**'
+      - 'tools/**'
+      - 'docs/insert-development.md'
+      - '.github/workflows/sql-insert-e2e.yml'
+      - 'pom.xml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transactional-insert-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-sql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      PIXELS_HOME: ${{ github.workspace }}/pixels-home
+      INGEST_DAEMON_WORK_DIR: ${{ github.workspace }}/verification/daemon
+      SQL_E2E_SKIP_BUILD: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pixels-trino
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: AntiO2/pixels
+          ref: 4218785abbe38d27494b5696e41c1580b89b1020
+          path: pixels
+          persist-credentials: false
+      - name: Record exact source versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verification "$PIXELS_HOME/lib" "$PIXELS_HOME/etc"
+          cp pixels/pixels-common/src/main/resources/pixels.properties "$PIXELS_HOME/etc/"
+          git -C pixels rev-parse HEAD > verification/pixels.commit
+          git -C pixels-trino rev-parse HEAD > verification/pixels-trino.commit
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+          cache-dependency-path: |
+            pixels/**/pom.xml
+            pixels-trino/**/pom.xml
+      - name: Build Pixels and run lifecycle regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn -B -ntp -f pixels/pom.xml \
+            -pl pixels-daemon,pixels-cache,pixels-storage/pixels-storage-redis,pixels-turbo/pixels-invoker-spike,pixels-turbo/pixels-invoker-vhive,pixels-turbo/pixels-invoker-lambda,pixels-turbo/pixels-scaling-ec2 \
+            -am -DskipTests=false \
+            -Dtest=TestIngestClient,TestIngestWriterAllocation,TestExplicitIngestTransaction,TestRetinaPrivateRead,TestRetinaServer,TestRecoveryCheckpoint,TestRetinaIngestParticipantCheckpoint,TestDurableIngestCoordinatorGc,TestCoordinatorStateStore,TestCoordinatorDurabilityBoundaries,TestLocalMutationJournal,TestServerContainer,TestStorageGcWal,TestMutationBatch,TestColumnBatchCodec,TestIngestRows,TestIngestColumnBatch,TestMainIndexBufferRanges,TestSqliteMainIndex#testRelocateEntriesPreservesRowIdsAndSurvivesRestart+testDirectRangeSurvivesFlushAndReopen+testBulkOverlapPreservesPerEntryResultsAndOriginalLocations+testBulkRangesSurviveFailedFlushAndRetry \
+            -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.source.skip=true install \
+            2>&1 | tee verification/pixels-build.log
+          bash pixels/tools/verify-ingest-gc.sh \
+            2>&1 | tee verification/journal-gc.log
+          mvn -B -ntp -f pixels/pixels-daemon/pom.xml \
+            -DskipTests=false -Dtest=TestPixelsIngestStorage \
+            -Dpixels.retina.test.allocator="$PIXELS_HOME/lib/libjemalloc.so" test \
+            2>&1 | tee verification/storage-rewrite.log
+      - name: Run production daemon lifecycle smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            --output verification/etcd.tar.gz \
+            https://github.com/etcd-io/etcd/releases/download/v3.5.17/etcd-v3.5.17-linux-amd64.tar.gz
+          tar -xzf verification/etcd.tar.gz -C verification
+          ETCD_BIN="$PWD/verification/etcd-v3.5.17-linux-amd64/etcd" \
+            INGEST_DAEMON_SKIP_BUILD=1 \
+            bash pixels/tools/verify-ingest-daemon.sh \
+            2>&1 | tee verification/normal-daemon.log
+          grep -q '^PIXELS_NORMAL_INGEST_DAEMON_PASS rows=73 pixelsFiles=3 services=TransServer,RetinaServer checkpointRestart=2 sharedFileTransactions=2$' \
+            "$INGEST_DAEMON_WORK_DIR/daemon.log"
+          grep -Eq '^PIXELS_NORMAL_INGEST_CUTOVER_PASS oldRows=73 totalRows=74 baseline=1000000000 commitTimestamp=[0-9]+ legacyFence=1$' \
+            verification/normal-daemon.log
+          grep -q '^PIXELS_NORMAL_INGEST_FAIL_CLOSED_PASS corruptDecision=1 missingCheckpoint=1 allocatorFloor=1$' \
+            verification/normal-daemon.log
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '23'
+      - name: Build the connector and run writer contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash pixels/tools/verify-ingest-contract.sh
+          bash pixels-trino/tools/verify-ingest-contract.sh "$PWD/pixels"
+          mvn -B -ntp -f pixels-trino/pom.xml -DskipTests=false \
+            -Dtest=TestPixelsMutationWriter,TestPixelsInsertPageSink -Dsurefire.failIfNoSpecifiedTests=false test \
+            2>&1 | tee verification/trino-build.log
+      - name: Execute the representation and acknowledgement SQL matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          file_target_rows=1000000
+          aggregation_transactions=100
+          aggregation_rows_per_transaction=10000
+          production_batch_rows=4096
+          production_batch_bytes=4194304
+          fixture_state_bytes=268435456
+          file_max_delay_ms=600000
+          scale_timeout_seconds=900
+          barrier_timeout_seconds=300
+          for representation in BUFFERED FILE; do
+            for ack in VISIBLE DURABLE; do
+              combination="${representation,,}-${ack,,}"
+              work="$PWD/verification/sql-$combination"
+              expected_rows=1008
+              aggregation=()
+              if [[ "$representation" == FILE && "$ack" == DURABLE ]]; then
+                expected_rows=$((expected_rows + aggregation_transactions * aggregation_rows_per_transaction))
+                aggregation=(
+                  "PIXELS_SQL_FIXTURE_FILE_TARGET_ROWS=$file_target_rows"
+                  "PIXELS_SQL_FIXTURE_FILE_MAX_DELAY_MS=$file_max_delay_ms"
+                  "PIXELS_SQL_FIXTURE_MEMTABLE_ROWS=$production_batch_rows"
+                  "PIXELS_SQL_FIXTURE_MAX_BATCH_ROWS=$production_batch_rows"
+                  "PIXELS_SQL_FIXTURE_MAX_BATCH_BYTES=$production_batch_bytes"
+                  "PIXELS_SQL_FIXTURE_MAX_STATE_BYTES=$fixture_state_bytes"
+                  "PIXELS_SQL_FILE_AGGREGATION_TRANSACTIONS=$aggregation_transactions"
+                  "PIXELS_SQL_FILE_AGGREGATION_ROWS_PER_TRANSACTION=$aggregation_rows_per_transaction"
+                  "SQL_E2E_RUN_FAILURE_SCENARIOS=false"
+                  "SQL_E2E_TIMEOUT_SECONDS=$scale_timeout_seconds"
+                  "SQL_E2E_VISIBILITY_BARRIER_TIMEOUT_SECONDS=$barrier_timeout_seconds"
+                )
+              fi
+              env \
+                PIXELS_SQL_FIXTURE_REPRESENTATION="$representation" \
+                PIXELS_SQL_FIXTURE_COMMIT_ACK="$ack" \
+                SQL_E2E_WORK_DIR="$work" \
+                SQL_E2E_PASS_PATTERN="(^|[[:space:]])FULL_SQL_INSERT_E2E_PASS checks=[0-9]+ rows=$expected_rows trinoWorkers=2( |$)" \
+                "${aggregation[@]}" \
+                bash pixels-trino/tools/verify-sql-insert.sh "$PWD/pixels" -ntp \
+                2>&1 | tee "verification/full-sql-$combination.log"
+              test "$(cat "$work/exit-code")" = 0
+              grep -Eq "(^|[[:space:]])FULL_SQL_INSERT_E2E_PASS checks=[0-9]+ rows=$expected_rows trinoWorkers=2( |$)" "$work/sql.log"
+              grep -q '^PIXELS_NATIVE_VISIBILITY_PASS iterations=1000$' "$work/backend.log"
+              grep -q '^PIXELS_SQL_FIXTURE_STOPPED$' "$work/backend.log"
+            done
+          done
+      - name: Execute small JDBC transaction benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
+          transactions=1000
+          warmup_transactions=100
+          concurrency=16
+          file_max_delay_ms=300000
+          for mode in AUTOCOMMIT EXPLICIT; do
+            work="$PWD/verification/small-${mode,,}"
+            env \
+              PIXELS_SQL_FIXTURE_REPRESENTATION=FILE \
+              PIXELS_SQL_FIXTURE_COMMIT_ACK=DURABLE \
+              PIXELS_SQL_FIXTURE_FILE_MAX_DELAY_MS="$file_max_delay_ms" \
+              SMALL_INSERT_CREATE_TABLE=false \
+              SMALL_INSERT_TRANSACTIONS="$transactions" \
+              SMALL_INSERT_WARMUP_TRANSACTIONS="$warmup_transactions" \
+              SMALL_INSERT_CONCURRENCY="$concurrency" \
+              SMALL_INSERT_TRANSACTION_MODE="$mode" \
+              SQL_E2E_MAIN_CLASS=io.pixelsdb.pixels.trino.testing.SmallTransactionsInsert \
+              SQL_E2E_WORK_DIR="$work" \
+              SQL_E2E_TIMEOUT_SECONDS=600 \
+              SQL_E2E_PASS_PATTERN="SMALL_TRANSACTION_INSERT_PASS mode=$mode transactions=$transactions" \
+              bash pixels-trino/tools/verify-sql-insert.sh "$PWD/pixels" -ntp \
+              2>&1 | tee "verification/small-${mode,,}.log"
+          done
+      - name: Verify full-column INSERT for every TPC-H and TPC-DS table
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL_E2E_WORK_DIR="$PWD/verification/all-tpc-tables" \
+            ETCD_BIN="$PWD/verification/etcd-v3.5.17-linux-amd64/etcd" \
+            TPCH_SCHEMA=tiny TPCDS_SCHEMA=tiny \
+            ALL_TPC_TRANSACTION_ROWS=100000 \
+            PIXELS_SQL_FIXTURE_MAX_PREPARED_ROWS=3000000 \
+            PIXELS_SQL_FIXTURE_MAX_STATE_BYTES=268435456 \
+            SQL_E2E_BACKEND_HEAP=2g SQL_E2E_ENGINE_HEAP=3g \
+            bash pixels-trino/tools/benchmark-all-tpc-tables.sh "$PWD/pixels" -ntp \
+            2>&1 | tee verification/all-tpc-tables.log
+      - name: Record SQL verification summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Full SQL INSERT verification'
+            echo
+            echo "Pixels: $(cat verification/pixels.commit)"
+            echo "Pixels-Trino: $(cat verification/pixels-trino.commit)"
+            echo
+            echo '```text'
+            if test -f "$INGEST_DAEMON_WORK_DIR/daemon.log"; then
+              grep -E '^PIXELS_NORMAL_INGEST_(DAEMON|CUTOVER|FAIL_CLOSED)_PASS ' verification/normal-daemon.log || true
+            fi
+            if test -f verification/journal-gc.log; then
+              grep -E '^(LocalMutationJournalContract:|Journal GC contract:)' verification/journal-gc.log || true
+            fi
+            for representation in buffered file; do
+              for ack in visible durable; do
+                combination="$representation-$ack"
+                log="verification/sql-$combination/sql.log"
+                if test -f "$log"; then
+                  echo "$combination:"
+                  grep -E '(^|[[:space:]])(JDBC_EXPLICIT_.*_PASS |JDBC_FILE_AGGREGATION_PASS |FULL_SQL_INSERT_E2E_PASS )' "$log" || true
+                fi
+              done
+            done
+            for mode in autocommit explicit; do
+              log="verification/small-$mode/sql.log"
+              if test -f "$log"; then
+                grep 'SMALL_TRANSACTION_INSERT_PASS ' "$log" || true
+              fi
+            done
+            if test -f verification/all-tpc-tables/sql.log; then
+              grep -E '(TPC_TABLE_INSERT_PASS |ALL_TPC_TABLES_INSERT_PASS )' \
+                verification/all-tpc-tables/sql.log || true
+            fi
+            echo '```'
+            echo
+            echo 'Catalog, node directory, and external ID allocation are fixtures. SQL execution, connector, TCP/gRPC, journals, Retina buffers, MainIndex, visibility, and file reads/writes are real.'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -39,10 +39,12 @@ import io.pixelsdb.pixels.trino.properties.PixelsTableProperties;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.*;
 import io.trino.spi.session.PropertyMetadata;
+import io.trino.spi.procedure.Procedure;
 import io.trino.spi.transaction.IsolationLevel;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static io.pixelsdb.pixels.trino.impl.PixelsTrinoConfig.getOutputStateKeyPrefix;
 import static java.util.Objects.requireNonNull;
@@ -62,6 +64,9 @@ public class PixelsConnector implements Connector
     private final TransService transService;
     private final QueryScheduleService queryScheduleService;
     private final PixelsOffloadDetector offloadDetector;
+    private final io.pixelsdb.pixels.trino.write.PixelsIngestTransactions ingest;
+    private final io.pixelsdb.pixels.trino.write.PixelsPageSinkProvider pageSinkProvider;
+
 
     @Inject
     public PixelsConnector(
@@ -72,8 +77,12 @@ public class PixelsConnector implements Connector
             PixelsTrinoConfig config,
             PixelsPageSourceProvider pageSourceProvider,
             PixelsSessionProperties sessionProperties,
-            PixelsTableProperties tableProperties)
+            PixelsTableProperties tableProperties,
+            io.pixelsdb.pixels.trino.write.PixelsIngestTransactions ingest,
+            io.pixelsdb.pixels.trino.write.PixelsPageSinkProvider pageSinkProvider)
     {
+        this.ingest = requireNonNull(ingest, "ingest");
+        this.pageSinkProvider = requireNonNull(pageSinkProvider, "pageSinkProvider");
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
         this.lifeCycleManager = requireNonNull(lifeCycleManager, "lifeCycleManager is null");
         this.metadataProxy = requireNonNull(metadataProxy, "metadataProxy is null");
@@ -101,6 +110,12 @@ public class PixelsConnector implements Connector
     public ConnectorTransactionHandle beginTransaction(IsolationLevel isolationLevel,
                                                        boolean readOnly, boolean autoCommit)
     {
+        if (isolationLevel == IsolationLevel.SERIALIZABLE)
+        {
+            throw new TrinoException(
+                    io.trino.spi.StandardErrorCode.NOT_SUPPORTED,
+                    "Pixels transactional INSERT does not support SERIALIZABLE isolation");
+        }
         /**
          * PIXELS-172:
          * Be careful that Presto does not set readOnly to true for normal queries.
@@ -145,7 +160,22 @@ public class PixelsConnector implements Connector
 
         // readOnly in Trino is false if not explicitly set.
         // Do not use it to identify whether a transaction is an analytic query.
-        return new PixelsTransactionHandle(context.getTransId(), context.getTimestamp(), readOnly, executorType);
+        PixelsTransactionHandle handle = new PixelsTransactionHandle(context.getTransId(), context.getTimestamp(),
+                ingest.enabled() || readOnly, executorType);
+        handle.setAutoCommit(autoCommit);
+        handle.setWriteProhibited(readOnly);
+        if (ingest.enabled())
+        {
+            handle.setTimestamp(ingest.client().coordinator().getPublication(com.google.protobuf.Empty.getDefaultInstance()).getPublishedTimestamp());
+            ingest.beginRead(handle);
+        }
+        return handle;
+    }
+
+    @Override
+    public Set<Procedure> getProcedures()
+    {
+        return ingest.procedures();
     }
 
     @Override
@@ -153,6 +183,18 @@ public class PixelsConnector implements Connector
     {
         if (transactionHandle instanceof PixelsTransactionHandle handle)
         {
+            if (ingest.enabled())
+            {
+                try { ingest.commit(handle); }
+                finally
+                {
+                    ingest.endRead(handle);
+                    offloadDetector.unregisterQuery(handle.getTransId());
+                    try { transService.commitTrans(handle.getTransId(), true); }
+                    catch (TransException e) { throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e); }
+                }
+                return;
+            }
             try
             {
                 // Unregister the query from offload detection
@@ -190,6 +232,18 @@ public class PixelsConnector implements Connector
     {
         if (transactionHandle instanceof PixelsTransactionHandle handle)
         {
+            if (ingest.enabled())
+            {
+                try { ingest.abort(handle); }
+                finally
+                {
+                    ingest.endRead(handle);
+                    offloadDetector.unregisterQuery(handle.getTransId());
+                    try { transService.commitTrans(handle.getTransId(), true); }
+                    catch (TransException e) { throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e); }
+                }
+                return;
+            }
             try
             {
                 // Unregister the query from offload detection
@@ -291,7 +345,16 @@ public class PixelsConnector implements Connector
             logger.error(e, "failed to bind external trace id to transaction");
             throw new TrinoException(PixelsErrorCode.PIXELS_TRANS_SERVICE_ERROR, e);
         }
-        return new PixelsMetadata(connectorId, metadataProxy, config, pixelsTransHandle);
+        return new PixelsMetadata(connectorId, metadataProxy, config, pixelsTransHandle, ingest);
+    }
+
+    @Override
+    public ConnectorPageSinkProvider getPageSinkProvider() { return pageSinkProvider; }
+
+    @Override
+    public boolean isSingleStatementWritesOnly()
+    {
+        return !ingest.enabled();
     }
 
     @Override
@@ -314,6 +377,7 @@ public class PixelsConnector implements Connector
     {
         try
         {
+            ingest.close();
             lifeCycleManager.stop();
             // PIXELS-715: no need to shut down the default transaction service.
             this.queryScheduleService.shutdown();

@@ -57,6 +57,8 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency><groupId>io.airlift</groupId><artifactId>bom</artifactId><version>${dep.airlift.version}</version><type>pom</type><scope>import</scope></dependency>
+            <dependency><groupId>org.antlr</groupId><artifactId>antlr4-runtime</artifactId><version>4.13.2</version></dependency>
             <!-- trino -->
             <dependency>
                 <groupId>io.trino</groupId>
